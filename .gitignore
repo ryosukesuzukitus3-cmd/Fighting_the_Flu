@@ -4,3 +4,14 @@
 /pyinstaller
 /_old/*
 /.venv/*
+/.html/
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# 実行時のユーザーデータ（data/stages は管理対象として残す）
+/data/playlogs/
+/data/highscore.json
+/data/settings.json

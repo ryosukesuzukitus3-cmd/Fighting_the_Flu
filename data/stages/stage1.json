@@ -1,0 +1,20 @@
+{
+  "stage_id": 1,
+  "bgm": "The_world_of_spirit_short.mp3",
+  "events": [
+    {"time":  8.0, "type": "Terrain", "y": 0,   "w": 90,  "h": 70, "kind": "wall"},
+    {"time": 16.0, "type": "Terrain", "y": 520, "w": 110, "h": 80, "kind": "wall"},
+    {"time": 24.0, "type": "EnemyTurret", "count": 1, "y": 470},
+    {"time":  3.0, "type": "EnemyVirus", "count": 3, "formation": "line"},
+    {"time":  6.0, "type": "EnemyVirus", "count": 4, "formation": "line"},
+    {"time": 10.0, "type": "EnemyVirus", "count": 4, "formation": "v_shape"},
+    {"time": 14.0, "type": "EnemyTakeshi",   "count": 2, "formation": "line"},
+    {"time": 18.0, "type": "EnemyVirus", "count": 5, "formation": "v_shape"},
+    {"time": 20.0, "type": "EnemyBilly",  "count": 1, "formation": "random"},
+    {"time": 22.0, "type": "EnemyVirus", "count": 4, "formation": "random"},
+    {"time": 26.0, "type": "EnemyTakeshi",   "count": 2, "formation": "random"},
+    {"time": 30.0, "type": "EnemyVirus", "count": 5, "formation": "line"},
+    {"time": 34.0, "type": "EnemyTakeshi",   "count": 2, "formation": "v_shape"},
+    {"time": 38.0, "type": "Boss",        "count": 1, "formation": "single"}
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "stage_id": 2,
+  "bgm": "戦艦ハルバード：甲板.mp3",
+  "events": [
+    {"time":  7.0, "type": "Terrain", "y": 120, "w": 60, "h": 60, "kind": "debris"},
+    {"time": 19.0, "type": "Terrain", "y": 360, "w": 70, "h": 70, "kind": "debris"},
+    {"time": 30.0, "type": "Terrain", "y": 60,  "w": 60, "h": 60, "kind": "debris"},
+    {"time":  2.0, "type": "EnemyVirus",   "count": 3, "formation": "line"},
+    {"time":  4.0, "type": "EnemyTakeshi",     "count": 3, "formation": "line"},
+    {"time":  6.0, "type": "EnemyVirus",   "count": 4, "formation": "v_shape"},
+    {"time":  8.0, "type": "EnemyPachemon", "count": 1, "formation": "random"},
+    {"time": 10.0, "type": "EnemyTakeshi",     "count": 3, "formation": "v_shape"},
+    {"time": 12.0, "type": "EnemyVirus",   "count": 5, "formation": "line"},
+    {"time": 14.0, "type": "EnemyBilly",    "count": 1, "formation": "random"},
+    {"time": 15.0, "type": "EnemyPachemon", "count": 2, "formation": "random"},
+    {"time": 16.0, "type": "EnemyBroly",     "count": 1, "formation": "random"},
+    {"time": 18.0, "type": "EnemyTakeshi",     "count": 4, "formation": "v_shape"},
+    {"time": 20.0, "type": "EnemyPachemon", "count": 2, "formation": "line"},
+    {"time": 22.0, "type": "EnemyBroly",     "count": 2, "formation": "random"},
+    {"time": 24.0, "type": "EnemyBilly",    "count": 1, "formation": "random"},
+    {"time": 25.0, "type": "EnemyVirus",   "count": 4, "formation": "v_shape", "enhanced": true},
+    {"time": 27.0, "type": "EnemyPachemon", "count": 2, "formation": "random",  "enhanced": true},
+    {"time": 29.0, "type": "EnemyBroly",     "count": 2, "formation": "random",  "enhanced": true},
+    {"time": 31.0, "type": "EnemyTakeshi",     "count": 4, "formation": "line",    "enhanced": true},
+    {"time": 33.0, "type": "EnemyPachemon", "count": 2, "formation": "v_shape", "enhanced": true},
+    {"time": 35.0, "type": "EnemyBroly",     "count": 3, "formation": "random",  "enhanced": true},
+    {"time": 37.0, "type": "EnemyTakeshi",     "count": 3, "formation": "v_shape", "enhanced": true},
+    {"time": 41.0, "type": "Boss",          "count": 1, "formation": "single"}
+  ]
+}

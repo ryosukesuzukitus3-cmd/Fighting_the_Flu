@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #fafafa;
+    --ink: #18181b;
+    --ink-soft: #3f3f46;
+    --ink-muted: #71717a;
+    --ink-faded: #a1a1aa;
+    --rule: #e4e4e7;
+    --rule-soft: #f4f4f5;
+    --code-bg: #f6f7f9;
+    --code-fg: #18181b;
+    --code-border: #e4e4e7;
+    --link: #2563eb;
+    --link-hover: #1d4ed8;
+    --accent: #2563eb;
+    --hl: #fef9c3;
+    --info-bg: #eff6ff;
+    --info-bd: #3b82f6;
+    --tip-bg: #f0fdf4;
+    --tip-bd: #22c55e;
+    --warn-bg: #fffbeb;
+    --warn-bd: #f59e0b;
+    --danger-bg: #fef2f2;
+    --danger-bd: #ef4444;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', 'Yu Gothic', sans-serif;
+    --mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Source Han Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); }
+  body {
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ── HEADER ──────────────────────────────────────────── */
+  .doc-header {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 24px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .doc-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--ink-muted);
+    margin-bottom: 16px;
+  }
+  .doc-meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .doc-meta span + span::before {
+    content: '·';
+    color: var(--ink-faded);
+    margin-right: 8px;
+  }
+  .doc-title {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    color: var(--ink);
+    margin-bottom: 12px;
+  }
+  .doc-source {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    background: var(--bg-soft);
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    display: inline-block;
+    margin-bottom: 24px;
+  }
+
+  /* ── LAYOUT ──────────────────────────────────────────── */
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 60px;
+    padding: 32px 24px 80px;
+  }
+  .main { min-width: 0; }
+
+  /* ── SIDEBAR (TOC) ───────────────────────────────────── */
+  .sidebar {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    border-left: 1px solid var(--rule);
+    padding-left: 20px;
+    font-size: 13px;
+  }
+  .sidebar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .sidebar nav ul { list-style: none; padding: 0; margin: 0; }
+  .sidebar nav li { margin: 0; padding: 0; }
+  .sidebar nav a {
+    display: block;
+    padding: 5px 0;
+    color: var(--ink-muted);
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+    margin-left: -22px;
+    padding-left: 20px;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .sidebar nav a:hover {
+    color: var(--ink);
+    border-left-color: var(--ink);
+  }
+  .sidebar nav .toc-h3 a { padding-left: 32px; font-size: 12px; }
+  .sidebar nav .toc-h4 a { padding-left: 44px; font-size: 12px; color: var(--ink-faded); }
+
+  /* ── CONTENT ─────────────────────────────────────────── */
+  .main { max-width: 760px; }
+
+  .main > *:first-child { margin-top: 0; }
+
+  .main h1, .main h2, .main h3, .main h4, .main h5, .main h6 {
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+    color: var(--ink);
+    scroll-margin-top: 24px;
+  }
+  .main h1 {
+    font-size: 30px;
+    margin-top: 2.4em;
+    margin-bottom: 0.5em;
+  }
+  .main h2 {
+    font-size: 24px;
+    margin-top: 2.2em;
+    margin-bottom: 0.5em;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .main h3 {
+    font-size: 19px;
+    margin-top: 1.8em;
+    margin-bottom: 0.4em;
+  }
+  .main h4 {
+    font-size: 16px;
+    margin-top: 1.6em;
+    margin-bottom: 0.3em;
+    color: var(--ink-soft);
+  }
+  .main h5, .main h6 {
+    font-size: 14px;
+    margin-top: 1.4em;
+    margin-bottom: 0.3em;
+    color: var(--ink-soft);
+  }
+
+  .main p { margin: 0.9em 0; }
+  .main strong { font-weight: 600; color: var(--ink); }
+  .main em { font-style: italic; }
+  .main a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(37, 99, 235, 0.25);
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .main a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link);
+  }
+
+  /* Lists */
+  .main ul, .main ol {
+    margin: 0.9em 0;
+    padding-left: 1.6em;
+  }
+  .main li { margin: 0.35em 0; }
+  .main li > ul, .main li > ol { margin: 0.3em 0; }
+  .main ul li::marker { color: var(--ink-faded); }
+  .main ol li::marker { color: var(--ink-muted); font-weight: 500; }
+
+  /* Task list */
+  .main ul.task-list { padding-left: 0.4em; list-style: none; }
+  .main ul.task-list li { padding-left: 0; }
+  .main input[type="checkbox"] {
+    margin-right: 8px;
+    accent-color: var(--accent);
+  }
+
+  /* Blockquote / Callout */
+  .main blockquote {
+    margin: 1.2em 0;
+    padding: 12px 16px;
+    border-left: 3px solid var(--ink-faded);
+    background: var(--bg-soft);
+    color: var(--ink-soft);
+    border-radius: 0 4px 4px 0;
+  }
+  .main blockquote p { margin: 0.4em 0; }
+  .main blockquote p:first-child { margin-top: 0; }
+  .main blockquote p:last-child { margin-bottom: 0; }
+
+  /* Inline code */
+  .main code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    padding: 2px 6px;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 4px;
+    color: var(--ink);
+  }
+
+  /* Code block */
+  .main pre {
+    margin: 1.2em 0;
+    padding: 16px 18px;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: var(--code-fg);
+  }
+  .main pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font-size: 13px;
+    color: inherit;
+  }
+
+  /* Tables */
+  .main table {
+    width: 100%;
+    margin: 1.4em 0;
+    border-collapse: collapse;
+    font-size: 14px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .main th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 14px;
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+  }
+  .main td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  .main tr:last-child td { border-bottom: 0; }
+
+  /* HR */
+  .main hr {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: 2.4em 0;
+  }
+
+  /* Footer */
+  .doc-footer {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-faded);
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .doc-footer a {
+    color: var(--ink-muted);
+    text-decoration: none;
+  }
+  .doc-footer a:hover { color: var(--ink); }
+
+  /* ── Responsive ──────────────────────────────────────── */
+  @media (max-width: 920px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    .sidebar {
+      position: static;
+      border-left: 0;
+      border-top: 1px solid var(--rule);
+      padding: 20px 0 0;
+      margin-top: 24px;
+    }
+    .sidebar nav a { margin-left: 0; padding-left: 12px; }
+    .sidebar nav .toc-h3 a { padding-left: 24px; }
+    .sidebar nav .toc-h4 a { padding-left: 36px; }
+  }
+  @media (max-width: 600px) {
+    .doc-header { padding-top: 32px; }
+    .doc-title { font-size: 28px; }
+    .layout { padding: 20px 16px 60px; }
+    .main pre { margin: 1em -8px; border-radius: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-header">
+  <div class="doc-meta">
+    <span>{{DATE}}</span>
+    <span>Claude Code Review</span>
+  </div>
+  <h1 class="doc-title">{{TITLE}}</h1>
+  <div class="doc-source">{{SOURCE}}</div>
+</header>
+
+<div class="layout">
+  <main class="main">
+    {{CONTENT}}
+  </main>
+  <aside class="sidebar">
+    <div class="sidebar-label">On this page</div>
+    <nav>{{TOC}}</nav>
+  </aside>
+</div>
+
+<footer class="doc-footer">
+  <span>Generated by Claude Code hook</span>
+  <a href="file:///{{SOURCE_URL}}">View source</a>
+</footer>
+
+</body>
+</html>

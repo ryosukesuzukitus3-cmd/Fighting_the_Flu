@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infuru-to-no-shito"
+version = "0.2.0"
+description = "インフルとの死闘 — 2D横スクロールシューティングゲーム"
+requires-python = ">=3.11"
+dependencies = [
+    "pygame-ce>=2.4.0",
+]
+
+[project.scripts]
+infuru = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+"*" = ["assets/**/*", "data/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
