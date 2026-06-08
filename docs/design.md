@@ -50,7 +50,7 @@
 - HPゲージ（最大100の多段階・残機制）。被弾源ごとに被ダメージ量が異なる（`balance.py` の `PLAYER_DMG_*`：雑魚接触15 / 敵弾10 / ボス接触25 / 地形8）
 - 被弾でHP減少、0でゲームオーバー
 - 被弾後は一定時間無敵（点滅で表現）
-- 地形（壁・岩・デブリ）に接触してもダメージ
+- 地形（壁・岩・デブリ）に接触してもダメージ。弾は地形で跳ね返り、レーザーは地形で遮られる。破壊可能地形は一定ダメージで壊れてアイテムを落とすことがある
 - HUDにHPゲージ・スコア・ウェポン状態・ウェポン在庫を表示
 
 ### 2.3 武器システム（グラディウス式スロット選択）
@@ -559,6 +559,22 @@ class Boss:
   "bgm": "The_world_of_spirit_short.mp3",
   "events": [
     {
+      "time": 0.0,
+      "type": "TerrainStrip",
+      "theme": "fever_cave",
+      "length": 4400,
+      "gap_min": 380,
+      "gap_max": 480,
+      "breakable_chance": 0.1
+    },
+    {
+      "time": 24.0,
+      "type": "EnemyTurret",
+      "count": 1,
+      "surface": "bottom",
+      "surface_offset": 24
+    },
+    {
       "time": 3.0,
       "type": "EnemyVirus",
       "count": 3,
@@ -584,10 +600,12 @@ class Boss:
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | ○ | ステージ開始からの経過秒数（出現タイミング） |
-| `type` | ○ | 敵の種別（EnemyVirus / EnemyTakeshi / EnemyBroly / EnemyPachemon / EnemyBilly / EnemyTurret / Boss / **Terrain**） |
-| `count` | △ | 出現数（Terrain では不要） |
-| `formation` | △ | 編隊の並び方（`line` / `v_shape` / `random` / `single`）。`y` 指定時・Terrain では不要 |
-| `y` | — | 出現Y座標を固定（砲台など。指定時は formation 省略可） |
+| `type` | ○ | 敵の種別（EnemyVirus / EnemyTakeshi / EnemyBroly / EnemyPachemon / EnemyBilly / EnemyTurret / Boss / **Terrain** / **TerrainStrip**） |
+| `count` | △ | 出現数（Terrain / TerrainStrip では不要） |
+| `formation` | △ | 編隊の並び方（`line` / `v_shape` / `random` / `single`）。`y` / `surface` 指定時・Terrain / TerrainStrip では不要 |
+| `y` | — | 出現Y座標を固定（指定時は formation 省略可） |
+| `surface` | — | 地形表面に吸着して出現（`top` / `bottom`）。砲台などの足場配置に使う |
+| `surface_offset` / `surface_step` | — | `surface` 指定時の表面からの中心オフセット・複数出現時の横間隔 |
 | `enhanced` | — | `true` で強化版パラメータを使用（省略時は通常版） |
 
 #### 地形イベント（`type: "Terrain"`）
@@ -602,6 +620,28 @@ class Boss:
 | `y` | ○ | 配置Y座標（左上基準） |
 | `w` / `h` | ○ | 幅・高さ（px） |
 | `kind` | ○ | 見た目種別（`wall` / `rock` / `debris`） |
+
+#### 連続地形イベント（`type: "TerrainStrip"`）
+
+グラディウス風の上下壁・洞窟・要塞回廊をセグメント列として生成する。接触判定は矩形セグメントごとに行い、
+見た目はテーマ別の手続き描画で表現する。Stage1 では `fever_cave` を使い、発熱回廊の上下壁を構成する。
+
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `time` | ○ | 生成タイミング（秒） |
+| `type` | ○ | `"TerrainStrip"` |
+| `theme` | ○ | 見た目テーマ（`fever_cave` / `debris` / `fortress` / `shogi_void`） |
+| `length` | ○ | 生成する横幅（px） |
+| `segment_w` | — | 1セグメントの横幅（既定64px） |
+| `gap_min` / `gap_max` | — | 上下壁の通路幅レンジ（px） |
+| `center_y` / `center_wave` | — | 通路中心と上下揺れ幅 |
+| `top_min` / `bottom_min` | — | 上下壁の最低厚み |
+| `irregularity` | — | セグメントごとの局所的な凹凸量 |
+| `breakable_chance` | — | 破壊可能セグメントの出現率（0.0〜1.0） |
+| `breakable_hp` | — | 破壊可能セグメントのHP |
+| `breakable_drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
+| `start_offset` | — | 生成開始Xの補正（画面左から始める場合は負値） |
+| `seed` | — | 形状・模様の固定乱数シード |
 
 ---
 

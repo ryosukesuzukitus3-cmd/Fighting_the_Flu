@@ -44,7 +44,7 @@ from src.core.balance import (
 )
 
 # ボス演出シーケンス状態
-# "" → alert → entering → boss_name → boss_dialogue → fight_banner → fighting
+# "" -> alert -> entering -> boss_name -> boss_dialogue -> fight_banner -> fighting
 _BOSS_INTRO_FREEZE = {"boss_name", "boss_dialogue", "fight_banner"}
 
 
@@ -103,20 +103,17 @@ class GameScene(
         self._upgrading      = False
         self._upgrade_cursor = 0
         self._upgrade_font   = None
-        self._weapon_tip_shown = False   # 初回 WeaponItem 取得時だけ強めの導線を出す
-
-        # ステージ名バナー（スポーナーも BANNER_DURATION 間ロック）
+        self._weapon_tip_shown = False
         self._stage_banner_timer: float = STAGE_BANNER_DURATION
         self._stage_banner_font  = None
         self._stage_banner_sub_font = None
 
-        # 背景の流れテキスト（§041/§051 ミーム・婚活UI）
         self._bg_text_pool:  list = STAGE_BG_TEXT.get(self._stage_id, [])
         self._bg_text_items: list = []
         self._bg_text_timer: float = 0.0
         self._bg_text_font   = None
 
-        # 戦闘中自動タイムアウトセリフ（mid / form2）— 話者付き・キュー順送り
+        # 戦闘中自動タイムアウトセリフ
         self._boss_dialogue_timer:   float = 0.0
         self._boss_dialogue_text:    str   = ""
         self._boss_dialogue_speaker: str   = ""
@@ -147,33 +144,29 @@ class GameScene(
         self._boss_boom_y        = 0.0
         self._hint_blink         = 0.0
 
-        # 撃破後セリフ（post_boss_mixin が管理）
         self._defeat_dialogue_active: bool      = False
         self._defeat_dialogue_pages:  list[str] = []
         self._defeat_dialogue_index:  int       = 0
         self._defeat_dialogue_delay:  float     = 0.0
         self._defeat_dialogue_font    = None
 
-        # ヒットストップ（撃破・フォーム遷移時に一瞬スロー）
         self._hitstop_timer: float = 0.0
 
         # 第二形態移行フラッシュ
         self._form2_flash_timer: float = 0.0
-        # ラスボス撃破フラッシュ（閃光）
         self._boss_kill_flash_timer: float = 0.0
-        # レーザー発射閃光
         self._laser_flash_timer: float = 0.0
 
-        # ポップアップテキスト [(text, sx, sy, timer, color), ...]
+        # ポップアップテキスト
         self._popups: list = []
 
-        # 相棒（カロナール先輩）— karonaru_available のときのみ生成
+        # 相棒（カロナール先輩）
         self._companion = None
         if self.game.story.karonaru_available:
             from src.entities.companion import Karonaru
             self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
 
-        # 最終決戦（Form3 投了王サワグチ）スクリプト演出
+        # 最終決戦（Form3 投了王サワグチ）
         self._final_phase: int = 0     # 0=非Form3 / 1=Act1 / 2=Act2
         self._final_seq:   str = ""    # ""/fakeout/sengen/return/final_sengen/final_chance
         self._final_dialogue_pages:  list = []
@@ -189,12 +182,17 @@ class GameScene(
         self._f3_act2_mid_shown:    bool = False
         self._fakeout_triggered:    bool = False
         self._final_sengen_triggered: bool = False
+        self._karonaru_return_timer: float = 0.0
+        self._karonaru_return_from: tuple[float, float] = (0.0, 0.0)
+        self._karonaru_return_to: tuple[float, float] = (0.0, 0.0)
+        self._karonaru_arrival_timer: float = 0.0
+        self._karonaru_arrival_pos: tuple[float, float] = (0.0, 0.0)
 
         # コンボカウンター
         self._combo_count:       int   = 0
         self._combo_timer:       float = 0.0
-        self._combo_pulse:       float = 0.0   # 更新時にズームパルス 0→1 で減衰
-        self._combo_break_timer: float = 0.0   # "COMBO BREAK" 表示タイマー
+        self._combo_pulse:       float = 0.0   # 更新時にズームパルス 0->1 で減衰
+        self._combo_break_timer: float = 0.0
 
         if __debug__:
             self._debug_invincible: bool = False
@@ -204,7 +202,6 @@ class GameScene(
             from src.scenes.game.debug_stage_panel import DebugStagePanel
             self._debug_panel = DebugStagePanel(self.game, self)
 
-        # スコア・残機初期化（ステージ1のみ）
         if self._stage_id == 1:
             self.game.shared.score      = 0
             self.game.shared.kill_count = 0
@@ -216,15 +213,12 @@ class GameScene(
         self.game.playlog.log_stage_start(self._stage_id)
         self._stage_elapsed: float = 0.0
 
-        # ステージ引き継ぎ復元
         carry = self.game.shared.take_carry()
         if carry:
             self.player.restore_state(carry[0], carry[1])
 
-        # ステージ開始時のウェポン状態を保存（コンティニュー用）
         self.game.shared.stage_start_weapon = self.player.weapon.snapshot()
 
-        # ラウンドSE → BGM 遅延スタート
         _next_stage_path = _Path("data") / "stages" / f"stage{self._stage_id + 1}.json"
         _is_final_stage  = not _next_stage_path.exists()
         if _is_final_stage:
@@ -243,7 +237,7 @@ class GameScene(
 
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
-        # ヒットストップ: タイマー中は移動系 dt をほぼ 0 にして打撃感を出す
+        # Hitstop slows movement updates for a short impact moment.
         if self._hitstop_timer > 0:
             self._hitstop_timer -= dt
             dt = dt * 0.06
@@ -261,12 +255,13 @@ class GameScene(
         if self._stage_banner_timer    > 0: self._stage_banner_timer    -= dt
         if self._final_banner_timer    > 0: self._final_banner_timer    -= dt
         if self._sengen_overlay_timer  > 0: self._sengen_overlay_timer  -= dt
+        if self._karonaru_arrival_timer > 0: self._karonaru_arrival_timer -= dt
         self._tick_boss_dialogue(dt)
         if self._combo_pulse           > 0: self._combo_pulse           -= dt * 4.0
         if self._combo_break_timer     > 0: self._combo_break_timer     -= dt
         self._update_popups(dt)
 
-        # コンボタイムアウト
+        # Combo timeout.
         if self._combo_count > 0 and self._combo_timer > 0:
             self._combo_timer -= dt
             if self._combo_timer <= 0:
@@ -277,12 +272,12 @@ class GameScene(
 
         inp = self.game.input
 
-        # ポーズ切り替え
+        # Pause toggle.
         if not self._upgrading and inp.is_action_just_pressed("pause"):
             self._paused = not self._paused
             self._pause_cursor = 0
 
-        # ウェポン選択画面を開く（V キー・在庫がある時のみ）
+        # Open weapon upgrade when stock is available.
         if (not self._upgrading and not self._paused
                 and inp.is_action_just_pressed("weapon_select")
                 and self.player.weapon.weapon_stock > 0):
@@ -310,18 +305,22 @@ class GameScene(
         if self._boss_intro_state != "" and self._boss_intro_state != "fighting":
             self._update_boss_intro(dt)
 
-        # ── 常時更新（演出中も動かすもの）───────────────────
+        # ── 常時更新 ───────────────────────────────────────
         self.camera.update(dt)
         self._update_bg_text(dt)
 
-        # フリーズ中は最低限のみ更新（ボスは fighting に遷移してから動き始める）
+        # Freeze gameplay during boss intro overlays.
         if self._boss_intro_state in _BOSS_INTRO_FREEZE:
             self.particles.update(dt)
             return
 
-        # 最終決戦のスクリプトセリフ中は戦闘をフリーズ（ENTER 送り）
+        # Freeze gameplay during final scripted dialogue.
         if self._final_dialogue_active:
             self._update_final_dialogue()
+            self.particles.update(dt)
+            return
+        if self._final_seq == "return_join":
+            self._update_karonaru_return_join(dt)
             self.particles.update(dt)
             return
 
@@ -334,12 +333,11 @@ class GameScene(
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera, self.enemies)
 
-        # スポーナー（バナー終了後 & ボス演出中はロック）
         if self._stage_banner_timer <= 0 and self._boss_intro_state == "":
             self.spawner.update(dt, self.camera)
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
-        # ボス保留検知 → ALERT 開始
+        # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
             self._boss_intro_state = "alert"
             self._boss_intro_timer = ALERT_DURATION
@@ -387,9 +385,16 @@ class GameScene(
                     self._laser_flash_timer = 0.08
                 if just_ended:
                     self.particles.spawn_hit(int(msx), int(msy))
-                laser_killed, laser_hit = self.laser.hit_check(self.enemies, self._boss, msx, msy)
+                laser_killed, laser_hit = self.laser.hit_check(
+                    self.enemies, self._boss, msx, msy, terrain=self.terrain,
+                )
                 for enemy in laser_killed:
                     self._on_enemy_killed(enemy)
+                terrain_hit = getattr(self.laser, "terrain_hit", None)
+                if terrain_hit is not None and getattr(self.laser, "_terrain_hit_timer", 0.0) <= 0.0:
+                    ter, hx, hy = terrain_hit
+                    self._strike_terrain(ter, 1, int(hx), int(hy), allow_damage=True)
+                    self.laser._terrain_hit_timer = 0.12
                 if laser_hit:
                     self.game.sound.play_se("music/se/ウェポン：laser_hit.mp3", volume=0.12)
                     self.camera.shake(1.2)
@@ -398,7 +403,6 @@ class GameScene(
             else:
                 self.laser.state = "ready"
 
-        # 地形更新（スクロール・画面外除去）
         for ter in list(self.terrain):
             ter.update(dt, self.camera)
             if ter.is_off_left(self.camera):
@@ -410,7 +414,6 @@ class GameScene(
             if enemy.is_off_left(self.camera):
                 enemy.kill()
 
-        # アイテム更新 + マグネット
         mag_lv = self.player.weapon.magnet_level
         mag_range, mag_speed = MAGNET_CONFIG.get(mag_lv, (0, 0))
         for item in list(self.items):
@@ -428,26 +431,39 @@ class GameScene(
 
         for bullet in list(self.player_bullets):
             bullet.update(dt, self.camera)
+            bounce_timer = getattr(bullet, "_terrain_bounce_timer", 0.0)
+            if bounce_timer > 0.0:
+                bullet._terrain_bounce_timer = bounce_timer - dt
+                if bullet._terrain_bounce_timer <= 0.0:
+                    bullet.kill()
+                    continue
             if bullet.is_off_screen(self.camera):
                 bullet.kill()
 
         for bullet in list(self.enemy_bullets):
             bullet.update(dt)
+            bounce_timer = getattr(bullet, "_terrain_bounce_timer", 0.0)
+            if bounce_timer > 0.0:
+                bullet._terrain_bounce_timer = bounce_timer - dt
+                if bullet._terrain_bounce_timer <= 0.0:
+                    bullet.kill()
+                    continue
             if bullet.is_off_screen():
                 bullet.kill()
 
-        # ボス中盤セリフ（HP 50%以下、fighting 中のみ）。Form3 は専用処理。
+        self._process_terrain_bullet_collisions()
+
+        # Queue boss mid-fight dialogue once after HP drops below half.
         if (self._boss is not None and self._boss_intro_state == "fighting"
                 and self._final_phase == 0
                 and not self._boss_mid_dialogue_shown
                 and self._boss.hp / self._boss.max_hp <= 0.5):
-            # Form2 中は専用キー、それ以外はステージ番号
             mid_key = "4f2mid" if getattr(self._boss, "_form2", False) else f"{self._stage_id}mid"
             if mid_key in BOSS_MID:
                 self._enqueue_boss_dialogue(BOSS_MID[mid_key], BOSS_MID_LINE_DURATION)
                 self._boss_mid_dialogue_shown = True
 
-        # 最終決戦（Form3）: 反芻再生・しきい値演出
+        # Update final-battle special effects and companion sequence.
         if (self._boss is not None and self._boss_intro_state == "fighting"
                 and self._final_phase > 0 and self._final_seq == ""):
             self._update_final_combat(dt)
@@ -458,11 +474,9 @@ class GameScene(
         if __debug__:
             self._debug_handle_input()
 
-        # デバッグステージ: パネル更新（開閉は Tab キー）
         if self._is_debug_stage and self._debug_panel is not None:
             self._debug_panel.update(dt)
 
-    # ── ボス演出ステートマシン ────────────────────────────────
     def _update_boss_intro(self, dt: float) -> None:
         state = self._boss_intro_state
         inp   = self.game.input
@@ -526,13 +540,15 @@ class GameScene(
         self.enemies.draw(buf)
         if self._boss is not None:
             buf.blit(self._boss.image, self._boss.rect)
-            # 被弾フラッシュ（白ティント加算）
+            # Draw boss hit flash.
             if getattr(self._boss, "hit_flash_timer", 0.0) > 0:
                 tint = self._boss.image.copy()
                 tint.fill((170, 170, 170), special_flags=pygame.BLEND_RGB_ADD)
                 buf.blit(tint, self._boss.rect)
-            self._draw_boss_gimmick(buf)
+        self._draw_boss_gimmick(buf)
         self.particles.draw(buf)
+        if self._karonaru_arrival_timer > 0:
+            self._draw_karonaru_arrival_marker(buf)
         if self._companion:
             self._companion.draw(buf)
         self.player.draw(buf)
@@ -559,7 +575,7 @@ class GameScene(
         self._draw_popups(screen)
         self._draw_combo(screen)
 
-        # レーザー発射閃光
+        # Draw laser fire flash.
         if self._laser_flash_timer > 0:
             alpha = int(160 * (self._laser_flash_timer / 0.08))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
@@ -568,14 +584,13 @@ class GameScene(
             flash.fill((*fc, alpha))
             screen.blit(flash, (0, 0))
 
-        # 第二形態フラッシュ
         if self._form2_flash_timer > 0:
             alpha = int(220 * (self._form2_flash_timer / 0.5))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
             flash.fill((255, 255, 255, alpha))
             screen.blit(flash, (0, 0))
 
-        # ラスボス撃破フラッシュ（閃光）
+        # Draw boss-kill flash.
         if self._boss_kill_flash_timer > 0:
             _FLASH_DUR = 1.2
             alpha = int(255 * (self._boss_kill_flash_timer / _FLASH_DUR))
@@ -591,7 +606,6 @@ class GameScene(
         if self._stage_banner_timer > 0:
             self._draw_stage_banner(screen)
 
-        # ボス演出オーバーレイ
         s = self._boss_intro_state
         if s == "alert":         self._draw_alert(screen)
         elif s == "boss_name":   self._draw_boss_name(screen)
@@ -601,7 +615,6 @@ class GameScene(
         if self._boss_dialogue_timer > 0:
             self._draw_boss_dialogue(screen)
 
-        # 最終決戦（Form3）オーバーレイ
         if self._sengen_overlay_timer > 0:
             self._draw_sengen_overlay(screen)
         if self._final_banner_timer > 0:
@@ -615,10 +628,97 @@ class GameScene(
         if self._is_debug_stage and self._debug_panel is not None:
             self._debug_panel.draw(screen)
 
-    # ── 衝突処理 ──────────────────────────────────────────────────
+    def _process_terrain_bullet_collisions(self) -> None:
+        if not self.terrain:
+            return
+
+        for bullet in list(self.player_bullets):
+            if getattr(bullet, "_terrain_bounced", False):
+                continue
+            ter = pygame.sprite.spritecollideany(bullet, self.terrain)
+            if ter is None:
+                continue
+            sx, sy = bullet.rect.center
+            self._strike_terrain(ter, getattr(bullet, "damage", 1), sx, sy, allow_damage=True)
+            self._ricochet_bullet(bullet, ter, screen_space=False)
+
+        for bullet in list(self.enemy_bullets):
+            if getattr(bullet, "_terrain_bounced", False):
+                continue
+            ter = pygame.sprite.spritecollideany(bullet, self.terrain)
+            if ter is None:
+                continue
+            sx, sy = bullet.rect.center
+            self._strike_terrain(ter, 1, sx, sy, allow_damage=False)
+            self._ricochet_bullet(bullet, ter, screen_space=True)
+
+    def _strike_terrain(self, ter, damage: int, sx: int, sy: int, *, allow_damage: bool) -> None:
+        self.particles.spawn_spark(sx, sy, count=10, speed=300.0)
+        self.particles.spawn_hit(sx, sy, color=(255, 210, 130), count=4)
+        self.camera.shake(0.8)
+        self.game.sound.play_se("music/se/hit.wav", volume=0.18)
+
+        if not allow_damage or not hasattr(ter, "take_damage"):
+            return
+
+        if not ter.take_damage(max(1, int(damage))):
+            return
+
+        world_x = self.camera.to_world_x(sx)
+        world_y = max(24.0, min(float(sy), SCREEN_HEIGHT - 24.0))
+        drop_chance = float(getattr(ter, "drop_chance", 0.0))
+        ter.kill()
+        self.particles.spawn_explosion(sx, sy, color=(255, 130, 70), count=18)
+        self.particles.spawn_spark(sx, sy, color=(255, 180, 90), count=18, speed=420.0)
+        self.camera.shake(4.0)
+        if drop_chance > 0.0 and random.random() < drop_chance:
+            self.items.add(random_item(world_x, world_y, spread=16.0))
+
+    def _ricochet_bullet(self, bullet, ter, *, screen_space: bool) -> None:
+        b = bullet.rect
+        t = ter.rect
+        overlap_x = min(b.right - t.left, t.right - b.left)
+        overlap_y = min(b.bottom - t.top, t.bottom - b.top)
+
+        if overlap_y < overlap_x:
+            if b.centery < t.centery:
+                b.bottom = t.top - 1
+                fallback_vy = -220.0
+            else:
+                b.top = t.bottom + 1
+                fallback_vy = 220.0
+            bullet.vy = -getattr(bullet, "vy", fallback_vy)
+            if abs(bullet.vy) < 80.0:
+                bullet.vy = fallback_vy
+            bullet.vx = getattr(bullet, "vx", 0.0) * 0.45
+        else:
+            if b.centerx < t.centerx:
+                b.right = t.left - 1
+                fallback_vx = -260.0
+            else:
+                b.left = t.right + 1
+                fallback_vx = 260.0
+            bullet.vx = -getattr(bullet, "vx", fallback_vx)
+            if abs(bullet.vx) < 100.0:
+                bullet.vx = fallback_vx
+            bullet.vy = getattr(bullet, "vy", 0.0) + random.uniform(-90.0, 90.0)
+
+        if hasattr(bullet, "_homing_left"):
+            bullet._homing_left = 0.0
+        bullet._terrain_bounced = True
+        bullet._terrain_bounce_timer = 0.18
+        if screen_space:
+            bullet.sx, bullet.sy = bullet.rect.center
+        else:
+            bullet.world_x = self.camera.to_world_x(bullet.rect.centerx)
+            bullet.world_y = float(bullet.rect.centery)
+
     def _process_collisions(self) -> bool:
         from src.entities.bullets.player_bullet import HomingBullet
-        hits = pygame.sprite.groupcollide(self.player_bullets, self.enemies, False, False)
+        active_player_bullets = pygame.sprite.Group(*[
+            b for b in self.player_bullets if not getattr(b, "_terrain_bounced", False)
+        ])
+        hits = pygame.sprite.groupcollide(active_player_bullets, self.enemies, False, False)
         for bullet, hit_enemies in hits.items():
             hit_se = "music/se/ウェポン：missile_hit.mp3" if isinstance(bullet, HomingBullet) \
                      else "music/se/ウェポン：normalshot_hit.mp3"
@@ -631,7 +731,7 @@ class GameScene(
                     self.particles.spawn_hit(bx, by)
                     self.camera.shake(1.0)
                 self.game.sound.play_se(hit_se, volume=0.4)
-                if self._combo_count > 0:   # 命中している間はコンボ継続
+                if self._combo_count > 0:
                     self._combo_timer = COMBO_WINDOW
                 if enemy.take_damage(bullet.damage):
                     self._on_enemy_killed(enemy)
@@ -640,20 +740,24 @@ class GameScene(
 
         if self._boss is not None and self._boss_intro_state == "fighting":
             for bullet in list(self.player_bullets):
+                if getattr(bullet, "_terrain_bounced", False):
+                    continue
                 if bullet.rect.colliderect(self._boss.rect):
                     hit_se = "music/se/ウェポン：missile_hit.mp3" if isinstance(bullet, HomingBullet) \
                              else "music/se/ウェポン：normalshot_hit.mp3"
                     bx, by = bullet.rect.centerx, bullet.rect.centery
-                    if isinstance(bullet, HomingBullet):
-                        self.particles.spawn_explosion(bx, by, color=(255, 160, 40), count=22)
-                        self.particles.spawn_spark(bx, by, count=6)
-                        self.camera.shake(4.0)
-                    else:
-                        self.particles.spawn_hit(bx, by)
-                        self.particles.spawn_spark(bx, by, count=3)
-                        self.camera.shake(1.5)
-                    self.game.sound.play_se(hit_se, volume=0.3)
-                    if self._combo_count > 0:   # ボスへの命中でもコンボ継続
+                    feedback = not getattr(self._boss, "suppresses_hit_feedback", lambda: False)()
+                    if feedback:
+                        if isinstance(bullet, HomingBullet):
+                            self.particles.spawn_explosion(bx, by, color=(255, 160, 40), count=22)
+                            self.particles.spawn_spark(bx, by, count=6)
+                            self.camera.shake(4.0)
+                        else:
+                            self.particles.spawn_hit(bx, by)
+                            self.particles.spawn_spark(bx, by, count=3)
+                            self.camera.shake(1.5)
+                        self.game.sound.play_se(hit_se, volume=0.3)
+                    if self._combo_count > 0:
                         self._combo_timer = COMBO_WINDOW
                     bullet.kill()
                     was_form2 = self._boss._form2
@@ -662,7 +766,7 @@ class GameScene(
                         self._on_boss_killed()
                         if not self._is_debug_stage:
                             return True
-                        break  # デバッグステージ: ボス消去後は残弾処理を打ち切る
+                        break
                     if self._boss is not None and not was_form2 and self._boss._form2:
                         self._on_form2_transition()
                     if self._boss is not None and not was_form3 and self._boss._form3:
@@ -673,36 +777,43 @@ class GameScene(
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True
 
-        hit_bullet = pygame.sprite.spritecollideany(self.player, self.enemy_bullets, _hit_rect_collide)
+        hit_bullet = None
+        for bullet in list(self.enemy_bullets):
+            if getattr(bullet, "_terrain_bounced", False):
+                continue
+            if self.player.hit_rect.colliderect(bullet.rect):
+                hit_bullet = bullet
+                break
         if hit_bullet is not None:
             self._damage_player(getattr(hit_bullet, "damage", PLAYER_DMG_BULLET))
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True
 
-        # ボス本体との接触ダメージ（戦闘中のみ）
+        # Damage player on direct boss contact during combat.
         if (self._boss is not None and self._boss_intro_state == "fighting"
                 and self.player.hit_rect.colliderect(self._boss.rect)):
             self._damage_player(PLAYER_DMG_BOSS)
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True
 
-        # 地形との接触ダメージ（i-frame で連続接触を間引く）
+        # Damage player on terrain contact.
         if pygame.sprite.spritecollideany(self.player, self.terrain, _hit_rect_collide):
             self._damage_player(PLAYER_DMG_TERRAIN)
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True
 
-        # 相棒への敵/弾接触（ゲームオーバーとは独立）。被弾SEは companion.take_damage 内で再生。
         if self._companion and self._companion.is_active:
             for enemy in list(self.enemies):
                 if self._companion.hit_rect.colliderect(enemy.rect):
                     self._companion.take_damage()
-                    # 接触した敵にも反撃ダメージ。倒したら撃破処理。
+                    # Also damage the enemy that touched the companion.
                     if enemy.take_damage(KARONARU_CONTACT_DMG):
                         self._on_enemy_killed(enemy)
                     break
             if self._companion.is_active:
                 for bullet in list(self.enemy_bullets):
+                    if getattr(bullet, "_terrain_bounced", False):
+                        continue
                     if self._companion.hit_rect.colliderect(bullet.rect):
                         self._companion.take_damage()
                         bullet.kill()   # 被弾した弾は相殺
@@ -711,7 +822,6 @@ class GameScene(
         from src.entities.items.weapon_item import WeaponItem
         for item in pygame.sprite.spritecollide(self.player, self.items, True):
             if isinstance(item, WeaponItem):
-                # 即選択せず在庫に加算。V キーで選択画面を開いて消費する。
                 self._pickup_weapon_item()
             else:
                 item.apply(self.player)
@@ -733,7 +843,6 @@ class GameScene(
             d = ENEMY_BY_NAME[etype]
             self.game.sound.play_se(d.se, volume=d.se_volume)
         enemy.kill()
-        # コンボ更新（ボス以外の雑魚のみカウント）
         self._combo_count += 1
         self._combo_timer  = COMBO_WINDOW
         self._combo_pulse  = 1.0
@@ -758,7 +867,6 @@ class GameScene(
             chance = DROP_CHANCE.get(etype, 0.20)
             if random.random() < chance:
                 self.items.add(random_item(enemy.world_x, enemy.world_y))
-            # レアドロップ: 残機アイテム (2%)
             if random.random() < 0.02:
                 from src.entities.items.extra_life import ExtraLifeItem
                 self.items.add(ExtraLifeItem(enemy.world_x, enemy.world_y))
@@ -772,16 +880,14 @@ class GameScene(
         self._form2_flash_timer = 0.5
         f2_key = f"{self._stage_id}f2"
         self._enqueue_boss_dialogue(BOSS_MID.get(f2_key, []), BOSS_MID_LINE_DURATION)
-        # Form2 の HP50% mid を再び発火できるようにする
         self._boss_mid_dialogue_shown = False
 
-    # ── 最終決戦（Form3 投了王サワグチ）────────────────────────────
     def _show_final_banner(self, key: str, duration: float = 2.6) -> None:
         self._final_banner_text  = FINAL_BANNERS.get(key, ())
         self._final_banner_timer = duration
 
     def _play_final_dialogue(self, pages: list, on_done) -> None:
-        """list[Line] を ENTER 送りで再生し、終了後 on_done を呼ぶ（戦闘フリーズ）。"""
+        """Play final dialogue pages and invoke a completion callback."""
         self._final_dialogue_pages   = list(pages)
         self._final_dialogue_idx     = 0
         self._final_dialogue_active  = True
@@ -800,13 +906,13 @@ class GameScene(
                     cb()
 
     def _on_form3_transition(self) -> None:
-        """Form2 撃破 → 投了王サワグチ登場。"""
+        """Transition from form 2 to the true final form."""
         self.camera.shake(26.0)
         self._hitstop_timer = 0.18
         self.particles.spawn_big_explosion(self._boss.sx, self._boss.sy)
         self.enemy_bullets.empty()
         self.player._invincible_timer = max(self.player._invincible_timer, 2.5)
-        self._boss_kill_flash_timer = 1.2   # 白閃光（暗転演出の代替）
+        self._boss_kill_flash_timer = 1.2
         self.game.sound.stop_bgm(fadeout_ms=600)
         self.game.sound.play_bgm("music/bgm/決戦.mp3")
         self._final_phase = 1
@@ -815,33 +921,28 @@ class GameScene(
         self._play_final_dialogue(BOSS_FORM3_INTRO, on_done=lambda: None)
 
     def _update_final_combat(self, dt: float) -> None:
-        """Form3 戦闘中: 反芻再生・しきい値演出（_final_seq=='' のときのみ）。"""
+        """Update special story beats during the final form."""
         boss = self._boss
         if boss is None:
             return
         ratio = boss.hp / boss.max_hp
 
         if self._final_phase == 1:
-            # 反芻再生（周期回復）
             if getattr(boss, "_regen_enabled", False):
                 self._regen_timer -= dt
                 if self._regen_timer <= 0.0:
                     self._regen_timer = 1.0
                     boss.regen(2)
-            # HP60% 初回: 反芻再生の気づきセリフ（非ブロッキング）
             if not self._f3_act1_mid_shown and ratio <= 0.6:
                 self._enqueue_boss_dialogue(BOSS_MID.get("4f3mid", []), BOSS_MID_LINE_DURATION)
                 self._f3_act1_mid_shown = True
-            # HP30% 初回: フェイクアウト → 投了勧告 → カロナール復帰
             if not self._fakeout_triggered and ratio <= 0.3:
                 self._fakeout_triggered = True
                 self._start_fakeout()
         elif self._final_phase == 2:
-            # Act2 中盤セリフ（HP50%）
             if not self._f3_act2_mid_shown and ratio <= 0.5:
                 self._enqueue_boss_dialogue(BOSS_MID.get("4f3act2mid", []), BOSS_MID_LINE_DURATION)
                 self._f3_act2_mid_shown = True
-            # HP を削りきった（1 にクランプ）→ 最終勧告・終局
             if not self._final_sengen_triggered and boss.hp <= 1:
                 self._final_sengen_triggered = True
                 self._start_final_sengen()
@@ -853,39 +954,112 @@ class GameScene(
         self._play_final_dialogue(FINAL_SEQ["fakeout"], on_done=self._start_sengen)
 
     def _start_sengen(self) -> None:
-        # 投了王 HP を半分まで戻す復活演出
         if self._boss is not None:
             self._boss.hp = self._boss.max_hp // 2
         self._final_seq = "sengen"
         self._sengen_overlay_timer = 2.5
         self._show_final_banner("sengen", 2.6)
-        self.player.hp = 1   # 回避不能 → 瀕死
+        self.player.hp = 1   # 蝗樣∩荳崎・ 竊・轢墓ｭｻ
         self.player._invincible_timer = max(self.player._invincible_timer, 3.0)
         self._play_final_dialogue(FINAL_SEQ["sengen"], on_done=self._start_karonaru_return)
 
     def _start_karonaru_return(self) -> None:
         self._final_seq = "return"
-        self._boss_kill_flash_timer = 1.2   # 白閃光
-        self.game.sound.play_bgm("music/bgm/Rebirth_the_edge.mp3", volume=0.7)   # 先輩復帰で盛り上がりBGMへ（音量0.7倍）
         self._show_final_banner("kouhatsu", 3.0)
+        self._boss_kill_flash_timer = 1.2   # 逋ｽ髢・・
+        self.game.sound.play_bgm("music/bgm/Rebirth_the_edge.mp3", volume=0.7)
         self.game.sound.play_se_alias("SE_LIGHT")
-        self._play_final_dialogue(FINAL_SEQ["return"], on_done=self._do_karonaru_max)
+        self._spawn_returning_karonaru()
+        self._play_final_dialogue(FINAL_SEQ["return"], on_done=self._start_karonaru_return_join)
+
+    def _spawn_returning_karonaru(self) -> None:
+        if self._companion is None:
+            from src.entities.companion import Karonaru
+            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
+        self._companion.sx = SCREEN_WIDTH * 0.68
+        self._companion.sy = SCREEN_HEIGHT * 0.38
+        self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
+        self._karonaru_arrival_timer = 2.4
+        self._karonaru_arrival_pos = (self._companion.sx, self._companion.sy)
+        self.camera.shake(8.0)
+        self.particles.spawn_glow(self._companion.sx, self._companion.sy,
+                                  color=(220, 255, 220), count=48, speed=150.0)
+        self.particles.spawn_spark(self._companion.sx, self._companion.sy,
+                                   color=(220, 255, 220), count=36, speed=540.0)
+        self._spawn_popup("KARONARU RETURNS",
+                          int(self._companion.sx), int(self._companion.sy) - 46,
+                          color=(190, 255, 210), life=2.2)
+
+    def _draw_karonaru_arrival_marker(self, surf: pygame.Surface) -> None:
+        x, y = self._karonaru_arrival_pos
+        t = max(0.0, min(1.0, self._karonaru_arrival_timer / 2.4))
+        alpha = int(230 * t)
+        pulse = 0.5 + 0.5 * math.sin(self._karonaru_arrival_timer * 18.0)
+        marker = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        cx, cy = int(x), int(y)
+        pygame.draw.line(marker, (150, 255, 190, int(95 * t)), (cx, 0), (cx, SCREEN_HEIGHT), 3)
+        pygame.draw.line(marker, (150, 255, 190, int(95 * t)), (0, cy), (SCREEN_WIDTH, cy), 3)
+        for i in range(3):
+            r = int((1.0 - t) * 120 + 28 + i * 24 + pulse * 8)
+            pygame.draw.circle(marker, (190, 255, 210, max(0, alpha - i * 55)), (cx, cy), r, 3)
+        font = self.game.resources.pixelfont(20)
+        label = font.render("KARONARU", True, (215, 255, 225))
+        label.set_alpha(alpha)
+        marker.blit(label, (cx - label.get_width() // 2, cy - 70))
+        surf.blit(marker, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
+    def _start_karonaru_return_join(self) -> None:
+        if self._companion is None:
+            self._spawn_returning_karonaru()
+        self._final_seq = "return_join"
+        self._karonaru_return_timer = 0.0
+        self._karonaru_return_from = (float(self._companion.sx), float(self._companion.sy))
+        self._karonaru_return_to = (
+            float(self.player.rect.centerx) - 52.0,
+            float(self.player.rect.centery) + 18.0,
+        )
+        self.game.sound.play_se_alias("SE_LIGHT")
+
+    def _update_karonaru_return_join(self, dt: float) -> None:
+        if self._companion is None:
+            self._do_karonaru_max()
+            return
+        self._karonaru_return_timer += dt
+        dur = 1.35
+        t = min(1.0, self._karonaru_return_timer / dur)
+        ease = 1.0 - (1.0 - t) ** 3
+        sx0, sy0 = self._karonaru_return_from
+        sx1, sy1 = self._karonaru_return_to
+        arc = math.sin(t * math.pi) * 36.0
+        self._companion.sx = sx0 + (sx1 - sx0) * ease
+        self._companion.sy = sy0 + (sy1 - sy0) * ease - arc
+        self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
+        self.particles.spawn_glow(
+            self._companion.sx,
+            self._companion.sy,
+            color=(190, 255, 210),
+            count=2,
+            speed=45.0,
+        )
+        if t >= 1.0:
+            self._spawn_popup("LET'S GO", int(self._companion.sx), int(self._companion.sy) - 34,
+                              color=(180, 255, 200), life=1.8)
+            self._do_karonaru_max()
 
     def _do_karonaru_max(self) -> None:
-        # カロナール先輩・薬効最大で復帰
         if self._companion is None:
             from src.entities.companion import Karonaru
             self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
             self._companion.sx = float(self.player.rect.centerx) - 50.0
             self._companion.sy = float(self.player.rect.centery) + 16.0
         self._companion.set_max()
-        # ストーリーフラグ更新（SCENE090）
         self.game.story.karonaru_lost        = False
+        # Story flags for Karonaru return.
         self.game.story.karonaru_available   = True
         self.game.story.karonaru_max         = True
         self.game.story.final_self_distanced = True
-        # 抗反芻フィールド・最終ゲージ開始
         self._show_final_banner("anti_rumin", 3.0)
+        # Start the anti-rumination field and final gauge.
         from src.entities.enemies.boss import _FORM3_ACT2_HP
         if self._boss is not None:
             self._boss.begin_act2(_FORM3_ACT2_HP)
@@ -910,7 +1084,7 @@ class GameScene(
 
     # ── 最終決戦 描画 ──────────────────────────────────────────────
     def _draw_sengen_overlay(self, screen: pygame.Surface) -> None:
-        """投了勧告の赤黒全画面オーバーレイ（脈動）。"""
+        """Draw the final declaration overlay."""
         pulse = 0.5 + 0.5 * math.sin(self._sengen_overlay_timer * 6.0)
         alpha = int(120 + 80 * pulse)
         ov = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
@@ -918,7 +1092,7 @@ class GameScene(
         screen.blit(ov, (0, 0))
 
     def _draw_final_banner(self, screen: pygame.Surface) -> None:
-        """技名・SYSTEM バナー（中央・複数行）。"""
+        """Draw the final system banner."""
         if not self._final_banner_text:
             return
         big   = self.game.resources.pixelfont(40)
@@ -934,7 +1108,7 @@ class GameScene(
             screen.blit(surf, (cx - surf.get_width() // 2, cy + i * 46))
 
     def _draw_final_dialogue(self, screen: pygame.Surface) -> None:
-        """最終決戦スクリプトセリフ（ENTER 送り）。"""
+        """Draw final battle dialogue pages."""
         if self._final_dialogue_font is None:
             self._final_dialogue_font = self.game.resources.pixelfont(26)
         pages = self._final_dialogue_pages
@@ -960,12 +1134,11 @@ class GameScene(
 
         hint_font = self.game.resources.pixelfont(16)
         if idx < total - 1:
-            hint = hint_font.render(f"{idx + 1}/{total}  ENTER: 次へ", True, (180, 130, 190))
+            hint = hint_font.render(f"{idx + 1}/{total}  ENTER: NEXT", True, (180, 130, 190))
         else:
-            hint = hint_font.render("ENTER: 続ける", True, (160, 200, 150))
+            hint = hint_font.render("ENTER: OK", True, (160, 200, 150))
         screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 28, box_y + box_h - hint.get_height() - 4))
 
-    # ── 背景の流れテキスト（§041/§051）────────────────────────────
     def _update_bg_text(self, dt: float) -> None:
         if not self._bg_text_pool:
             return
@@ -992,9 +1165,8 @@ class GameScene(
             txt.set_alpha(70)
             surf.blit(txt, (int(it["x"]), int(it["y"])))
 
-    # ── 戦闘中セリフ（話者付き・自動順送り）────────────────────────
     def _enqueue_boss_dialogue(self, lines: list, line_duration: float | None = None) -> None:
-        """Line のリストを順送り表示する。1 行目を即表示し残りをキューへ。"""
+        """Start timed boss dialogue and queue remaining lines."""
         if not lines:
             return
         self._boss_dialogue_line_dur = line_duration or BOSS_DIALOGUE_DURATION
@@ -1005,7 +1177,7 @@ class GameScene(
         self._boss_dialogue_timer    = self._boss_dialogue_line_dur
 
     def _tick_boss_dialogue(self, dt: float) -> None:
-        """戦闘中セリフのタイマー更新。期限切れでキューの次行へ。"""
+        """Advance timed boss dialogue."""
         if self._boss_dialogue_timer <= 0:
             return
         self._boss_dialogue_timer -= dt
@@ -1016,8 +1188,7 @@ class GameScene(
             self._boss_dialogue_timer   = getattr(self, "_boss_dialogue_line_dur", BOSS_DIALOGUE_DURATION)
 
     def _draw_boss_gimmick(self, buf: pygame.Surface) -> None:
-        """ボスのギミック状態（シールド/装甲/弱点露出/砲台/スタン）を可視化する。
-        図形に加え、状態が一目で分かる短いラベルをボス頭上に表示する。"""
+        """Draw the current boss gimmick state."""
         b = self._boss
         cx, cy = b.rect.center
         r = max(b.rect.width, b.rect.height) // 2 + 10
@@ -1061,7 +1232,7 @@ class GameScene(
             buf.blit(surf, (cx - surf.get_width() // 2, b.rect.top - 26))
 
     def _draw_armor_gauge(self, buf: pygame.Surface, b, cx: int, y: int) -> None:
-        """weakpoint ギミックの装甲残量を小ゲージで表示。"""
+        """Draw a compact armor gauge for weakpoint gimmicks."""
         from src.entities.enemies.boss import _ARMOR_MAX
         w, h = 80, 6
         ratio = max(0.0, min(1.0, getattr(b, "_armor", 0) / _ARMOR_MAX))
@@ -1071,11 +1242,11 @@ class GameScene(
         pygame.draw.rect(buf, (90, 100, 120), (x, y, w, h), 1, border_radius=2)
 
     def _summon_boss_turrets(self, n: int) -> list:
-        """ボス（砲台連動ギミック）用に砲台を召喚し、enemies グループへ追加して返す。"""
+        """Summon turrets used by boss gimmicks."""
         from src.entities.enemies.turret import EnemyTurret
         spawned = []
         for i in range(n):
-            wx = self.camera.spawn_x(margin=-120)   # 画面内右寄りに出現
+            wx = self.camera.spawn_x(margin=-120)
             wy = 110.0 + i * (SCREEN_HEIGHT - 220.0) / max(1, n - 1) if n > 1 else SCREEN_HEIGHT / 2
             t = EnemyTurret(self.game, wx, wy, self.enemy_bullets, self.player)
             self.enemies.add(t)
@@ -1094,7 +1265,7 @@ class GameScene(
         self.player.take_damage(amount)
         self.particles.spawn_player_hit(self.player.sx, self.player.sy)
         self.camera.shake(10.0)
-        # 反芻再生: Act1 で澤口が被弾するとボスが回復する（後悔をエネルギーに）
+        # Regenerate the final boss when the player is hit during act 1.
         if (self._boss is not None and self._final_phase == 1
                 and getattr(self._boss, "_regen_enabled", False)):
             self._boss.regen(15)
@@ -1104,18 +1275,17 @@ class GameScene(
             self.game.sound.play_se("music/se/shout.wav", volume=0.6)
 
     def _pickup_weapon_item(self) -> None:
-        """WeaponItem 取得＝在庫+1。初回だけ強めの導線ポップアップを出す。"""
+        """Apply a weapon stock pickup."""
         self.player.weapon.weapon_stock += 1
         wsel = self.game.settings.key_display("weapon_select")
         px, py = self.player.rect.centerx, self.player.rect.top - 10
         if not self._weapon_tip_shown:
             self._weapon_tip_shown = True
-            self._spawn_popup(f"WEAPON STOCK +1   {wsel}キーで強化を選択!",
+            self._spawn_popup(f"WEAPON STOCK +1   {wsel}キーで強化を選抁E",
                               px, py, color=(120, 230, 255), life=3.0)
         else:
             self._spawn_popup(f"WEAPON +1  [{wsel}]", px, py)
 
-    # ── ポップアップテキスト ──────────────────────────────────────
     def _spawn_popup(self, text: str, sx: int, sy: int,
                      color: tuple = (255, 230, 60), life: float = 1.4) -> None:
         self._popups.append([text, float(sx), float(sy), life, color])
@@ -1123,8 +1293,7 @@ class GameScene(
     def _update_popups(self, dt: float) -> None:
         for p in self._popups:
             p[3] -= dt
-            p[2] -= 35.0 * dt   # 上に流れる
-        self._popups = [p for p in self._popups if p[3] > 0]
+            p[2] -= 35.0 * dt   # 上に流れめE        self._popups = [p for p in self._popups if p[3] > 0]
 
     def _draw_popups(self, screen: pygame.Surface) -> None:
         font = self.game.resources.pixelfont(24)
@@ -1160,13 +1329,12 @@ class GameScene(
 
         label = f"{self._combo_count} COMBO!"
         if mult > 1:
-            label += f"  ×{mult}"
+            label += f"  x{mult}"
         surf = font.render(label, True, color)
         cx   = SCREEN_WIDTH // 2
         cy   = 58
         screen.blit(surf, (cx - surf.get_width() // 2, cy - surf.get_height() // 2))
 
-        # タイマーバー（コンボウィンドウの残り時間）
         bar_w   = 160
         bar_h   = 5
         ratio   = max(0.0, self._combo_timer / COMBO_WINDOW)

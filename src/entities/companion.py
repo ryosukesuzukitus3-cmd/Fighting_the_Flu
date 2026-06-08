@@ -162,8 +162,8 @@ class Karonaru(pygame.sprite.Sprite):
             self._blink_visible = True
 
         # ショット
-        self._shoot_cooldown -= dt
-        if self._shoot_cooldown <= 0.0:
+        self._shoot_cooldown = max(0.0, self._shoot_cooldown - dt)
+        if getattr(player, "fire_held", False) and self._shoot_cooldown <= 0.0:
             self._fire(player_bullets, camera)
             self._shoot_cooldown = _SHOOT_COOLDOWN
 

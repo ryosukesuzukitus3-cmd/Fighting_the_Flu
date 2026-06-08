@@ -148,6 +148,11 @@ class GameScenePostBossMixin:
 
     def _on_boss_killed(self) -> None:
         """ボス撃破時の演出・後続フェーズ設定を行う。"""
+        self._boss_dialogue_timer = 0.0  # type: ignore[attr-defined]
+        self._boss_dialogue_text = ""  # type: ignore[attr-defined]
+        self._boss_dialogue_speaker = ""  # type: ignore[attr-defined]
+        self._boss_dialogue_queue = []  # type: ignore[attr-defined]
+
         # デバッグステージではボスをリセットするだけ（GameClearへ進まない）
         if getattr(self, "_is_debug_stage", False):  # type: ignore[attr-defined]
             self._boss = None  # type: ignore[attr-defined]

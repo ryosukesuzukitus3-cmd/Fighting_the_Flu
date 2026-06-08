@@ -53,6 +53,7 @@ class Player(pygame.sprite.Sprite):
 
         self._cooldown:       float = 0.0
         self.shoot_requested: bool  = False
+        self.fire_held:       bool  = False
         self.laser_fire_held: bool  = False   # レーザー用: SPACE長押し状態
 
     @property
@@ -88,6 +89,9 @@ class Player(pygame.sprite.Sprite):
                 self._entering = False
             self.rect.topleft = (int(self.sx), int(self.sy))
             self._cooldown = max(0.0, self._cooldown - dt)
+            self.shoot_requested = False
+            self.fire_held = False
+            self.laser_fire_held = False
             return
 
         inp = self.game.input
@@ -134,8 +138,9 @@ class Player(pygame.sprite.Sprite):
         self.shoot_requested = False
 
         # 射撃（長押し連射）・レーザー保持判定（レーザーはVキー専用）
+        self.fire_held = inp.is_action_pressed("fire")
         self.laser_fire_held = inp.is_action_pressed("laser")
-        if inp.is_action_pressed("fire") and self._cooldown <= 0.0:
+        if self.fire_held and self._cooldown <= 0.0:
             self.shoot_requested = True
             self._cooldown = self.weapon.shoot_cooldown
 

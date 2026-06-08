@@ -44,6 +44,9 @@ class LaserBeam:
         self._width_progress: float = 0.0   # ビーム幅 0.0〜1.0（starting/ending でアニメ）
         self._gauge:          float = 0.0   # チャージゲージ 0.0(空)〜1.0(満タン)
         self._prev_fire_held: bool  = False  # 前フレームの fire_held（エッジ検出用）
+        self._terrain_block_x: float | None = None
+        self._terrain_hit_timer: float = 0.0
+        self.terrain_hit: tuple[object, float, float] | None = None
 
     # ── パブリックAPI ──────────────────────────────────────────────
 
@@ -150,6 +153,10 @@ class LaserBeam:
             if self._hit_timers[k] < 0:
                 self._hit_timers[k] = 0.0
         self._boss_hit_timer = max(0.0, self._boss_hit_timer - dt)
+        self._terrain_hit_timer = max(0.0, self._terrain_hit_timer - dt)
+        if not self.is_active:
+            self._terrain_block_x = None
+            self.terrain_hit = None
 
         self._prev_fire_held = fire_held
         return just_fired, just_ended
@@ -160,7 +167,10 @@ class LaserBeam:
         boss,
         muzzle_sx: float,
         muzzle_sy: float,
+        terrain: pygame.sprite.Group | None = None,
     ) -> tuple:
+        self._terrain_block_x = None
+        self.terrain_hit = None
         if not self.is_active:
             return [], False
 
@@ -174,6 +184,13 @@ class LaserBeam:
         beam_right = muzzle_sx + (SCREEN_WIDTH - muzzle_sx) * self._beam_progress
         pulse  = _PULSE_AMP * math.sin(2 * math.pi * _PULSE_FREQ * self._time)
         half_w = (core_w // 2) + abs(pulse) + 4
+        if terrain is not None:
+            block = self._terrain_block(terrain, muzzle_sx, muzzle_sy, half_w, beam_right)
+            if block is not None:
+                ter, block_x = block
+                beam_right = max(muzzle_sx, block_x)
+                self._terrain_block_x = beam_right
+                self.terrain_hit = (ter, beam_right, muzzle_sy)
 
         beam_rect = pygame.Rect(
             int(muzzle_sx), int(muzzle_sy - half_w),
@@ -192,10 +209,38 @@ class LaserBeam:
         if boss is not None and self._boss_hit_timer <= 0:
             if beam_rect.colliderect(boss.rect):
                 self._boss_hit_timer = boss_hit_int
+                feedback = not getattr(boss, "suppresses_hit_feedback", lambda: False)()
                 boss.take_damage(1)
-                had_hit = True
+                if feedback:
+                    had_hit = True
 
         return killed, had_hit
+
+    def _terrain_block(
+        self,
+        terrain: pygame.sprite.Group,
+        muzzle_sx: float,
+        muzzle_sy: float,
+        half_w: float,
+        beam_right: float,
+    ):
+        nearest = None
+        nearest_x = beam_right
+        y0 = muzzle_sy - half_w
+        y1 = muzzle_sy + half_w
+        for ter in terrain:
+            rect = ter.rect
+            if rect.right < muzzle_sx or rect.left > beam_right:
+                continue
+            if rect.bottom < y0 or rect.top > y1:
+                continue
+            hit_x = rect.left if rect.left >= muzzle_sx else rect.right
+            if muzzle_sx <= hit_x <= nearest_x:
+                nearest = ter
+                nearest_x = float(hit_x)
+        if nearest is None:
+            return None
+        return nearest, nearest_x
 
     def draw(self, screen: pygame.Surface, muzzle_sx: float, muzzle_sy: float) -> None:
         cfg = self._cfg()
@@ -217,6 +262,8 @@ class LaserBeam:
         w_glow  = max(4, int((glow_base + pulse * 1.5) * w_scale))
 
         beam_right = muzzle_sx + (SCREEN_WIDTH - muzzle_sx) * self._beam_progress
+        if self._terrain_block_x is not None:
+            beam_right = min(beam_right, self._terrain_block_x)
         x0, y0 = int(muzzle_sx), int(muzzle_sy)
         x1     = int(beam_right)
 

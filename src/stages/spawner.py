@@ -57,11 +57,46 @@ class EnemySpawner:
                 ))
             return
 
+        # 連続地形（上下壁・洞窟など）: セグメント列として一括生成
+        if enemy_type == "TerrainStrip":
+            if self._terrain is not None:
+                from src.entities.terrain import make_terrain_strip
+                start_x = camera.x + float(event.get("start_offset", -80))
+                segments = make_terrain_strip(
+                    start_x,
+                    length=int(event.get("length", 3600)),
+                    theme=event.get("theme", "fever_cave"),
+                    segment_w=int(event.get("segment_w", 64)),
+                    seed=int(event.get("seed", self._stage_id)),
+                    gap_min=int(event.get("gap_min", 270)),
+                    gap_max=int(event.get("gap_max", 380)),
+                    center_y=int(event.get("center_y", SCREEN_HEIGHT // 2)),
+                    center_wave=int(event.get("center_wave", 42)),
+                    top_min=int(event.get("top_min", 38)),
+                    bottom_min=int(event.get("bottom_min", 42)),
+                    irregularity=int(event.get("irregularity", 36)),
+                    breakable_chance=float(event.get("breakable_chance", 0.0)),
+                    breakable_hp=int(event.get("breakable_hp", 3)),
+                    breakable_drop_chance=float(event.get("breakable_drop_chance", 0.0)),
+                )
+                self._terrain.add(*segments)
+            return
+
         count      = event.get("count", 1)
         formation  = event.get("formation", "random")
         enhanced   = event.get("enhanced", False)
-        # 砲台など y 固定で出したい場合は "y" を指定（formation より優先）
-        if "y" in event:
+
+        # 砲台などを地形表面に吸着させたい場合は "surface" を指定。
+        if "surface" in event:
+            positions = self._surface_positions(
+                count,
+                str(event.get("surface", "bottom")),
+                camera,
+                offset=float(event.get("surface_offset", 24)),
+                step=float(event.get("surface_step", 56)),
+            )
+        # y 固定で出したい場合は "y" を指定（formation より優先）
+        elif "y" in event:
             base_x = camera.spawn_x()
             positions = [(base_x + i * 44, float(event["y"])) for i in range(count)]
         else:
@@ -73,20 +108,83 @@ class EnemySpawner:
 
     def _positions(self, count: int, formation: str, camera: Camera) -> list[tuple[float, float]]:
         base_x = camera.spawn_x()
+        safe_top, safe_bottom = self._safe_y_bounds(base_x, margin=_MARGIN)
+        if safe_bottom <= safe_top:
+            safe_top, safe_bottom = float(_MARGIN), float(SCREEN_HEIGHT - _MARGIN)
+
         if formation == "line":
-            step = (SCREEN_HEIGHT - 2 * _MARGIN) / max(count - 1, 1)
-            return [(base_x, float(_MARGIN + i * step)) for i in range(count)]
+            step = (safe_bottom - safe_top) / max(count - 1, 1)
+            return [(base_x, float(safe_top + i * step)) for i in range(count)]
         elif formation == "v_shape":
-            cx = SCREEN_HEIGHT / 2
+            cx = (safe_top + safe_bottom) / 2
+            amp = min(60.0, max(24.0, (safe_bottom - safe_top) * 0.25))
             return [
-                (base_x + abs(i - count // 2) * 50, cx + (i - count // 2) * 60)
+                (base_x + abs(i - count // 2) * 50,
+                 max(safe_top, min(safe_bottom, cx + (i - count // 2) * amp)))
                 for i in range(count)
             ]
         else:  # random
             return [
-                (base_x + i * 40, float(random.randint(_MARGIN, SCREEN_HEIGHT - _MARGIN)))
+                (base_x + i * 40, random.uniform(safe_top, safe_bottom))
                 for i in range(count)
             ]
+
+    def _surface_positions(
+        self,
+        count: int,
+        surface: str,
+        camera: Camera,
+        *,
+        offset: float,
+        step: float,
+    ) -> list[tuple[float, float]]:
+        base_x = camera.spawn_x()
+        positions: list[tuple[float, float]] = []
+        for i in range(count):
+            wx = base_x + i * step
+            sy = self._surface_y_at(wx, surface)
+            if sy is None:
+                safe_top, safe_bottom = self._safe_y_bounds(wx, margin=_MARGIN)
+                sy = safe_bottom if surface == "bottom" else safe_top
+            wy = sy - offset if surface == "bottom" else sy + offset
+            positions.append((wx, wy))
+        return positions
+
+    def _terrain_at_x(self, world_x: float) -> list:
+        if self._terrain is None:
+            return []
+        result = []
+        for ter in self._terrain:
+            left = getattr(ter, "world_x", 0.0)
+            right = left + ter.rect.width
+            if left <= world_x <= right:
+                result.append(ter)
+        return result
+
+    def _safe_y_bounds(self, world_x: float, *, margin: float) -> tuple[float, float]:
+        top = float(margin)
+        bottom = float(SCREEN_HEIGHT - margin)
+        for ter in self._terrain_at_x(world_x):
+            side = getattr(ter, "side", "")
+            y = float(getattr(ter, "y", ter.rect.y))
+            h = float(ter.rect.height)
+            if side == "top" or y <= 1:
+                top = max(top, y + h + margin)
+            elif side == "bottom" or y + h >= SCREEN_HEIGHT - 1:
+                bottom = min(bottom, y - margin)
+        return top, bottom
+
+    def _surface_y_at(self, world_x: float, surface: str) -> float | None:
+        candidates = []
+        for ter in self._terrain_at_x(world_x):
+            side = getattr(ter, "side", "")
+            if surface == "bottom" and side == "bottom":
+                candidates.append(getattr(ter, "surface_y", ter.rect.top))
+            elif surface == "top" and side == "top":
+                candidates.append(getattr(ter, "surface_y", ter.rect.bottom))
+        if not candidates:
+            return None
+        return min(candidates) if surface == "bottom" else max(candidates)
 
     def _make_enemy(self, enemy_type: str, wx: float, wy: float, *, enhanced: bool = False) -> Enemy | None:
         from src.entities.enemies.virus    import EnemyVirus

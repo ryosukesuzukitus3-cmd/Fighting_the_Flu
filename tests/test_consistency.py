@@ -53,7 +53,7 @@ def test_balance_sheet_enemy_keys_match_registry() -> None:
 
 def test_stage_json_enemy_types_in_registry() -> None:
     from src.core.registries import ENEMY_NAMES
-    valid = set(ENEMY_NAMES) | {"Boss", "Terrain"}
+    valid = set(ENEMY_NAMES) | {"Boss", "Terrain", "TerrainStrip"}
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for ev in data.get("events", []):
@@ -85,21 +85,33 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_terrain_kinds = {"wall", "rock", "debris"}
+    from src.entities.terrain import TERRAIN_STRIP_THEMES
+    valid_strip_themes = set(TERRAIN_STRIP_THEMES)
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 assert field in ev, f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如"
+            if "surface" in ev:
+                assert ev["surface"] in {"top", "bottom"}, (
+                    f"{p.name} events[{i}]: invalid surface '{ev['surface']}'"
+                )
             if ev.get("type") == "Terrain":
                 for field in ("y", "w", "h", "kind"):
                     assert field in ev, f"{p.name} events[{i}](Terrain): 必須フィールド '{field}' が欠如"
                 assert ev["kind"] in valid_terrain_kinds, (
                     f"{p.name} events[{i}](Terrain): 未知の kind '{ev['kind']}'"
                 )
+            elif ev.get("type") == "TerrainStrip":
+                for field in ("theme", "length"):
+                    assert field in ev, f"{p.name} events[{i}](TerrainStrip): 必須フィールド '{field}' が欠如"
+                assert ev["theme"] in valid_strip_themes, (
+                    f"{p.name} events[{i}](TerrainStrip): 未知の theme '{ev['theme']}'"
+                )
             else:
                 assert "count" in ev, f"{p.name} events[{i}]: 必須フィールド 'count' が欠如"
                 # 'y' 指定（砲台等の固定配置）がある場合は formation 省略可
-                if "y" not in ev:
+                if "y" not in ev and "surface" not in ev:
                     assert "formation" in ev, f"{p.name} events[{i}]: 必須フィールド 'formation' が欠如"
                     assert ev["formation"] in valid_formations, (
                         f"{p.name} events[{i}]: 未知の formation '{ev['formation']}'"
@@ -178,6 +190,134 @@ def test_stage_backgrounds_draw_all_stages() -> None:
 
 
 # ── docs ─────────────────────────────────────────────────────────────
+
+def test_terrain_strip_can_spawn_breakable_segments() -> None:
+    from src.entities.terrain import make_terrain_strip
+
+    segments = make_terrain_strip(
+        0,
+        length=512,
+        segment_w=64,
+        seed=3,
+        breakable_chance=1.0,
+        breakable_hp=2,
+    )
+    breakables = [s for s in segments if getattr(s, "destructible", False)]
+    assert breakables
+
+    target = breakables[0]
+    assert target.take_damage(1) is False
+    assert target.hp == 1
+    assert target.take_damage(1) is True
+
+
+def test_spawner_surface_positions_follow_bottom_terrain() -> None:
+    from src.core.camera import Camera
+    from src.entities.terrain import make_terrain_strip
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    terrain_segments = make_terrain_strip(
+        camera.spawn_x() - 32,
+        length=256,
+        segment_w=64,
+        seed=5,
+        gap_min=380,
+        gap_max=380,
+    )
+    terrain = pygame.sprite.Group(*terrain_segments)
+    spawner = EnemySpawner(
+        game=None,
+        enemies=pygame.sprite.Group(),
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        player=object(),
+        terrain=terrain,
+    )
+
+    wx, wy = spawner._surface_positions(1, "bottom", camera, offset=24.0, step=56.0)[0]
+    surface_y = spawner._surface_y_at(wx, "bottom")
+    assert surface_y is not None
+    assert wy == surface_y - 24.0
+
+
+def test_laser_beam_blocks_at_terrain() -> None:
+    from src.entities.laser_beam import LaserBeam
+    from src.entities.terrain import Terrain
+
+    laser = LaserBeam()
+    laser.state = "firing"
+    laser._beam_progress = 1.0
+    laser._width_progress = 1.0
+    terrain = Terrain(240, 110, 48, 80)
+
+    laser.hit_check(
+        pygame.sprite.Group(),
+        None,
+        120.0,
+        140.0,
+        terrain=pygame.sprite.Group(terrain),
+    )
+
+    assert laser._terrain_block_x == terrain.rect.left
+    assert laser.terrain_hit is not None
+    assert laser.terrain_hit[0] is terrain
+
+
+def test_project_text_files_are_utf8_and_mojibake_free() -> None:
+    from tools.dev_env import text_integrity_issues
+
+    assert text_integrity_issues(ROOT) == []
+
+
+def test_project_runner_prefers_utf8_and_venv() -> None:
+    src = (ROOT / "tools" / "run.py").read_text(encoding="utf-8")
+    assert "PYTHONIOENCODING" in src
+    assert ".venv" in src
+
+
+def test_boss_defense_gimmicks_suppress_hit_feedback() -> None:
+    boss_src = (ROOT / "src" / "entities" / "enemies" / "boss.py").read_text(encoding="utf-8")
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    laser_src = (ROOT / "src" / "entities" / "laser_beam.py").read_text(encoding="utf-8")
+
+    assert "def suppresses_hit_feedback" in boss_src
+    assert "if dealt > 0:" in boss_src
+    assert 'getattr(self._boss, "suppresses_hit_feedback"' in game_src
+    assert 'getattr(boss, "suppresses_hit_feedback"' in laser_src
+
+
+def test_companion_shoots_only_while_player_fires() -> None:
+    player_src = (ROOT / "src" / "entities" / "player.py").read_text(encoding="utf-8")
+    companion_src = (ROOT / "src" / "entities" / "companion.py").read_text(encoding="utf-8")
+
+    assert "self.fire_held" in player_src
+    assert 'getattr(player, "fire_held", False)' in companion_src
+
+
+def test_boss_kill_clears_mid_dialogue_queue() -> None:
+    src = (ROOT / "src" / "scenes" / "game" / "post_boss_mixin.py").read_text(encoding="utf-8")
+    assert "self._boss_dialogue_timer = 0.0" in src
+    assert "self._boss_dialogue_queue = []" in src
+
+
+def test_stage3_blackhole_uses_actor_scene() -> None:
+    src = (ROOT / "src" / "scenes" / "stageclear.py").read_text(encoding="utf-8")
+    assert "BlackholeScene" in src
+    scene_src = (ROOT / "src" / "scenes" / "blackhole_scene.py").read_text(encoding="utf-8")
+    assert "Player(self.game)" in scene_src
+    assert "Karonaru(self.game)" in scene_src
+
+
+def test_final_return_spawns_karonaru_before_dialogue() -> None:
+    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    spawn_at = src.index("self._spawn_returning_karonaru()")
+    dialogue_at = src.index("self._play_final_dialogue(FINAL_SEQ[\"return\"]")
+    assert spawn_at < dialogue_at
+    assert "self._final_seq == \"return_join\"" in src
+    assert "_draw_karonaru_arrival_marker" in src
+    assert "KARONARU RETURNS" in src
+
 
 def test_design_md_autogen_blocks_are_current() -> None:
     import subprocess

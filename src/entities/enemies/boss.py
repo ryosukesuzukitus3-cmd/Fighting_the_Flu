@@ -199,6 +199,15 @@ class Boss(pygame.sprite.Sprite):
         self._summoned = [t for t in self._summoned if t.alive()]
         return len(self._summoned)
 
+    def suppresses_hit_feedback(self) -> bool:
+        """Return True when the current gimmick should absorb normal hit feedback."""
+        gimmick = self._current_gimmick()
+        if gimmick == "shield" and self._shield_active:
+            return True
+        if gimmick == "weakpoint" and self._weak_timer <= 0:
+            return True
+        return False
+
     # ─────────────────────────────────────────
     def update(self, dt: float, enemy_bullets: pygame.sprite.Group, player: "Player") -> None:
         self._time += dt
@@ -410,7 +419,6 @@ class Boss(pygame.sprite.Sprite):
 
     # ─────────────────────────────────────────
     def take_damage(self, amount: int) -> bool:
-        self.hit_flash_timer = 0.08   # 被弾フラッシュ
         # ── ギミックによる被ダメージ補正 ──────────────────────────
         gimmick = self._current_gimmick()
         dealt = amount
@@ -430,6 +438,8 @@ class Boss(pygame.sprite.Sprite):
                 dealt = int(amount * _TURRET_STUN_MULT)   # スタン中は被ダメ増
             elif self._summoned_alive() > 0:
                 dealt = max(1, int(amount * _TURRET_GUARD_MULT))  # 砲台健在で被ダメ減
+        if dealt > 0:
+            self.hit_flash_timer = 0.08   # 被弾フラッシュ
         self.hp -= dealt
         if self._form3:
             # Form3 は game_scene のスクリプト演出が死を制御する。

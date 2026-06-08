@@ -52,9 +52,9 @@ class StageClearScene(Scene):
                 self.game.story.blackhole_event_done = True
                 _to_next()
 
-            self.game.change_scene(CutsceneScene(
-                self.game, INTERLUDE_STAGE3_BLACKHOLE, _blackhole_done,
-                theme="blackhole", stop_bgm=True))
+            from src.scenes.blackhole_scene import BlackholeScene
+            self.game.change_scene(BlackholeScene(
+                self.game, INTERLUDE_STAGE3_BLACKHOLE, _blackhole_done))
         else:
             _to_next()
 

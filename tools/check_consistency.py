@@ -10,15 +10,16 @@
 from __future__ import annotations
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+from tools.dev_env import configure_headless_pygame, configure_utf8_stdio, text_integrity_issues
+
+configure_utf8_stdio()
+configure_headless_pygame()
 
 import pygame
 pygame.init()
@@ -38,6 +39,17 @@ def _ok(msg: str) -> None:
 
 
 # ── 検査関数 ────────────────────────────────────────────────────────
+
+def check_text_integrity() -> None:
+    """UTF-8 と代表的な文字化け混入を検査する。"""
+    print("\n[text]")
+    issues = text_integrity_issues(ROOT)
+    if issues:
+        for issue in issues:
+            _fail(issue)
+    else:
+        _ok("project text files are UTF-8 and mojibake-free")
+
 
 def check_enemies() -> None:
     """敵名集合の一致"""
@@ -85,15 +97,15 @@ def check_enemies() -> None:
         if extra:
             _fail(f"balance_sheet._ENEMY_BASE に余分: {sorted(extra)}")
 
-    # stage JSON の type が ENEMY_NAMES ∪ {'Boss','Terrain'} に含まれるか
-    valid_types = set(ENEMY_NAMES) | {"Boss", "Terrain"}
+    # stage JSON の type が ENEMY_NAMES ∪ {'Boss','Terrain','TerrainStrip'} に含まれるか
+    valid_types = set(ENEMY_NAMES) | {"Boss", "Terrain", "TerrainStrip"}
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for ev in data.get("events", []):
             t = ev.get("type", "")
             if t not in valid_types:
                 _fail(f"{p.name}: 未知の type '{t}'")
-    _ok("stage JSON: 全 type が ENEMY_NAMES ∪ {{'Boss','Terrain'}} に含まれる")
+    _ok("stage JSON: 全 type が ENEMY_NAMES ∪ {{'Boss','Terrain','TerrainStrip'}} に含まれる")
 
 
 def check_items() -> None:
@@ -139,12 +151,16 @@ def check_stages() -> None:
     # stage JSON 必須フィールド検証
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_terrain_kinds = {"wall", "rock", "debris"}
+    from src.entities.terrain import TERRAIN_STRIP_THEMES
+    valid_strip_themes = set(TERRAIN_STRIP_THEMES)
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 if field not in ev:
                     _fail(f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如")
+            if "surface" in ev and ev.get("surface") not in {"top", "bottom"}:
+                _fail(f"{p.name} events[{i}]: invalid surface '{ev.get('surface')}'")
             if ev.get("type") == "Terrain":
                 # 地形イベント: y/w/h/kind を要求（count/formation は不要）
                 for field in ("y", "w", "h", "kind"):
@@ -152,11 +168,17 @@ def check_stages() -> None:
                         _fail(f"{p.name} events[{i}](Terrain): 必須フィールド '{field}' が欠如")
                 if ev.get("kind") not in valid_terrain_kinds:
                     _fail(f"{p.name} events[{i}](Terrain): 未知の kind '{ev.get('kind')}'")
+            elif ev.get("type") == "TerrainStrip":
+                for field in ("theme", "length"):
+                    if field not in ev:
+                        _fail(f"{p.name} events[{i}](TerrainStrip): 必須フィールド '{field}' が欠如")
+                if ev.get("theme") not in valid_strip_themes:
+                    _fail(f"{p.name} events[{i}](TerrainStrip): 未知の theme '{ev.get('theme')}'")
             else:
                 if "count" not in ev:
                     _fail(f"{p.name} events[{i}]: 必須フィールド 'count' が欠如")
                 # 'y' 指定（砲台等の固定配置）がある場合は formation 省略可
-                if "y" not in ev:
+                if "y" not in ev and "surface" not in ev:
                     if "formation" not in ev:
                         _fail(f"{p.name} events[{i}]: 必須フィールド 'formation' が欠如")
                     elif ev.get("formation") not in valid_formations:
@@ -262,6 +284,7 @@ def check_docs() -> None:
 # ── エントリーポイント ─────────────────────────────────────────────
 
 _ALL_CHECKS = {
+    "text":          check_text_integrity,
     "enemies":       check_enemies,
     "items":         check_items,
     "stages":        check_stages,

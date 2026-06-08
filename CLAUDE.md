@@ -77,7 +77,16 @@
 
 ## ツール使用方法
 
+実行環境・文字化け事故を避けるため、可能なら直接 `python` を叩かず `tools/run.py` を使う。
+`tools/run.py` はローカル `.venv` を優先し、UTF-8 出力と pygame のヘッドレス設定を揃える。
+
 ```powershell
+# 推奨ラッパー
+.venv/Scripts/python tools/run.py check
+.venv/Scripts/python tools/run.py test
+.venv/Scripts/python tools/run.py docs
+.venv/Scripts/python tools/run.py game
+
 # docs を手動更新
 .venv/Scripts/python tools/gen_docs.py
 

@@ -47,6 +47,7 @@ class ScrollingBackground:
             _StarLayer(10,  0.6, (150, 150, 190), 2),
         ]
         self._time = 0.0
+        self._ribs: list = []
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -59,6 +60,12 @@ class ScrollingBackground:
                 (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(0, SCREEN_HEIGHT),
                  rnd.uniform(6, 16), rnd.uniform(0.06, 0.22), rnd.uniform(0, 6.28))
                 for _ in range(14)
+            ]
+            # 洞窟奥の縦ひだ。地形の手前に出すぎないよう低コントラストにする。
+            self._ribs = [
+                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(26, 64), rnd.uniform(0.08, 0.18),
+                 rnd.uniform(0, 6.28))
+                for _ in range(9)
             ]
         elif sid == 2:
             # 走査ノイズ帯（y, 高さ, 速度, 位相）
@@ -99,15 +106,37 @@ class ScrollingBackground:
     # ── Stage1 発熱回廊（血管・血球）─────────────────────────────
     def _draw_vessel(self, screen: pygame.Surface, camera_x: float) -> None:
         t = self._time
+        # 奥に流れる発熱洞窟のひだ。TerrainStrip と重なって「回廊」に見せる。
+        rib = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for (cx, w, sf, ph) in self._ribs:
+            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 160) - 80
+            amp = 18 + math.sin(t * 0.9 + ph) * 8
+            pts_l = []
+            pts_r = []
+            for y in range(-40, SCREEN_HEIGHT + 80, 48):
+                drift = math.sin(y * 0.018 + t * 0.45 + ph) * amp
+                pts_l.append((int(x + drift), y))
+                pts_r.append((int(x + w + drift * 0.55), y))
+            pygame.draw.polygon(rib, (58, 10, 16, 60), pts_l + list(reversed(pts_r)))
+            pygame.draw.lines(rib, (115, 22, 28, 45), False, pts_l, 2)
+            pygame.draw.lines(rib, (115, 22, 28, 35), False, pts_r, 2)
+        screen.blit(rib, (0, 0))
+
+        # 熱の霞。
+        haze_alpha = int(18 + 10 * (0.5 + 0.5 * math.sin(t * 1.5)))
+        haze = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        haze.fill((120, 22, 18, haze_alpha))
+        screen.blit(haze, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
         # うねる血管ライン（2本）
-        for k, (base_y, col) in enumerate(((SCREEN_HEIGHT * 0.32, (60, 16, 20)),
-                                           (SCREEN_HEIGHT * 0.7,  (48, 12, 16)))):
+        for k, (base_y, col) in enumerate(((SCREEN_HEIGHT * 0.32, (82, 24, 28)),
+                                           (SCREEN_HEIGHT * 0.7,  (68, 18, 22)))):
             pts = []
             for x in range(0, SCREEN_WIDTH + 20, 40):
                 y = base_y + math.sin(x * 0.012 + t * 0.8 + k) * 26
                 pts.append((x, int(y)))
             if len(pts) >= 2:
-                pygame.draw.lines(screen, col, False, pts, 10)
+                pygame.draw.lines(screen, col, False, pts, 6)
         # 脈打つ血球
         pulse = 0.5 + 0.5 * math.sin(t * 2.0)
         for (cx, cy, r, sf, ph) in self._cells:
