@@ -36,16 +36,15 @@ class GameClearScene(Scene):
 
     def _go_credits(self) -> None:
         """エンドロール＋用法・用量注意 → タイトルへ。"""
-        from src.scenes.cutscene_scene import CutsceneScene
+        from src.scenes.credits_roll import CreditsRollScene
         from src.scenes.title import TitleScene
         from src.story.script import CREDITS, POSTCREDIT
 
         def _to_title() -> None:
             self.game.change_scene(TitleScene(self.game))
 
-        self.game.change_scene(CutsceneScene(
+        self.game.change_scene(CreditsRollScene(
             self.game, CREDITS + POSTCREDIT, _to_title,
-            theme="dark", stop_bgm=False,
         ))
 
     def draw(self, screen: pygame.Surface) -> None:

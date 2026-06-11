@@ -17,6 +17,7 @@ BGM: dict[str, str | None] = {
     "BGM_FINAL":    "music/bgm/決戦.mp3",
     "BGM_EPILOGUE": None,                              # TODO(Phase4): 専用曲ダミー
     "BGM_CLEAR":    "music/bgm/FFVI_勝利のファンファーレ.mp3",
+    "BGM_CREDITS":  "music/bgm/il_vento_d'oro.mp3",
 }
 
 # ── SE ─────────────────────────────────────────────────────────────

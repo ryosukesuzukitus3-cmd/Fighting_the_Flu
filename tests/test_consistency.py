@@ -309,6 +309,13 @@ def test_stage3_blackhole_uses_actor_scene() -> None:
     assert "Karonaru(self.game)" in scene_src
 
 
+def test_credits_roll_fades_bgm_before_title() -> None:
+    src = (ROOT / "src" / "scenes" / "credits_roll.py").read_text(encoding="utf-8")
+    assert "stop_bgm(fadeout_ms=_FADEOUT_MS)" in src
+    assert "self._fadeout_timer" in src
+    assert "self._on_complete()" in src
+
+
 def test_final_return_spawns_karonaru_before_dialogue() -> None:
     src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
     spawn_at = src.index("self._spawn_returning_karonaru()")
