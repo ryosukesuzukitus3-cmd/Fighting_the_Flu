@@ -2,15 +2,15 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 import pygame
+from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
 if TYPE_CHECKING:
     from src.core.game import Game
     from src.core.camera import Camera
 
-_HP    = 18
-_SPEED = 45.0   # 鈍い
 _SIZE  = (76, 80)
+_STATS = enemy_stats("EnemyBilly")
 
 _SHAKE_DURATION = 0.35   # 被弾時震え時間（秒）
 _SHAKE_AMOUNT   = 5      # 震れ幅 px
@@ -23,7 +23,7 @@ class EnemyBilly(Enemy):
     _base_image: pygame.Surface | None = None
 
     def __init__(self, game: "Game", world_x: float, world_y: float) -> None:
-        super().__init__(world_x, world_y, hp=_HP, speed=_SPEED)
+        super().__init__(world_x, world_y, hp=_STATS.base_hp, speed=_STATS.base_speed)
         self._game = game
 
         if EnemyBilly._base_image is None:

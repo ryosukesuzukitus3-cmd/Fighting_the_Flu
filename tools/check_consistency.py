@@ -54,24 +54,31 @@ def check_text_integrity() -> None:
 def check_enemies() -> None:
     """敵名集合の一致"""
     print("\n[enemies]")
-    from src.core.registries import ENEMY_NAMES, ENEMY_BY_NAME
+    from src.core.registries import ENEMY_NAMES
+    from src.core.factories import enemy_factory_names
 
-    # spawner._make_enemy が全 ENEMY_NAMES を処理できるか
-    from src.stages.spawner import EnemySpawner
-    src = Path(ROOT, "src", "stages", "spawner.py").read_text(encoding="utf-8")
-    for name in ENEMY_NAMES:
-        if name not in src:
-            _fail(f"spawner._make_enemy に '{name}' が未登録")
-        else:
-            _ok(f"spawner._make_enemy: {name}")
+    factory_keys = enemy_factory_names()
+    reg_keys = set(ENEMY_NAMES)
+    if factory_keys == reg_keys:
+        _ok("factories.enemy_factory_names() == ENEMY_NAMES")
+    else:
+        missing = reg_keys - factory_keys
+        extra = factory_keys - reg_keys
+        if missing:
+            _fail(f"enemy factory に不足: {sorted(missing)}")
+        if extra:
+            _fail(f"enemy factory に余分: {sorted(extra)}")
 
-    # debug_stage_panel._make_enemy が全 ENEMY_NAMES を処理できるか
+    spawner_src = Path(ROOT, "src", "stages", "spawner.py").read_text(encoding="utf-8")
     panel_src = Path(ROOT, "src", "scenes", "game", "debug_stage_panel.py").read_text(encoding="utf-8")
-    for name in ENEMY_NAMES:
-        if name not in panel_src:
-            _fail(f"debug_stage_panel._make_enemy に '{name}' が未登録")
-        else:
-            _ok(f"debug_stage_panel._make_enemy: {name}")
+    if "make_enemy(" in spawner_src:
+        _ok("spawner._make_enemy は共通 factory を参照")
+    else:
+        _fail("spawner._make_enemy が共通 factory を参照していない")
+    if "make_enemy(" in panel_src:
+        _ok("debug_stage_panel は共通 enemy factory を参照")
+    else:
+        _fail("debug_stage_panel が共通 enemy factory を参照していない")
 
     # _SE_MAP キー → ENEMY_NAMES に含まれるか（旧ハードコードは削除済みなので確認のみ）
     # game_scene.py を読んで ENEMY_BY_NAME を使っているか確認
@@ -105,6 +112,11 @@ def check_enemies() -> None:
             t = ev.get("type", "")
             if t not in valid_types:
                 _fail(f"{p.name}: 未知の type '{t}'")
+        for section in ("initial_terrain", "boss_terrain"):
+            for ev in data.get(section, []):
+                t = ev.get("type", "")
+                if t not in {"Terrain", "TerrainStrip"}:
+                    _fail(f"{p.name} {section}: 未知の type '{t}'")
     _ok("stage JSON: 全 type が ENEMY_NAMES ∪ {{'Boss','Terrain','TerrainStrip'}} に含まれる")
 
 
@@ -112,13 +124,27 @@ def check_items() -> None:
     """アイテム名集合の一致"""
     print("\n[items]")
     from src.core.registries import ITEM_NAMES
+    from src.core.registries import ITEM_DEFS
+    from src.core.factories import item_factory_names, random_item_names
 
-    panel_src = Path(ROOT, "src", "scenes", "game", "debug_stage_panel.py").read_text(encoding="utf-8")
-    for name in ITEM_NAMES:
-        if name not in panel_src:
-            _fail(f"debug_stage_panel._make_item に '{name}' が未登録")
-        else:
-            _ok(f"debug_stage_panel._make_item: {name}")
+    factory_keys = item_factory_names()
+    reg_keys = set(ITEM_NAMES)
+    if factory_keys == reg_keys:
+        _ok("factories.item_factory_names() == ITEM_NAMES")
+    else:
+        missing = reg_keys - factory_keys
+        extra = factory_keys - reg_keys
+        if missing:
+            _fail(f"item factory に不足: {sorted(missing)}")
+        if extra:
+            _fail(f"item factory に余分: {sorted(extra)}")
+
+    drop_names = {d.name for d in ITEM_DEFS if d.drop_weight > 0}
+    random_names = random_item_names()
+    if drop_names == random_names:
+        _ok("random_item 対象 == ITEM_DEFS.drop_weight > 0")
+    else:
+        _fail(f"random_item 対象不一致: defs={sorted(drop_names)} factory={sorted(random_names)}")
 
 
 def check_stages() -> None:
@@ -153,8 +179,42 @@ def check_stages() -> None:
     valid_terrain_kinds = {"wall", "rock", "debris"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
+
+    def validate_terrain_event(label: str, ev: dict) -> None:
+        if ev.get("type") == "Terrain":
+            for field in ("y", "w", "h", "kind"):
+                if field not in ev:
+                    _fail(f"{label}(Terrain): 必須フィールド '{field}' が欠如")
+            if ev.get("kind") not in valid_terrain_kinds:
+                _fail(f"{label}(Terrain): 未知の kind '{ev.get('kind')}'")
+        elif ev.get("type") == "TerrainStrip":
+            for field in ("theme", "length"):
+                if field not in ev:
+                    _fail(f"{label}(TerrainStrip): 必須フィールド '{field}' が欠如")
+            if ev.get("theme") not in valid_strip_themes:
+                _fail(f"{label}(TerrainStrip): 未知の theme '{ev.get('theme')}'")
+        else:
+            _fail(f"{label}: terrain section only allows Terrain/TerrainStrip")
+
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
+        if data.get("debug"):
+            if "events" not in data:
+                _fail(f"{p.name}: debug stage に events がない")
+            continue
+        if "stage_id" not in data:
+            _fail(f"{p.name}: 必須フィールド 'stage_id' が欠如")
+        else:
+            try:
+                expected_sid = int(p.stem.replace("stage", ""))
+                if int(data["stage_id"]) != expected_sid:
+                    _fail(f"{p.name}: stage_id がファイル名と不一致 ({data['stage_id']} != {expected_sid})")
+            except ValueError:
+                _fail(f"{p.name}: stage_id が整数ではない")
+        if "bgm" not in data:
+            _fail(f"{p.name}: 必須フィールド 'bgm' が欠如")
+        if "events" not in data:
+            _fail(f"{p.name}: 必須フィールド 'events' が欠如")
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 if field not in ev:
@@ -183,6 +243,9 @@ def check_stages() -> None:
                         _fail(f"{p.name} events[{i}]: 必須フィールド 'formation' が欠如")
                     elif ev.get("formation") not in valid_formations:
                         _fail(f"{p.name} events[{i}]: 未知の formation '{ev.get('formation')}'")
+        for section in ("initial_terrain", "boss_terrain"):
+            for i, ev in enumerate(data.get(section, [])):
+                validate_terrain_event(f"{p.name} {section}[{i}]", ev)
     _ok("stage JSON: 全イベントの必須フィールド・formation OK")
 
 
@@ -279,6 +342,21 @@ def check_docs() -> None:
         _ok("design.md AUTOGEN ブロックは最新")
     else:
         _fail(f"design.md AUTOGEN ブロックが古い:\n{result.stderr.strip()}")
+
+    design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
+    stale_item_terms = ("LaserItem", "HomingItem", "ShieldItem", "shield.py")
+    stale = [term for term in stale_item_terms if term in design]
+    if stale:
+        _fail(f"design.md に削除済みアイテム記述が残っている: {stale}")
+    else:
+        _ok("design.md 手書きアイテム記述は現行構成に一致")
+
+    tools_doc = (ROOT / "docs" / "tools.md").read_text(encoding="utf-8")
+    debug_src = (ROOT / "src" / "scenes" / "game" / "debug_mixin.py").read_text(encoding="utf-8")
+    if "ウェポンアイテムをドロップ" in debug_src and "ウェポンアイテムを自機前方にドロップ" in tools_doc:
+        _ok("docs/tools.md: F2 デバッグ説明は実装と一致")
+    else:
+        _fail("docs/tools.md: F2 デバッグ説明が実装と一致していない")
 
 
 # ── エントリーポイント ─────────────────────────────────────────────

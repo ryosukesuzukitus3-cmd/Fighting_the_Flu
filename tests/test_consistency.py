@@ -21,18 +21,17 @@ pygame.init()
 
 # ── 敵 ──────────────────────────────────────────────────────────────
 
-def test_spawner_handles_all_enemy_names() -> None:
+def test_enemy_factory_handles_all_enemy_names() -> None:
     from src.core.registries import ENEMY_NAMES
-    src = (ROOT / "src" / "stages" / "spawner.py").read_text(encoding="utf-8")
-    missing = [n for n in ENEMY_NAMES if n not in src]
-    assert not missing, f"spawner._make_enemy に未登録: {missing}"
+    from src.core.factories import enemy_factory_names
+    assert enemy_factory_names() == set(ENEMY_NAMES)
 
 
-def test_debug_panel_handles_all_enemy_names() -> None:
-    from src.core.registries import ENEMY_NAMES
-    src = (ROOT / "src" / "scenes" / "game" / "debug_stage_panel.py").read_text(encoding="utf-8")
-    missing = [n for n in ENEMY_NAMES if n not in src]
-    assert not missing, f"debug_stage_panel._make_enemy に未登録: {missing}"
+def test_spawner_and_debug_panel_use_enemy_factory() -> None:
+    spawner_src = (ROOT / "src" / "stages" / "spawner.py").read_text(encoding="utf-8")
+    panel_src = (ROOT / "src" / "scenes" / "game" / "debug_stage_panel.py").read_text(encoding="utf-8")
+    assert "make_enemy(" in spawner_src
+    assert "make_enemy(" in panel_src
 
 
 def test_game_scene_uses_registry_for_se() -> None:
@@ -59,15 +58,26 @@ def test_stage_json_enemy_types_in_registry() -> None:
         for ev in data.get("events", []):
             t = ev.get("type", "")
             assert t in valid, f"{p.name}: 未知の type '{t}'"
+        for section in ("initial_terrain", "boss_terrain"):
+            for ev in data.get(section, []):
+                t = ev.get("type", "")
+                assert t in {"Terrain", "TerrainStrip"}, (
+                    f"{p.name} {section}: 未知の type '{t}'"
+                )
 
 
 # ── アイテム ─────────────────────────────────────────────────────────
 
 def test_debug_panel_handles_all_item_names() -> None:
     from src.core.registries import ITEM_NAMES
-    src = (ROOT / "src" / "scenes" / "game" / "debug_stage_panel.py").read_text(encoding="utf-8")
-    missing = [n for n in ITEM_NAMES if n not in src]
-    assert not missing, f"debug_stage_panel._make_item に未登録: {missing}"
+    from src.core.factories import item_factory_names
+    assert item_factory_names() == set(ITEM_NAMES)
+
+
+def test_random_item_pool_matches_item_drop_weights() -> None:
+    from src.core.registries import ITEM_DEFS
+    from src.core.factories import random_item_names
+    assert random_item_names() == {d.name for d in ITEM_DEFS if d.drop_weight > 0}
 
 
 # ── ステージ ─────────────────────────────────────────────────────────
@@ -87,8 +97,35 @@ def test_stage_json_required_fields() -> None:
     valid_terrain_kinds = {"wall", "rock", "debris"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
+
+    def assert_terrain_event(section: str, i: int, ev: dict) -> None:
+        assert ev.get("type") in {"Terrain", "TerrainStrip"}, (
+            f"{section}[{i}]: terrain section only allows Terrain/TerrainStrip"
+        )
+        if ev.get("type") == "Terrain":
+            for field in ("y", "w", "h", "kind"):
+                assert field in ev, f"{section}[{i}](Terrain): missing '{field}'"
+            assert ev["kind"] in valid_terrain_kinds, (
+                f"{section}[{i}](Terrain): unknown kind '{ev['kind']}'"
+            )
+        else:
+            for field in ("theme", "length"):
+                assert field in ev, f"{section}[{i}](TerrainStrip): missing '{field}'"
+            assert ev["theme"] in valid_strip_themes, (
+                f"{section}[{i}](TerrainStrip): unknown theme '{ev['theme']}'"
+            )
+
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
+        if data.get("debug"):
+            assert "events" in data, f"{p.name}: debug stage に events がない"
+            continue
+        assert "stage_id" in data, f"{p.name}: 必須フィールド 'stage_id' が欠如"
+        assert int(data["stage_id"]) == int(p.stem.replace("stage", "")), (
+            f"{p.name}: stage_id がファイル名と不一致"
+        )
+        assert "bgm" in data, f"{p.name}: 必須フィールド 'bgm' が欠如"
+        assert "events" in data, f"{p.name}: 必須フィールド 'events' が欠如"
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 assert field in ev, f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如"
@@ -116,6 +153,9 @@ def test_stage_json_required_fields() -> None:
                     assert ev["formation"] in valid_formations, (
                         f"{p.name} events[{i}]: 未知の formation '{ev['formation']}'"
                     )
+        for section in ("initial_terrain", "boss_terrain"):
+            for i, ev in enumerate(data.get(section, [])):
+                assert_terrain_event(f"{p.name} {section}", i, ev)
 
 
 # ── ボス ─────────────────────────────────────────────────────────────
@@ -211,6 +251,37 @@ def test_terrain_strip_can_spawn_breakable_segments() -> None:
     assert target.take_damage(1) is True
 
 
+def test_destructible_terrain_gate_takes_damage() -> None:
+    from src.entities.terrain import Terrain
+
+    gate = Terrain(0, 0, 96, 600, "wall", destructible=True, hp=2, drop_chance=0.35)
+    assert gate.drop_chance == 0.35
+    assert gate.take_damage(1) is False
+    assert gate.hp == 1
+    assert gate.take_damage(1) is True
+
+
+def test_large_debris_splits_into_shards() -> None:
+    from src.entities.enemies.debris import EnemyDebrisLarge, EnemyDebrisShard
+
+    debris = EnemyDebrisLarge(object(), 520.0, 280.0)
+    shards = debris.split(object())
+    assert len(shards) == 5
+    assert all(isinstance(s, EnemyDebrisShard) for s in shards)
+
+
+def test_boss_phase_configs_reference_known_patterns() -> None:
+    from src.entities.enemies.boss import _PHASE_CONFIGS
+
+    known = {
+        "fan5", "fan7", "aimed", "dbl_aimed", "ring8", "ring12", "ring16",
+        "aimring6", "aimring8", "scatter", "cross", "spiral", "vortex2",
+        "vortex3", "chaos", "burst3", "wall_gap",
+    }
+    used = {phase[1] for phases in _PHASE_CONFIGS.values() for phase in phases}
+    assert used <= known
+
+
 def test_spawner_surface_positions_follow_bottom_terrain() -> None:
     from src.core.camera import Camera
     from src.entities.terrain import make_terrain_strip
@@ -264,6 +335,38 @@ def test_laser_beam_blocks_at_terrain() -> None:
     assert laser.terrain_hit[0] is terrain
 
 
+def test_laser_beam_reports_boss_kill() -> None:
+    from src.entities.laser_beam import LaserBeam
+
+    class BossStub:
+        def __init__(self) -> None:
+            self.rect = pygame.Rect(260, 120, 80, 80)
+            self._form2 = False
+            self._form3 = False
+
+        def suppresses_hit_feedback(self) -> bool:
+            return False
+
+        def take_damage(self, amount: int) -> bool:
+            return amount >= 1
+
+    laser = LaserBeam()
+    laser.state = "firing"
+    laser._beam_progress = 1.0
+    laser._width_progress = 1.0
+    killed, hit, boss_killed = laser.hit_check(
+        pygame.sprite.Group(),
+        BossStub(),
+        120.0,
+        160.0,
+    )
+
+    assert killed == []
+    assert hit is True
+    assert boss_killed is True
+    assert laser.boss_killed is True
+
+
 def test_project_text_files_are_utf8_and_mojibake_free() -> None:
     from tools.dev_env import text_integrity_issues
 
@@ -274,6 +377,19 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     src = (ROOT / "tools" / "run.py").read_text(encoding="utf-8")
     assert "PYTHONIOENCODING" in src
     assert ".venv" in src
+
+
+def test_manual_docs_do_not_reference_removed_items() -> None:
+    design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
+    for term in ("LaserItem", "HomingItem", "ShieldItem", "shield.py"):
+        assert term not in design
+
+
+def test_debug_f2_docs_match_implementation() -> None:
+    tools_doc = (ROOT / "docs" / "tools.md").read_text(encoding="utf-8")
+    debug_src = (ROOT / "src" / "scenes" / "game" / "debug_mixin.py").read_text(encoding="utf-8")
+    assert "ウェポンアイテムをドロップ" in debug_src
+    assert "ウェポンアイテムを自機前方にドロップ" in tools_doc
 
 
 def test_boss_defense_gimmicks_suppress_hit_feedback() -> None:
@@ -301,12 +417,21 @@ def test_boss_kill_clears_mid_dialogue_queue() -> None:
     assert "self._boss_dialogue_queue = []" in src
 
 
+def test_boss_gimmick_draw_ignores_missing_boss() -> None:
+    from src.scenes.game_scene import GameScene
+
+    scene = object.__new__(GameScene)
+    scene._boss = None
+    GameScene._draw_boss_gimmick(scene, pygame.Surface((32, 32)))
+
+
 def test_stage3_blackhole_uses_actor_scene() -> None:
     src = (ROOT / "src" / "scenes" / "stageclear.py").read_text(encoding="utf-8")
     assert "BlackholeScene" in src
     scene_src = (ROOT / "src" / "scenes" / "blackhole_scene.py").read_text(encoding="utf-8")
     assert "Player(self.game)" in scene_src
     assert "Karonaru(self.game)" in scene_src
+    assert "_draw_pull_lines" not in scene_src
 
 
 def test_credits_roll_fades_bgm_before_title() -> None:
@@ -322,8 +447,13 @@ def test_final_return_spawns_karonaru_before_dialogue() -> None:
     dialogue_at = src.index("self._play_final_dialogue(FINAL_SEQ[\"return\"]")
     assert spawn_at < dialogue_at
     assert "self._final_seq == \"return_join\"" in src
-    assert "_draw_karonaru_arrival_marker" in src
-    assert "KARONARU RETURNS" in src
+    assert "_draw_karonaru_arrival_trail" in src
+    assert "SE_KARONARU_ARRIVE" in src
+    assert "start = (-48.0, arrival_y)" in src
+    assert "self._karonaru_heal_player()" in src
+    assert "self.player.hp = self.player.max_hp" in src
+    assert "final_chance" in src
+    assert "KARONARU RETURNS" not in src
 
 
 def test_design_md_autogen_blocks_are_current() -> None:

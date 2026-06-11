@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pygame
 from src.entities.enemies.base import Enemy
 from src.core.constants import SCREEN_HEIGHT
+from src.core.registries import enemy_stats
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -16,12 +17,9 @@ _ZIGZAG_RANGE   = 120.0  # Y方向の折り返し幅
 _SHOOT_INTERVAL = 2.2    # 射撃間隔（秒）
 _BULLET_SPEED   = 200.0
 
-_BASE_HP       = 3
-_BASE_SPEED    = 130.0
 _BASE_INTERVAL = 2.2
-_ENH_HP        = 8
-_ENH_SPEED     = 170.0
 _ENH_INTERVAL  = 1.3
+_STATS         = enemy_stats("EnemyPachemon")
 
 
 class EnemyPachemon(Enemy):
@@ -37,8 +35,8 @@ class EnemyPachemon(Enemy):
         *,
         enhanced: bool = False,
     ) -> None:
-        hp    = _ENH_HP       if enhanced else _BASE_HP
-        speed = _ENH_SPEED    if enhanced else _BASE_SPEED
+        hp    = _STATS.enhanced_hp    if enhanced else _STATS.base_hp
+        speed = _STATS.enhanced_speed if enhanced else _STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=speed, enhanced=enhanced)
         self._shoot_interval = _ENH_INTERVAL if enhanced else _BASE_INTERVAL
         raw        = game.resources.image("graphic/enemy_パチえもん.png")

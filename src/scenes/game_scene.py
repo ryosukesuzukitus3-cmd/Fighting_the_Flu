@@ -90,6 +90,8 @@ class GameScene(
             self.stage.events, self.player, stage_id=self._stage_id,
             terrain=self.terrain,
         )
+        self.spawner.spawn_terrain_events(self.stage.initial_terrain, self.camera)
+        self._boss_terrain_spawned = False
         self._boss     = None
         self.particles = ParticleSystem()
         self._buf      = pygame.Surface(self.game.screen.get_size())
@@ -187,6 +189,12 @@ class GameScene(
         self._karonaru_return_to: tuple[float, float] = (0.0, 0.0)
         self._karonaru_arrival_timer: float = 0.0
         self._karonaru_arrival_pos: tuple[float, float] = (0.0, 0.0)
+        self._karonaru_arrival_duration: float = 0.0
+        self._karonaru_arrival_from: tuple[float, float] = (0.0, 0.0)
+        self._karonaru_arrival_to: tuple[float, float] = (0.0, 0.0)
+        self._karonaru_arrival_trail: list[tuple[float, float, float]] = []
+
+        self._player_prev_rect = self.player.rect.copy()
 
         # コンボカウンター
         self._combo_count:       int   = 0
@@ -210,7 +218,8 @@ class GameScene(
             self.game.shared.carry_weapon = None
             self.game.playlog.begin_run()
 
-        self.game.playlog.log_stage_start(self._stage_id)
+        if not self._is_debug_stage:
+            self.game.playlog.log_stage_start(self._stage_id)
         self._stage_elapsed: float = 0.0
 
         carry = self.game.shared.take_carry()
@@ -255,7 +264,10 @@ class GameScene(
         if self._stage_banner_timer    > 0: self._stage_banner_timer    -= dt
         if self._final_banner_timer    > 0: self._final_banner_timer    -= dt
         if self._sengen_overlay_timer  > 0: self._sengen_overlay_timer  -= dt
-        if self._karonaru_arrival_timer > 0: self._karonaru_arrival_timer -= dt
+        if self._karonaru_arrival_timer > 0:
+            self._update_karonaru_arrival_motion(dt)
+        elif self._karonaru_arrival_trail:
+            self._decay_karonaru_arrival_trail(dt)
         self._tick_boss_dialogue(dt)
         if self._combo_pulse           > 0: self._combo_pulse           -= dt * 4.0
         if self._combo_break_timer     > 0: self._combo_break_timer     -= dt
@@ -328,6 +340,7 @@ class GameScene(
         self._stage_elapsed += dt
         self.stage.update(dt)
         _panel_open = self._is_debug_stage and self._debug_panel is not None and self._debug_panel._open
+        self._player_prev_rect = self.player.rect.copy()
         if not _panel_open:
             self.player.update(dt)
         if self._companion:
@@ -339,6 +352,9 @@ class GameScene(
 
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
+            if not self._boss_terrain_spawned:
+                self.spawner.spawn_terrain_events(self.stage.boss_terrain, self.camera)
+                self._boss_terrain_spawned = True
             self._boss_intro_state = "alert"
             self._boss_intro_timer = ALERT_DURATION
             self.camera.scroll_speed = 0.0
@@ -385,11 +401,20 @@ class GameScene(
                     self._laser_flash_timer = 0.08
                 if just_ended:
                     self.particles.spawn_hit(int(msx), int(msy))
-                laser_killed, laser_hit = self.laser.hit_check(
+                laser_killed, laser_hit, laser_boss_killed = self.laser.hit_check(
                     self.enemies, self._boss, msx, msy, terrain=self.terrain,
                 )
                 for enemy in laser_killed:
                     self._on_enemy_killed(enemy)
+                if self._boss is not None:
+                    if getattr(self.laser, "boss_form2_transition", False):
+                        self._on_form2_transition()
+                    if self._boss is not None and getattr(self.laser, "boss_form3_transition", False):
+                        self._on_form3_transition()
+                    if laser_boss_killed:
+                        self._on_boss_killed()
+                        if not self._is_debug_stage:
+                            return
                 terrain_hit = getattr(self.laser, "terrain_hit", None)
                 if terrain_hit is not None and getattr(self.laser, "_terrain_hit_timer", 0.0) <= 0.0:
                     ter, hx, hy = terrain_hit
@@ -407,6 +432,11 @@ class GameScene(
             ter.update(dt, self.camera)
             if ter.is_off_left(self.camera):
                 ter.kill()
+
+        if self._resolve_player_terrain_collision():
+            self._damage_player(PLAYER_DMG_TERRAIN)
+            if self.player.hp <= 0 and not self._is_debug_stage:
+                return
 
         # 雑魚敵更新
         for enemy in list(self.enemies):
@@ -547,8 +577,8 @@ class GameScene(
                 buf.blit(tint, self._boss.rect)
         self._draw_boss_gimmick(buf)
         self.particles.draw(buf)
-        if self._karonaru_arrival_timer > 0:
-            self._draw_karonaru_arrival_marker(buf)
+        if self._karonaru_arrival_trail:
+            self._draw_karonaru_arrival_trail(buf)
         if self._companion:
             self._companion.draw(buf)
         self.player.draw(buf)
@@ -627,6 +657,60 @@ class GameScene(
 
         if self._is_debug_stage and self._debug_panel is not None:
             self._debug_panel.draw(screen)
+
+    def _resolve_player_terrain_collision(self) -> bool:
+        """Push the player out of terrain and report whether contact happened."""
+        if not self.terrain:
+            return False
+
+        collided = False
+        prev_hit = self._hit_rect_from_rect(getattr(self, "_player_prev_rect", self.player.rect))
+
+        for _ in range(4):
+            hit = self.player.hit_rect
+            blockers = [ter for ter in self.terrain if hit.colliderect(ter.rect)]
+            if not blockers:
+                break
+
+            collided = True
+            ter = max(blockers, key=lambda t: hit.clip(t.rect).width * hit.clip(t.rect).height)
+            dx, dy = self._terrain_separation_delta(hit, prev_hit, ter.rect)
+            if dx == 0 and dy == 0:
+                break
+
+            self.player.sx += dx
+            self.player.sy += dy
+            self.player.sx = max(0.0, min(SCREEN_WIDTH - self.player.rect.width, self.player.sx))
+            self.player.sy = max(0.0, min(SCREEN_HEIGHT - self.player.rect.height, self.player.sy))
+            self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))
+
+        return collided
+
+    def _hit_rect_from_rect(self, rect: pygame.Rect) -> pygame.Rect:
+        return rect.inflate(-int(rect.width * 0.1), -int(rect.height * 0.1))
+
+    def _terrain_separation_delta(
+        self,
+        hit: pygame.Rect,
+        prev_hit: pygame.Rect,
+        block: pygame.Rect,
+    ) -> tuple[float, float]:
+        if prev_hit.right <= block.left:
+            return float(block.left - hit.right), 0.0
+        if prev_hit.left >= block.right:
+            return float(block.right - hit.left), 0.0
+        if prev_hit.bottom <= block.top:
+            return 0.0, float(block.top - hit.bottom)
+        if prev_hit.top >= block.bottom:
+            return 0.0, float(block.bottom - hit.top)
+
+        candidates = (
+            (float(block.left - hit.right), 0.0),
+            (float(block.right - hit.left), 0.0),
+            (0.0, float(block.top - hit.bottom)),
+            (0.0, float(block.bottom - hit.top)),
+        )
+        return min(candidates, key=lambda d: abs(d[0]) + abs(d[1]))
 
     def _process_terrain_bullet_collisions(self) -> None:
         if not self.terrain:
@@ -842,6 +926,12 @@ class GameScene(
         if etype in ENEMY_BY_NAME and ENEMY_BY_NAME[etype].se:
             d = ENEMY_BY_NAME[etype]
             self.game.sound.play_se(d.se, volume=d.se_volume)
+        if hasattr(enemy, "split"):
+            shards = enemy.split(self.game)
+            self.enemies.add(*shards)
+            for shard in shards:
+                sx2 = self.camera.to_screen_x(shard.world_x)
+                self.particles.spawn_spark(int(sx2), int(shard.world_y), count=6, speed=280.0)
         enemy.kill()
         self._combo_count += 1
         self._combo_timer  = COMBO_WINDOW
@@ -914,7 +1004,7 @@ class GameScene(
         self.player._invincible_timer = max(self.player._invincible_timer, 2.5)
         self._boss_kill_flash_timer = 1.2
         self.game.sound.stop_bgm(fadeout_ms=600)
-        self.game.sound.play_bgm("music/bgm/決戦.mp3")
+        self.game.sound.play_bgm(BOSS_BGM.get(self._stage_id, "music/bgm/決戦.mp3"))
         self._final_phase = 1
         self._final_seq   = ""
         self._show_final_banner("true_final", 3.0)
@@ -976,41 +1066,67 @@ class GameScene(
         if self._companion is None:
             from src.entities.companion import Karonaru
             self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
-        self._companion.sx = SCREEN_WIDTH * 0.68
-        self._companion.sy = SCREEN_HEIGHT * 0.38
+        arrival_y = float(self.player.rect.centery) + 18.0
+        end_x = max(62.0, float(self.player.rect.centerx) - 76.0)
+        start = (-48.0, arrival_y)
+        end = (end_x, arrival_y)
+        self._companion.sx, self._companion.sy = start
         self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
-        self._karonaru_arrival_timer = 2.4
-        self._karonaru_arrival_pos = (self._companion.sx, self._companion.sy)
-        self.camera.shake(8.0)
-        self.particles.spawn_glow(self._companion.sx, self._companion.sy,
-                                  color=(220, 255, 220), count=48, speed=150.0)
-        self.particles.spawn_spark(self._companion.sx, self._companion.sy,
-                                   color=(220, 255, 220), count=36, speed=540.0)
-        self._spawn_popup("KARONARU RETURNS",
-                          int(self._companion.sx), int(self._companion.sy) - 46,
-                          color=(190, 255, 210), life=2.2)
+        self._karonaru_arrival_duration = 1.65
+        self._karonaru_arrival_timer = self._karonaru_arrival_duration
+        self._karonaru_arrival_from = start
+        self._karonaru_arrival_to = end
+        self._karonaru_arrival_pos = start
+        self._karonaru_arrival_trail = [(start[0], start[1], 0.45)]
+        self.game.sound.play_se_alias("SE_KARONARU_ARRIVE", volume=0.7)
 
-    def _draw_karonaru_arrival_marker(self, surf: pygame.Surface) -> None:
-        x, y = self._karonaru_arrival_pos
-        t = max(0.0, min(1.0, self._karonaru_arrival_timer / 2.4))
-        alpha = int(230 * t)
-        pulse = 0.5 + 0.5 * math.sin(self._karonaru_arrival_timer * 18.0)
-        marker = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        cx, cy = int(x), int(y)
-        pygame.draw.line(marker, (150, 255, 190, int(95 * t)), (cx, 0), (cx, SCREEN_HEIGHT), 3)
-        pygame.draw.line(marker, (150, 255, 190, int(95 * t)), (0, cy), (SCREEN_WIDTH, cy), 3)
-        for i in range(3):
-            r = int((1.0 - t) * 120 + 28 + i * 24 + pulse * 8)
-            pygame.draw.circle(marker, (190, 255, 210, max(0, alpha - i * 55)), (cx, cy), r, 3)
-        font = self.game.resources.pixelfont(20)
-        label = font.render("KARONARU", True, (215, 255, 225))
-        label.set_alpha(alpha)
-        marker.blit(label, (cx - label.get_width() // 2, cy - 70))
-        surf.blit(marker, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+    def _update_karonaru_arrival_motion(self, dt: float) -> None:
+        if self._companion is None:
+            self._karonaru_arrival_timer = 0.0
+            return
+        dur = max(0.001, self._karonaru_arrival_duration)
+        self._karonaru_arrival_timer = max(0.0, self._karonaru_arrival_timer - dt)
+        t = 1.0 - self._karonaru_arrival_timer / dur
+        ease = 1.0 - (1.0 - t) ** 3
+        sx0, sy0 = self._karonaru_arrival_from
+        sx1, sy1 = self._karonaru_arrival_to
+        self._companion.sx = sx0 + (sx1 - sx0) * ease
+        self._companion.sy = sy0 + (sy1 - sy0) * ease
+        self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
+        self._karonaru_arrival_pos = (self._companion.sx, self._companion.sy)
+        self._karonaru_arrival_trail.append((self._companion.sx, self._companion.sy, 0.55))
+        self._karonaru_arrival_trail = [
+            (x, y, life - dt) for x, y, life in self._karonaru_arrival_trail
+            if life - dt > 0.0
+        ]
+
+    def _decay_karonaru_arrival_trail(self, dt: float) -> None:
+        self._karonaru_arrival_trail = [
+            (x, y, life - dt) for x, y, life in self._karonaru_arrival_trail
+            if life - dt > 0.0
+        ]
+
+    def _draw_karonaru_arrival_trail(self, surf: pygame.Surface) -> None:
+        trail = self._karonaru_arrival_trail
+        if len(trail) < 2:
+            return
+        layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for i, (x, y, life) in enumerate(trail):
+            alpha = max(0, min(180, int(180 * life / 0.55)))
+            radius = 2 + min(4, i // 3)
+            pygame.draw.circle(layer, (170, 255, 205, alpha), (int(x), int(y)), radius)
+        pts = [(int(x), int(y)) for x, y, _ in trail]
+        if len(pts) >= 2:
+            pygame.draw.lines(layer, (125, 245, 180, 80), False, pts, 2)
+        surf.blit(layer, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
     def _start_karonaru_return_join(self) -> None:
         if self._companion is None:
             self._spawn_returning_karonaru()
+        if self._karonaru_arrival_timer > 0:
+            self._karonaru_arrival_timer = 0.0
+            self._companion.sx, self._companion.sy = self._karonaru_arrival_to
+            self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
         self._final_seq = "return_join"
         self._karonaru_return_timer = 0.0
         self._karonaru_return_from = (float(self._companion.sx), float(self._companion.sy))
@@ -1053,6 +1169,8 @@ class GameScene(
             self._companion.sx = float(self.player.rect.centerx) - 50.0
             self._companion.sy = float(self.player.rect.centery) + 16.0
         self._companion.set_max()
+        self._companion.reseed_trail(self.player)
+        self._karonaru_heal_player()
         self.game.story.karonaru_lost        = False
         # Story flags for Karonaru return.
         self.game.story.karonaru_available   = True
@@ -1067,6 +1185,31 @@ class GameScene(
         self._boss_mid_dialogue_shown = False
         self._play_final_dialogue(FINAL_SEQ["act2_start"], on_done=self._resume_final_combat)
 
+    def _karonaru_heal_player(self) -> None:
+        before = self.player.hp
+        self.player.hp = self.player.max_hp
+        self.player._invincible_timer = max(self.player._invincible_timer, 2.8)
+        healed = max(0, self.player.hp - before)
+        px, py = self.player.rect.center
+        self._spawn_popup(
+            "HP FULL RECOVER" if healed > 0 else "HP SECURED",
+            px,
+            self.player.rect.top - 26,
+            color=(160, 255, 190),
+            life=2.4,
+        )
+        self.particles.spawn_glow(px, py, color=(160, 255, 190), count=28, speed=85.0)
+        self.particles.spawn_spark(px, py, color=(225, 255, 210), count=16, speed=260.0)
+        if self._companion is not None:
+            self.particles.spawn_glow(
+                self._companion.sx,
+                self._companion.sy,
+                color=(220, 255, 230),
+                count=18,
+                speed=70.0,
+            )
+        self.game.sound.play_se_alias("SE_HEAL", volume=0.8)
+
     def _resume_final_combat(self) -> None:
         self._final_seq = ""
 
@@ -1080,6 +1223,8 @@ class GameScene(
     def _arm_final_kill(self) -> None:
         if self._boss is not None:
             self._boss.arm_final_kill()
+        self._show_final_banner("final_chance", 2.4)
+        self._spawn_popup("NOW STRIKE", SCREEN_WIDTH // 2, 120, color=(255, 230, 150), life=2.0)
         self._final_seq = "final_chance"
 
     # ── 最終決戦 描画 ──────────────────────────────────────────────
@@ -1190,6 +1335,8 @@ class GameScene(
     def _draw_boss_gimmick(self, buf: pygame.Surface) -> None:
         """Draw the current boss gimmick state."""
         b = self._boss
+        if b is None:
+            return
         cx, cy = b.rect.center
         r = max(b.rect.width, b.rect.height) // 2 + 10
         gimmick = b._current_gimmick() if hasattr(b, "_current_gimmick") else None

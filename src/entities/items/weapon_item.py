@@ -45,4 +45,4 @@ class WeaponItem(Item):
         self.rect    = self.image.get_rect(center=old_center)
 
     def apply(self, player: Player) -> None:
-        player.weapon.upgrade("weapon_main")
+        player.weapon.weapon_stock += 1

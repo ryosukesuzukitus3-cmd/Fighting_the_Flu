@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python 'c:\\02_work\\01_Fighting_the_Flu\\.codex\\hooks\\md_to_html.py'"
+            "command": "\"c:\\02_work\\01_Fighting_the_Flu\\.venv\\Scripts\\python.exe\" \"c:\\02_work\\01_Fighting_the_Flu\\.codex\\hooks\\md_to_html.py\""
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python 'c:\\02_work\\01_Fighting_the_Flu\\.codex\\hooks\\check_sync.py'"
+            "command": "\"c:\\02_work\\01_Fighting_the_Flu\\.venv\\Scripts\\python.exe\" \"c:\\02_work\\01_Fighting_the_Flu\\.codex\\hooks\\check_sync.py\""
           }
         ]
       }

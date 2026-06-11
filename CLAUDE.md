@@ -6,8 +6,9 @@
 
 | データ種別 | 唯一のソース |
 |---|---|
-| 敵一覧・SE・ドロップ率 | `src/core/registries.py` > `ENEMY_DEFS` |
+| 敵一覧・SE・ドロップ率・基本ステータス | `src/core/registries.py` > `ENEMY_DEFS` |
 | アイテム一覧・ドロップ重み | `src/core/registries.py` > `ITEM_DEFS` |
+| 敵・アイテム生成 | `src/core/factories.py` |
 | ステージ数 | `data/stages/stage*.json` → `registries.stage_ids()` |
 | ボス攻撃パターン一覧 | `src/entities/enemies/boss.py` > `_PHASE_CONFIGS`（`4f3`＝投了王サワグチ含む） |
 | 武器メインレベル | `src/entities/weapon.py` > `_MAIN_LEVELS` |
@@ -25,12 +26,10 @@
 ### 敵を追加するとき
 
 1. `src/entities/enemies/{name}.py` を作成
-2. `src/core/registries.py` > `ENEMY_DEFS` に1行追加（se / drop_chance / doc_movement / doc_notes を設定）
-3. `src/stages/spawner.py` > `_make_enemy()` に `if enemy_type == "{Name}":` 分岐を追加
-4. `src/scenes/game/debug_stage_panel.py` > `_make_enemy()` に同様の分岐を追加
-5. `tools/balance_sheet.py` > `_ENEMY_BASE` にステータスを追加
-6. `python tools/gen_docs.py` を実行（design.md の敵一覧表が自動更新される）
-7. `python tools/check_consistency.py` で全項目パスを確認
+2. `src/core/registries.py` > `ENEMY_DEFS` に1行追加（se / drop_chance / stats / doc_movement / doc_notes を設定）
+3. `src/core/factories.py` に生成分岐を追加
+4. `python tools/gen_docs.py` を実行（design.md の敵一覧表が自動更新される）
+5. `python tools/check_consistency.py` で全項目パスを確認
 
 ### ステージを追加するとき
 
@@ -44,9 +43,8 @@
 
 1. `src/entities/items/{name}.py` を作成
 2. `src/core/registries.py` > `ITEM_DEFS` に1行追加（`drop_weight > 0` でランダムドロップ対象）
-3. `src/scenes/game/debug_stage_panel.py` > `_make_item()` に分岐を追加
-4. ランダムドロップ対象の場合は `src/scenes/game/config.py` > `random_item()` 内 `_CLASSES` にも追加
-5. `python tools/check_consistency.py` で確認
+3. `src/core/factories.py` に生成分岐を追加
+4. `python tools/check_consistency.py` で確認
 
 ### 武器レベルを変更するとき
 

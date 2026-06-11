@@ -1,26 +1,24 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import pygame
+from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
 if TYPE_CHECKING:
     from src.core.game import Game
 
-_APPROACH_SPEED = 80.0
 _CHARGE_SPEED   = 520.0
 _APPROACH_TIME  = 1.2   # 秒：突進開始までの助走時間
 
-_BASE_HP      = 5
-_ENH_HP       = 14
-_ENH_APPROACH = 100.0
 _ENH_CHARGE   = 650.0
+_STATS        = enemy_stats("EnemyBroly")
 
 
 class EnemyBroly(Enemy):
     def __init__(self, game: Game, world_x: float, world_y: float,
                  target_y: float | None = None, *, enhanced: bool = False) -> None:
-        hp       = _ENH_HP       if enhanced else _BASE_HP
-        approach = _ENH_APPROACH if enhanced else _APPROACH_SPEED
+        hp       = _STATS.enhanced_hp    if enhanced else _STATS.base_hp
+        approach = _STATS.enhanced_speed if enhanced else _STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=approach, enhanced=enhanced)
         self._charge_speed = _ENH_CHARGE if enhanced else _CHARGE_SPEED
         raw        = game.resources.image("graphic/enemy_ブロリー.png")

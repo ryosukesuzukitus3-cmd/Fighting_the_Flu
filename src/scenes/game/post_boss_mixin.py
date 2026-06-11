@@ -70,24 +70,28 @@ class GameScenePostBossMixin:
                     self._defeat_dialogue_active = False  # type: ignore[attr-defined]
             return  # セリフ表示中は遷移しない
 
-        # ── セリフ終了後: プレイヤー操作・アイテム取得を解放 ────────────
-        self.player.update(dt)  # type: ignore[attr-defined]   # プレイヤーはスローなし
+        is_final = self._post_boss_next_id is None  # type: ignore[attr-defined]
+        if not is_final:
+            # ── セリフ終了後: プレイヤー操作・アイテム取得を解放 ────────────
+            self.player.update(dt)  # type: ignore[attr-defined]   # プレイヤーはスローなし
 
-        # 試し撃ち（ポストボスフェーズ）
-        if self.player.shoot_requested:  # type: ignore[attr-defined]
-            wx, wy = self.player.muzzle_world(self.camera)  # type: ignore[attr-defined]
-            for bullet in self.player.weapon.get_bullets(  # type: ignore[attr-defined]
-                    wx, wy, self.enemies, game=self.game):  # type: ignore[attr-defined]
-                self.player_bullets.add(bullet)  # type: ignore[attr-defined]
-            self.game.sound.play_se("music/se/laser.wav", volume=0.6)  # type: ignore[attr-defined]
-        if self.player.weapon.has_laser:  # type: ignore[attr-defined]
-            msx, msy = self.player.muzzle_screen()  # type: ignore[attr-defined]
-            self.laser.laser_level = self.player.weapon.laser_level  # type: ignore[attr-defined]
-            just_fired, _ = self.laser.update(dt, self.player.laser_fire_held)  # type: ignore[attr-defined]
-            if just_fired:
-                self.game.sound.play_se("music/se/laser.wav", volume=0.225)  # type: ignore[attr-defined]
-                self.camera.shake(6.0)  # type: ignore[attr-defined]
-            self.laser.hit_check(self.enemies, None, msx, msy)  # type: ignore[attr-defined]
+            # 試し撃ち（ポストボスフェーズ）
+            if self.player.shoot_requested:  # type: ignore[attr-defined]
+                wx, wy = self.player.muzzle_world(self.camera)  # type: ignore[attr-defined]
+                for bullet in self.player.weapon.get_bullets(  # type: ignore[attr-defined]
+                        wx, wy, self.enemies, game=self.game):  # type: ignore[attr-defined]
+                    self.player_bullets.add(bullet)  # type: ignore[attr-defined]
+                self.game.sound.play_se("music/se/laser.wav", volume=0.6)  # type: ignore[attr-defined]
+            if self.player.weapon.has_laser:  # type: ignore[attr-defined]
+                msx, msy = self.player.muzzle_screen()  # type: ignore[attr-defined]
+                self.laser.laser_level = self.player.weapon.laser_level  # type: ignore[attr-defined]
+                just_fired, _ = self.laser.update(dt, self.player.laser_fire_held)  # type: ignore[attr-defined]
+                if just_fired:
+                    self.game.sound.play_se("music/se/laser.wav", volume=0.225)  # type: ignore[attr-defined]
+                    self.camera.shake(6.0)  # type: ignore[attr-defined]
+                self.laser.hit_check(self.enemies, None, msx, msy)  # type: ignore[attr-defined]
+            else:
+                self.laser.state = "ready"  # type: ignore[attr-defined]
         else:
             self.laser.state = "ready"  # type: ignore[attr-defined]
 

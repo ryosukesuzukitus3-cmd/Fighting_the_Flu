@@ -18,6 +18,8 @@ class Stage:
 
         data      = self._load(stage_id)
         self.bgm: str        = data.get("bgm", "MEGALOVANIA.mp3")
+        self.initial_terrain: list = list(data.get("initial_terrain", []))
+        self.boss_terrain: list    = list(data.get("boss_terrain", []))
         self.events: list    = sorted(data.get("events", []), key=lambda e: e["time"])
 
     def _load(self, stage_id: int) -> dict:

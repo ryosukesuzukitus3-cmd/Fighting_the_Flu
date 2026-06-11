@@ -5,6 +5,7 @@
 ダミースプライト（緑丸 + "カ" 表示）を使用。後で差し替え予定。
 """
 from __future__ import annotations
+import math
 import random
 from collections import deque
 from typing import Callable, TYPE_CHECKING
@@ -22,10 +23,9 @@ _REVIVE_INVINCIBLE = 1.6  # 復帰直後の無敵時間（秒）
 _BLINK_INTERVAL   = 0.1
 _RETURN_TIME      = 24.0  # 撤退後復帰までの時間（秒・従来の3倍）
 _SHOOT_COOLDOWN   = 0.5   # ショットクールダウン（秒）
-_HISTORY_LEN      = 20    # 追従用位置履歴のフレーム数（軌跡追従）
-_TRAIL_LERP       = 8.0   # lerp 速度（大きいほど即追従）
-_OFFSET_X         = 0.0   # 横固定バイアスなし＝移動方向の後方から付いてくる
-_OFFSET_Y         = 16.0  # 自機下方オフセット
+_TRAIL_MAX_POINTS = 96    # 自機軌跡の保存点数
+_FOLLOW_DISTANCE  = 82.0  # 自機の軌跡上で後ろに取る距離
+_MIN_TRAIL_STEP   = 1.0   # 履歴に点を追加する最小移動距離
 _SPRITE_R         = 16    # ダミースプライト半径（px）
 
 
@@ -81,7 +81,7 @@ class Karonaru(pygame.sprite.Sprite):
         self._target_sy: float = self.sy
 
         # 追従用位置履歴（自機の中心位置）
-        self._history: deque[tuple[float, float]] = deque(maxlen=_HISTORY_LEN)
+        self._history: deque[tuple[float, float]] = deque(maxlen=_TRAIL_MAX_POINTS)
 
         # HP / 無敵
         self.hp:     int  = _MAX_HP
@@ -127,21 +127,10 @@ class Karonaru(pygame.sprite.Sprite):
                 self._revive(player)
             return
 
-        # 位置履歴に自機中心を積む
-        self._history.append((float(player.rect.centerx), float(player.rect.centery)))
-
-        # 追従目標: 位置履歴の先頭（最も古い）＋後方オフセット
-        if len(self._history) >= _HISTORY_LEN:
-            hx, hy = self._history[0]
-        else:
-            hx, hy = float(player.rect.centerx), float(player.rect.centery)
-        self._target_sx = hx + _OFFSET_X
-        self._target_sy = hy + _OFFSET_Y
-
-        # lerp で滑らかに追従
-        t = min(1.0, _TRAIL_LERP * dt)
-        self.sx += (self._target_sx - self.sx) * t
-        self.sy += (self._target_sy - self.sy) * t
+        self._append_player_point(player)
+        self._target_sx, self._target_sy = self._sample_trail_point()
+        self.sx = self._target_sx
+        self.sy = self._target_sy
 
         # 壁クランプ
         hw = self.rect.width  // 2
@@ -166,6 +155,47 @@ class Karonaru(pygame.sprite.Sprite):
         if getattr(player, "fire_held", False) and self._shoot_cooldown <= 0.0:
             self._fire(player_bullets, camera)
             self._shoot_cooldown = _SHOOT_COOLDOWN
+
+    def _append_player_point(self, player) -> None:
+        px = float(player.rect.centerx)
+        py = float(player.rect.centery)
+        if not self._history:
+            self.reseed_trail(player)
+            return
+        lx, ly = self._history[-1]
+        if math.hypot(px - lx, py - ly) >= _MIN_TRAIL_STEP:
+            self._history.append((px, py))
+
+    def _sample_trail_point(self) -> tuple[float, float]:
+        if not self._history:
+            return self.sx, self.sy
+
+        points = list(self._history)
+        remaining = _FOLLOW_DISTANCE
+        for i in range(len(points) - 1, 0, -1):
+            x1, y1 = points[i]
+            x0, y0 = points[i - 1]
+            seg = math.hypot(x1 - x0, y1 - y0)
+            if seg <= 0.0:
+                continue
+            if remaining <= seg:
+                t = remaining / seg
+                return x1 + (x0 - x1) * t, y1 + (y0 - y1) * t
+            remaining -= seg
+        return points[0]
+
+    def reseed_trail(self, player, *, snap: bool = True) -> None:
+        px = float(player.rect.centerx)
+        py = float(player.rect.centery)
+        self._history.clear()
+        start_x = px - _FOLLOW_DISTANCE
+        steps = 8
+        for i in range(steps):
+            t = i / (steps - 1)
+            self._history.append((start_x + (px - start_x) * t, py))
+        if snap:
+            self.sx, self.sy = self._sample_trail_point()
+            self.rect.center = (int(self.sx), int(self.sy))
 
     def _fire(self, player_bullets: pygame.sprite.Group, camera: "Camera") -> None:
         from src.entities.bullets.player_bullet import KaronaruBullet, KaronaruMaxBullet
@@ -218,11 +248,7 @@ class Karonaru(pygame.sprite.Sprite):
         self._invincible_timer = _REVIVE_INVINCIBLE
         self._blink_visible = True
         self._blink_timer   = 0.0
-        # 自機の後方付近に再出現
-        self.sx = float(player.rect.centerx) + _OFFSET_X
-        self.sy = float(player.rect.centery) + _OFFSET_Y
-        self.rect.center = (int(self.sx), int(self.sy))
-        self._history.clear()
+        self.reseed_trail(player)
 
     # ── 描画 ─────────────────────────────────────────────────────
 

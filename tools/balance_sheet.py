@@ -26,42 +26,23 @@ pygame.init()
 # ── ゲームモジュールのインポート ────────────────────────────────
 from src.entities.laser_beam import _LEVEL_CONFIG as _LASER_CFG
 from src.entities.enemies.boss import _BOSS_CONFIG, _FORM2_CONFIG
+from src.entities.bullets.player_bullet import _HOMING_DAMAGE
+from src.entities.weapon import _HOMING_CONFIG as _HOMING_CFG
+from src.entities.weapon import _MAIN_FIRE_CONFIG as _MAIN_CFG
+from src.core.registries import ENEMY_DEFS
 
 # ── 敵基本ステータス ────────────────────────────────────────────
-# キーは src/core/registries.ENEMY_NAMES と一致させること（check_consistency.py が検証）
-# (base_hp, base_speed_px_s, enh_hp, enh_speed_px_s, 備考)
-# EnemyBroly の speed は approach 速度。charge 速度は base=520 / enh=650
+# src/core/registries.ENEMY_DEFS.stats から導出する。
 _ENEMY_BASE: dict[str, tuple[int, float, int, float, str]] = {
-    "EnemyVirus":    ( 1, 160.0,  3, 210.0, "直進"),
-    "EnemyTakeshi":  ( 2, 110.0,  6, 145.0, "sin波"),
-    "EnemyBroly":    ( 5,  80.0, 14, 100.0, "突進(charge:520→650)"),
-    "EnemyPachemon": ( 3, 130.0,  8, 170.0, "ジグザグ+狙撃"),
-    "EnemyBilly":    (18,  45.0, 18,  45.0, "高HP・鈍足・確定W(強化なし)"),
-    "EnemyTurret":   ( 6,   0.0, 12,   0.0, "地形固定(速度0)・狙撃"),
-}
-
-# ── ホーミング設定（weapon.py から）────────────────────────────
-_HOMING_DAMAGE = 4   # player_bullet.py HomingBullet.damage
-
-_HOMING_CFG: dict[int, tuple[float, list]] = {
-    1: (1.07, [0.0]),
-    2: (0.82, [0.0]),
-    3: (0.63, [0.0]),
-    4: (0.79, [-22.5, 22.5]),
-    5: (0.66, [-22.5, 22.5]),
-    6: (0.83, [-45.0, 0.0, 45.0]),
-    7: (0.55, [-45.0, 0.0, 45.0]),
-}
-
-# ── メインウェポン設定 ───────────────────────────────────────
-# (発射数/射撃, クールダウン秒, ダメージ/発)
-_MAIN_CFG: dict[str, tuple[int, float, int]] = {
-    "single": (1, 0.25, 1),
-    "rapid1": (1, 0.15, 1),
-    "rapid2": (1, 0.12, 1),
-    "wide1":  (2, 0.12, 1),
-    "wide2":  (3, 0.12, 1),
-    "medic":  (3, 0.12, 2),
+    d.name: (
+        d.stats.base_hp,
+        d.stats.base_speed,
+        d.stats.enhanced_hp,
+        d.stats.enhanced_speed,
+        d.stats.note,
+    )
+    for d in ENEMY_DEFS
+    if d.stats is not None
 }
 
 # ── ユーティリティ ───────────────────────────────────────────

@@ -11,6 +11,7 @@ _SPEED        = 600.0   # px/秒
 _HOMING_SPEED = 350.0
 _TURN_RATE    = 1.8     # 方向補正の強さ（1秒あたりの補間率）
 _HOMING_TIME  = 1.2     # ホーミング有効時間（秒）
+_HOMING_DAMAGE = 4
 
 
 def _angle_velocity(speed: float, angle_deg: float) -> tuple[float, float]:
@@ -109,7 +110,7 @@ class HomingBullet(Bullet):
         rad = math.radians(init_angle)
         vx  = _HOMING_SPEED * math.cos(rad)
         vy  = -_HOMING_SPEED * math.sin(rad)
-        super().__init__(world_x, world_y, vx=vx, vy=vy, damage=4)
+        super().__init__(world_x, world_y, vx=vx, vy=vy, damage=_HOMING_DAMAGE)
         self._enemies     = enemies
         self._boss        = boss
         self._homing_left = _HOMING_TIME

@@ -7,6 +7,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 import pygame
+from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
 if TYPE_CHECKING:
@@ -14,12 +15,11 @@ if TYPE_CHECKING:
     from src.core.camera import Camera
     from src.entities.player import Player
 
-_BASE_HP       = 6
-_ENH_HP        = 12
 _SHOOT_INTERVAL = 1.8
 _ENH_INTERVAL   = 1.1
 _BULLET_SPEED   = 230.0
 _SIZE           = 40
+_STATS          = enemy_stats("EnemyTurret")
 
 
 class EnemyTurret(Enemy):
@@ -33,22 +33,24 @@ class EnemyTurret(Enemy):
         enemy_bullets: pygame.sprite.Group | None = None,
         player: "Player | None" = None,
         *,
+        surface: str = "bottom",
         enhanced: bool = False,
     ) -> None:
-        hp = _ENH_HP if enhanced else _BASE_HP
+        hp = _STATS.enhanced_hp if enhanced else _STATS.base_hp
         # speed=0 → 自走せずカメラスクロールで地形と一体に流れる
-        super().__init__(world_x, world_y, hp=hp, speed=0.0, enhanced=enhanced)
+        super().__init__(world_x, world_y, hp=hp, speed=_STATS.base_speed, enhanced=enhanced)
         self._game           = game
         self._enemy_bullets  = enemy_bullets
         self._player         = player
         self._shoot_interval = _ENH_INTERVAL if enhanced else _SHOOT_INTERVAL
         self._shoot_timer    = self._shoot_interval * 0.5
-        self.image = self._make_sprite()
+        self._surface        = "top" if surface == "top" else "bottom"
+        self.image = self._make_sprite(self._surface)
         self.rect  = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._init_glow()
 
     @staticmethod
-    def _make_sprite() -> pygame.Surface:
+    def _make_sprite(surface: str = "bottom") -> pygame.Surface:
         s = _SIZE
         surf = pygame.Surface((s, s), pygame.SRCALPHA)
         # 台座
@@ -58,6 +60,8 @@ class EnemyTurret(Enemy):
         pygame.draw.circle(surf, (150, 156, 172), (s // 2, s // 2), s // 3, 2)
         # 砲身（左向き）
         pygame.draw.rect(surf, (40, 42, 50), (0, s // 2 - 4, s // 2, 8), border_radius=2)
+        if surface == "top":
+            surf = pygame.transform.flip(surf, False, True)
         return surf
 
     def update(self, dt: float, camera: "Camera") -> None:

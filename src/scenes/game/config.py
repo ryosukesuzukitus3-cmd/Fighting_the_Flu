@@ -3,7 +3,6 @@ game_scene 専用の定数・設定値。
 ここを編集すればゲームバランスに一括反映される。
 """
 from __future__ import annotations
-import random
 from pathlib import Path
 
 # ── アセットパス ─────────────────────────────────────────────────
@@ -49,9 +48,9 @@ BOSS_NAME_DURATION = 2.5   # 秒
 # ── ボス戦BGM（ステージ別・SSOT）─────────────────────────────────
 BOSS_BGM: dict[int, str] = {
     1: "music/bgm/決戦.mp3",
-    2: "music/bgm/決戦_FF10.mp3",
-    3: "music/bgm/決戦_FF10.mp3",
-    4: "music/bgm/決戦！N.mp3",   # ラスボス（先輩復帰で Rebirth_the_edge に切替）
+    2: "music/bgm/決戦！N_short.mp3",
+    3: "music/bgm/決戦！N_short.mp3",
+    4: "music/bgm/決戦_FF10.mp3",   # ラスボス（先輩復帰で Rebirth_the_edge に切替）
 }
 
 # ── ボスセリフ（内容は src/story/script.py が SSOT）───────────────
@@ -100,14 +99,5 @@ CONTINUE_WEAPON: dict[int, dict] = {
 
 def random_item(world_x: float, world_y: float, *, spread: float = 0.0):
     """ランダムアイテムを1つ生成する。重みは registries.ITEM_DEFS.drop_weight で管理。"""
-    from src.core.registries import ITEM_DEFS
-    from src.entities.items.weapon_item import WeaponItem
-    from src.entities.items.heal import HealItem
-    from src.entities.items.score_item import ScoreItem
-    _CLASSES = {"WeaponItem": WeaponItem, "HealItem": HealItem, "ScoreItem": ScoreItem}
-    pool = [(d.name, d.drop_weight) for d in ITEM_DEFS if d.drop_weight > 0 and d.name in _CLASSES]
-    names, weights = zip(*pool)
-    ox = world_x + random.uniform(-spread, spread)
-    oy = world_y + random.uniform(-spread, spread)
-    chosen = random.choices(names, weights=weights, k=1)[0]
-    return _CLASSES[chosen](ox, oy)
+    from src.core.factories import random_item as _random_item
+    return _random_item(world_x, world_y, spread=spread)

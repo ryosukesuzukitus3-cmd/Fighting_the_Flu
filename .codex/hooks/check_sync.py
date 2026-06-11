@@ -5,7 +5,7 @@ gen_docs + check_consistency を自動実行する。
 Claude にそのターンでの修正を促す。
 
 settings.json での登録:
-  "Stop": [{"hooks": [{"type": "command", "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check_sync.py\""}]}]
+  "Stop": [{"hooks": [{"type": "command", "command": ".venv/Scripts/python .codex/hooks/check_sync.py"}]}]
 """
 from __future__ import annotations
 import os
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path(__file__).parent.parent.parent))
-PYTHON      = str(PROJECT_DIR / ".venv" / "Scripts" / "python")
+PYTHON      = str(PROJECT_DIR / ".venv" / "Scripts" / "python.exe")
 
 _WATCH_DIRS = ["src", "data", "tools", "docs"]
 
@@ -39,7 +39,7 @@ def main() -> None:
     errors: list[str] = []
 
     # 1. gen_docs で docs を自動再生成
-    r = _run([PYTHON, str(PROJECT_DIR / "tools" / "gen_docs.py")])
+    r = _run([PYTHON, str(PROJECT_DIR / "tools" / "run.py"), "docs"])
     if r.returncode != 0:
         errors.append(f"gen_docs.py failed:\n{r.stderr.strip()}")
     elif r.stdout.strip() and "no changes" not in r.stdout:
@@ -47,7 +47,7 @@ def main() -> None:
         print(r.stdout.strip(), file=sys.stderr)
 
     # 2. 整合性チェック
-    r2 = _run([PYTHON, str(PROJECT_DIR / "tools" / "check_consistency.py")])
+    r2 = _run([PYTHON, str(PROJECT_DIR / "tools" / "run.py"), "check"])
     if r2.returncode != 0:
         errors.append(f"check_consistency.py failed:\n{r2.stderr.strip()}")
 

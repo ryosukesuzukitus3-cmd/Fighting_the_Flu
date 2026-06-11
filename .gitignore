@@ -5,6 +5,9 @@
 /_old/*
 /.venv/*
 /.html/
+/.uv-cache/
+/.pytest_cache/
+/captures/
 
 # Python キャッシュ
 __pycache__/
@@ -15,3 +18,4 @@ __pycache__/
 /data/playlogs/
 /data/highscore.json
 /data/settings.json
+/.claude/settings.local.json

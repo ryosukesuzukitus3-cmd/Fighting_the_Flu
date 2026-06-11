@@ -27,39 +27,47 @@ if TYPE_CHECKING:
 #   vortex2   : 2アームスパイラル（高速回転）
 #   vortex3   : 3アームスパイラル（高速弾・激難）
 #   chaos     : カオス弾幕（aimring8 + vortex2 + ランダムオフセット）
+#   burst3    : 3連狙撃（速度差つき）
+#   wall_gap  : 縦の弾壁。毎回違う位置に抜け道
 _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
     1: [   # 悪寒大王インフルX（ステージ1 入門ボス）
         (1.00, "fan5",      2.0),
         (0.70, "aimed",     1.3),
-        (0.45, "ring8",     1.1),
+        (0.45, "cross",     1.0),
         (0.20, "dbl_aimed", 0.55),
     ],
     2: [   # 情報汚染超人野獣ブロリー（ステージ2 中級ボス）
         (1.00, "fan7",      1.6),
-        (0.65, "aimring6",  1.0),
-        (0.35, "ring12",    0.75),
+        (0.70, "burst3",    1.05),
+        (0.50, "wall_gap",  0.95),
+        (0.30, "ring12",    0.70),
         (0.12, "scatter",   0.32),
     ],
     3: [   # 婚活要塞マッチング・ゼロ（ステージ3 中上級ボス）
         (1.00, "ring12",   1.5),
-        (0.60, "aimring6", 0.9),
-        (0.30, "scatter",  0.35),
+        (0.72, "cross",    0.95),
+        (0.50, "wall_gap", 0.82),
+        (0.30, "scatter",  0.34),
         (0.12, "spiral",   0.60),
     ],
     4: [   # 藤井竜王 Form1（ステージ4 ラスボス）
         (1.00, "ring12",   1.5),
-        (0.65, "spiral",   0.55),
-        (0.35, "aimring8", 0.65),
+        (0.72, "wall_gap", 0.90),
+        (0.52, "spiral",   0.52),
+        (0.32, "aimring8", 0.62),
         (0.15, "vortex2",  0.28),
     ],
     "4f2": [  # 藤井竜王 Form2（激難）
         (1.00, "vortex3", 0.38),
-        (0.60, "ring16",  0.48),
+        (0.72, "wall_gap", 0.55),
+        (0.48, "ring16",  0.46),
         (0.25, "chaos",   0.20),
     ],
     "4f3": [  # 投了王サワグチ Form3（最終形態・赤黒弾幕）
-        (1.00, "ring16",  0.55),
-        (0.65, "chaos",   0.30),
+        (1.00, "cross",   0.48),
+        (0.78, "ring16",  0.52),
+        (0.58, "chaos",   0.30),
+        (0.42, "burst3",  0.32),
         (0.30, "vortex3", 0.24),
     ],
 }
@@ -145,6 +153,7 @@ class Boss(pygame.sprite.Sprite):
         self._vy:           float = _MOVE_SPEED_Y
         self._shoot_timer:  float = 2.0
         self._spiral_angle: float = 0.0
+        self._shot_variant: int   = 0
         self._time:         float = 0.0
         self.hit_flash_timer: float = 0.0   # 被弾時の白フラッシュ（game_scene が描画）
 
@@ -299,6 +308,9 @@ class Boss(pygame.sprite.Sprite):
         pattern = self._phase[1]
         bx, by  = self.sx, self.sy
         spd     = _BULLET_SPEED
+        variant = self._shot_variant
+        self._shot_variant += 1
+        spin_dir = -1 if variant % 2 else 1
 
         # 攻撃SE（dummy・連射で鳴り過ぎないよう間隔制御）
         if self._time - self._shot_se_t >= 0.25:
@@ -307,13 +319,17 @@ class Boss(pygame.sprite.Sprite):
 
         # ── 5-way 扇形 ±40°（薄め）
         if pattern == "fan5":
+            offset = -8 if variant % 2 else 8
             for deg in (-40, -20, 0, 20, 40):
+                deg += offset
                 vx, vy = self._rotated(nx, ny, deg, spd)
                 enemy_bullets.add(EnemyBullet(bx, by, vx, vy))
 
         # ── 7-way 扇形 ±54°（広め）
         elif pattern == "fan7":
+            offset = -6 if variant % 2 else 6
             for deg in (-54, -36, -18, 0, 18, 36, 54):
+                deg += offset
                 vx, vy = self._rotated(nx, ny, deg, spd * 1.05)
                 enemy_bullets.add(EnemyBullet(bx, by, vx, vy))
 
@@ -332,21 +348,21 @@ class Boss(pygame.sprite.Sprite):
             for i in range(8):
                 a = math.radians(i * 45 + self._spiral_angle * 0.5)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 200, math.sin(a) * 200))
-            self._spiral_angle = (self._spiral_angle + 22.5) % 360
+            self._spiral_angle = (self._spiral_angle + spin_dir * 22.5) % 360
 
         # ── 12方向 全方位 等間隔
         elif pattern == "ring12":
             for i in range(12):
                 a = math.radians(i * 30 + self._spiral_angle * 0.4)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 210, math.sin(a) * 210))
-            self._spiral_angle = (self._spiral_angle + 15) % 360
+            self._spiral_angle = (self._spiral_angle + spin_dir * 15) % 360
 
         # ── 16方向 全方位 高密度（激難）
         elif pattern == "ring16":
             for i in range(16):
                 a = math.radians(i * 22.5 + self._spiral_angle * 0.6)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 240, math.sin(a) * 240))
-            self._spiral_angle = (self._spiral_angle + 11.25) % 360
+            self._spiral_angle = (self._spiral_angle + spin_dir * 11.25) % 360
 
         # ── 6方向 プレイヤー方向に位相合わせ + リング
         elif pattern == "aimring6":
@@ -365,8 +381,10 @@ class Boss(pygame.sprite.Sprite):
         # ── 12発 ランダム広角 散弾
         elif pattern == "scatter":
             base = math.atan2(ny, nx)
-            for _ in range(12):
-                a = base + math.radians(random.uniform(-70, 70))
+            count = 10 + (variant % 4)
+            spread = 58 + (variant % 3) * 12
+            for _ in range(count):
+                a = base + math.radians(random.uniform(-spread, spread))
                 s = spd * random.uniform(1.2, 1.9)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * s, math.sin(a) * s))
 
@@ -382,7 +400,7 @@ class Boss(pygame.sprite.Sprite):
             for i in range(6):
                 a = base + math.radians(self._spiral_angle + i * 60)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 255, math.sin(a) * 255))
-            self._spiral_angle = (self._spiral_angle + 35) % 360
+            self._spiral_angle = (self._spiral_angle + spin_dir * 35) % 360
 
         # ── 2アームスパイラル（高速回転）
         elif pattern == "vortex2":
@@ -392,7 +410,7 @@ class Boss(pygame.sprite.Sprite):
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 280, math.sin(a) * 280))
             # 同フレームで狙い打ちも追加（プレイヤーへのプレッシャー）
             enemy_bullets.add(EnemyBullet(bx, by, nx * 350, ny * 350))
-            self._spiral_angle = (self._spiral_angle + 50) % 360
+            self._spiral_angle = (self._spiral_angle + spin_dir * 50) % 360
 
         # ── 3アームスパイラル（高速弾・激難）
         elif pattern == "vortex3":
@@ -404,7 +422,7 @@ class Boss(pygame.sprite.Sprite):
             for i in range(3):
                 a = base - math.radians(self._spiral_angle + i * 120 + 60)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 240, math.sin(a) * 240))
-            self._spiral_angle = (self._spiral_angle + 45) % 360
+            self._spiral_angle = (self._spiral_angle + spin_dir * 45) % 360
 
         # ── カオス弾幕（aimring8 + ランダムオフセット + 狙い打ち）
         elif pattern == "chaos":
@@ -416,6 +434,22 @@ class Boss(pygame.sprite.Sprite):
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * s, math.sin(a) * s))
             # 超高速狙い打ち
             enemy_bullets.add(EnemyBullet(bx, by, nx * 440, ny * 440))
+
+        # ── 3連狙撃（速度差で回避タイミングをずらす）
+        elif pattern == "burst3":
+            for deg, speed in ((-10, 360), (0, 450), (10, 390)):
+                vx, vy = self._rotated(nx, ny, deg + (-4 if variant % 2 else 4), speed)
+                enemy_bullets.add(EnemyBullet(bx, by, vx, vy))
+
+        # ── 縦の弾壁。毎回違う位置に抜け道を作る。
+        elif pattern == "wall_gap":
+            gap = 2 + (variant % 5) * 2
+            for i in range(13):
+                if gap <= i <= gap + 1:
+                    continue
+                vy = (i - 6) * 42.0
+                enemy_bullets.add(EnemyBullet(bx, by, -270.0, vy))
+            enemy_bullets.add(EnemyBullet(bx, by, nx * 340, ny * 340))
 
     # ─────────────────────────────────────────
     def take_damage(self, amount: int) -> bool:
@@ -468,6 +502,7 @@ class Boss(pygame.sprite.Sprite):
         self.max_hp = hp2
         self._shoot_timer  = 1.0
         self._spiral_angle = 0.0
+        self._shot_variant = 0
         # Form2 は weakpoint ギミック。装甲を満タンで開始。
         self._shield_active = False
         self._armor         = _ARMOR_MAX
@@ -511,6 +546,7 @@ class Boss(pygame.sprite.Sprite):
         self.max_hp = _FORM3_MAX_HP
         self._shoot_timer  = 1.2
         self._spiral_angle = 0.0
+        self._shot_variant = 0
         # 演出（バナー・セリフ）は game_scene の form3 検知で行う
 
     def regen(self, amount: int) -> None:
@@ -525,6 +561,8 @@ class Boss(pygame.sprite.Sprite):
         self.hp     = hp
         self.max_hp = hp
         self._shoot_timer = 1.0
+        self._spiral_angle = 0.0
+        self._shot_variant = 0
 
     def arm_final_kill(self) -> None:
         """最終勧告後: 次の被弾で撃破できるようにする。"""

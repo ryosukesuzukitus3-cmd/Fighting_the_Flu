@@ -24,16 +24,40 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
 class Terrain(pygame.sprite.Sprite):
     """スクロールする地形ブロック（ワールド座標 world_x / 画面 y 固定）。"""
 
-    def __init__(self, world_x: float, y: float, w: int, h: int, kind: str = "wall") -> None:
+    def __init__(
+        self,
+        world_x: float,
+        y: float,
+        w: int,
+        h: int,
+        kind: str = "wall",
+        *,
+        destructible: bool = False,
+        hp: int = 5,
+        drop_chance: float = 0.0,
+    ) -> None:
         super().__init__()
         self.world_x = float(world_x)
         self.y       = float(y)
         self.kind    = kind
-        self.image   = self._make_surface(w, h, kind)
+        self.destructible = destructible
+        self.max_hp = max(1, hp)
+        self.hp = self.max_hp
+        self.drop_chance = drop_chance
+        self._w = w
+        self._h = h
+        self.image   = self._make_surface(w, h, kind, destructible=destructible)
         self.rect    = self.image.get_rect(topleft=(int(world_x), int(y)))
 
     @staticmethod
-    def _make_surface(w: int, h: int, kind: str) -> pygame.Surface:
+    def _make_surface(
+        w: int,
+        h: int,
+        kind: str,
+        *,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+    ) -> pygame.Surface:
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         radius = 8 if kind != "wall" else 3
@@ -46,7 +70,40 @@ class Terrain(pygame.sprite.Sprite):
             sy = rng.randint(2, max(2, h - 3))
             shade = tuple(max(0, c - 24) for c in base)
             pygame.draw.circle(surf, shade, (sx, sy), rng.randint(1, 3))
+        if destructible:
+            crack_col = (255, 190, 105)
+            node_col = (255, 125, 70)
+            for _ in range(4 + int(damage_ratio * 8)):
+                x = rng.randint(5, max(5, w - 6))
+                y = rng.randint(8, max(8, h - 9))
+                pts = [(x, y)]
+                for _step in range(rng.randint(2, 5)):
+                    x += rng.randint(-14, 14)
+                    y += rng.randint(-16, 16)
+                    pts.append((max(3, min(w - 4, x)), max(4, min(h - 5, y))))
+                pygame.draw.lines(surf, crack_col, False, pts, 2)
+            for _ in range(max(2, (w * h) // 7000)):
+                sx = rng.randint(8, max(8, w - 9))
+                sy = rng.randint(12, max(12, h - 13))
+                pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
         return surf
+
+    def take_damage(self, amount: int) -> bool:
+        """破壊されたら True。破壊不能地形は常に False。"""
+        if not self.destructible:
+            return False
+        self.hp -= amount
+        if self.hp <= 0:
+            return True
+        center = self.rect.center
+        damage_ratio = 1.0 - (self.hp / self.max_hp)
+        self.image = self._make_surface(
+            self._w, self._h, self.kind,
+            destructible=True,
+            damage_ratio=damage_ratio,
+        )
+        self.rect = self.image.get_rect(center=center)
+        return False
 
     def update(self, dt: float, camera: "Camera") -> None:
         self.rect.topleft = (int(camera.to_screen_x(self.world_x)), int(self.y))
@@ -71,6 +128,13 @@ _STRIP_THEMES: dict[str, dict] = {
         "edge": (144, 150, 166),
         "glow": (95, 180, 220),
         "spot": (108, 112, 126),
+    },
+    "meme_static": {
+        "base": (34, 62, 48),
+        "dark": (10, 18, 18),
+        "edge": (104, 188, 122),
+        "glow": (130, 255, 150),
+        "spot": (60, 120, 72),
     },
     "fortress": {
         "base": (64, 72, 86),
@@ -285,6 +349,7 @@ def make_terrain_strip(
     breakable_chance: float = 0.0,
     breakable_hp: int = 3,
     breakable_drop_chance: float = 0.0,
+    profile: str = "normal",
 ) -> list[TerrainStripSegment]:
     """上下壁の連続地形をセグメント列として生成する。"""
     segments: list[TerrainStripSegment] = []
@@ -311,6 +376,20 @@ def make_terrain_strip(
 
         top_h = int(center - gap / 2)
         bottom_y = int(center + gap / 2)
+
+        if profile == "mountain":
+            mound = math.sin(math.pi * p)
+            shoulder = 0.35 * math.sin(math.pi * p * 3.0 + seed * 0.17)
+            height = max(90, int(center_wave * 1.9 + irregularity))
+            top_h = top_min
+            bottom_y = int(SCREEN_HEIGHT - bottom_min - height * max(0.0, mound + shoulder))
+        elif profile == "ceiling":
+            bulge = math.sin(math.pi * p)
+            bite = 0.28 * math.sin(math.pi * p * 2.5 + seed * 0.11)
+            depth = max(95, int(center_wave * 1.8 + irregularity))
+            top_h = int(top_min + depth * max(0.0, bulge + bite))
+            bottom_y = SCREEN_HEIGHT - bottom_min
+
         top_h = max(top_min, min(SCREEN_HEIGHT - bottom_min - gap_min, top_h))
         bottom_y = max(top_h + gap_min, min(SCREEN_HEIGHT - bottom_min, bottom_y))
         bottom_h = SCREEN_HEIGHT - bottom_y

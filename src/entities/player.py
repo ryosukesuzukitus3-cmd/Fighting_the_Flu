@@ -139,7 +139,7 @@ class Player(pygame.sprite.Sprite):
 
         # 射撃（長押し連射）・レーザー保持判定（レーザーはVキー専用）
         self.fire_held = inp.is_action_pressed("fire")
-        self.laser_fire_held = inp.is_action_pressed("laser")
+        self.laser_fire_held = inp.is_pressed(pygame.K_SPACE)
         if self.fire_held and self._cooldown <= 0.0:
             self.shoot_requested = True
             self._cooldown = self.weapon.shoot_cooldown

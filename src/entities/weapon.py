@@ -9,8 +9,29 @@ if TYPE_CHECKING:
 # rapid1: 連射(発射間隔0.15s), rapid2: 超連射(0.12s), wide1: 2本, wide2: 3本
 _MAIN_LEVELS = ["single", "rapid1", "rapid2", "wide1", "wide2", "medic"]
 
+# (発射数/射撃, クールダウン秒, ダメージ/発)
+_MAIN_FIRE_CONFIG: dict[str, tuple[int, float, int]] = {
+    "single": (1, 0.25, 1),
+    "rapid1": (1, 0.15, 1),
+    "rapid2": (1, 0.12, 1),
+    "wide1":  (2, 0.12, 1),
+    "wide2":  (3, 0.12, 1),
+    "medic":  (3, 0.12, 2),
+}
+
 # スピードアップ最大段階（1段階あたり+20%、最大2倍）
 _SPEED_MAX_LEVEL = 5
+
+# レベル別: (クールダウン秒, 発射角リスト)
+_HOMING_CONFIG: dict[int, tuple[float, list[float]]] = {
+    1: (1.07, [0.0]),
+    2: (0.82, [0.0]),
+    3: (0.63, [0.0]),
+    4: (0.79, [-22.5, 22.5]),
+    5: (0.66, [-22.5, 22.5]),
+    6: (0.83, [-45.0, 0.0, 45.0]),
+    7: (0.55, [-45.0, 0.0, 45.0]),
+}
 
 
 class Weapon:
@@ -36,9 +57,7 @@ class Weapon:
 
     @property
     def shoot_cooldown(self) -> float:
-        if self.main_level >= 2: return 0.12   # rapid2 以上
-        if self.main_level >= 1: return 0.15   # rapid1
-        return 0.25                             # single
+        return _MAIN_FIRE_CONFIG[self.main_type][1]
 
     @property
     def main_type(self) -> str:
@@ -134,16 +153,6 @@ class Weapon:
             bullets += [PierceBullet(wx, wy, angle, game=game) for angle in (0, 15, -15)]
 
         if self.has_homing and self._homing_timer <= 0:
-            # レベル別: (クールダウン秒, 発射角リスト)
-            _HOMING_CONFIG = {
-                1: (1.07, [0.0]),
-                2: (0.82, [0.0]),
-                3: (0.63, [0.0]),
-                4: (0.79, [-22.5, 22.5]),
-                5: (0.66, [-22.5, 22.5]),
-                6: (0.83, [-45.0, 0.0, 45.0]),
-                7: (0.55, [-45.0, 0.0, 45.0]),
-            }
             cooldown, angles = _HOMING_CONFIG.get(self.homing_level, (1.60, [0.0]))
             for angle in angles:
                 bullets.append(HomingBullet(wx, wy, enemies, game=game, boss=boss, init_angle=angle))

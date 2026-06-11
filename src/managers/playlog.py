@@ -53,6 +53,8 @@ class PlayLogger:
     # ── イベント記録 ─────────────────────────────────────────────
 
     def log_stage_start(self, stage_id: int) -> None:
+        if not self._run:
+            return
         self._run["stage_reached"] = max(self._run.get("stage_reached", 1), stage_id)
         self._event("stage_start", stage=stage_id)
 

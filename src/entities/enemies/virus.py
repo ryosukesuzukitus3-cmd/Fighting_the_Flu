@@ -1,21 +1,19 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import pygame
+from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
 if TYPE_CHECKING:
     from src.core.game import Game
 
-_BASE_HP    = 1
-_BASE_SPEED = 160.0
-_ENH_HP     = 3
-_ENH_SPEED  = 210.0
+_STATS = enemy_stats("EnemyVirus")
 
 
 class EnemyVirus(Enemy):
     def __init__(self, game: Game, world_x: float, world_y: float, *, enhanced: bool = False) -> None:
-        hp    = _ENH_HP    if enhanced else _BASE_HP
-        speed = _ENH_SPEED if enhanced else _BASE_SPEED
+        hp    = _STATS.enhanced_hp    if enhanced else _STATS.base_hp
+        speed = _STATS.enhanced_speed if enhanced else _STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=speed, enhanced=enhanced)
         raw        = game.resources.image("graphic/enemy_virus.png")
         w, h       = raw.get_width(), raw.get_height()

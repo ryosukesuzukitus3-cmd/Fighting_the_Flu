@@ -20,7 +20,7 @@ class TitleScene(Scene):
         self._idle_timer = 0.0
         self._idle_index = random.randrange(len(TITLE_IDLE)) if TITLE_IDLE else 0
         # サブメニューから戻った場合はBGMを再起動しない
-        self.game.sound.play_bgm_if_new("music/bgm/The_Final_Battle.mp3")
+        self.game.sound.play_bgm_if_new("music/bgm/The_Final_Battle_short.mp3")
 
     def on_exit(self) -> None:
         pass  # BGMはサブメニューでも継続させる（ゲーム開始時にgame_sceneが停止する）

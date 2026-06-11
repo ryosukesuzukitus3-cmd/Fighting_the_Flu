@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pygame
 from src.entities.enemies.base import Enemy
 from src.core.camera import Camera
+from src.core.registries import enemy_stats
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -11,16 +12,13 @@ if TYPE_CHECKING:
 _WAVE_AMP  = 70.0   # 振れ幅 px
 _WAVE_FREQ = 1.2    # Hz
 
-_BASE_HP    = 2
-_BASE_SPEED = 110.0
-_ENH_HP     = 6
-_ENH_SPEED  = 145.0
+_STATS = enemy_stats("EnemyTakeshi")
 
 
 class EnemyTakeshi(Enemy):
     def __init__(self, game: Game, world_x: float, world_y: float, *, enhanced: bool = False) -> None:
-        hp    = _ENH_HP    if enhanced else _BASE_HP
-        speed = _ENH_SPEED if enhanced else _BASE_SPEED
+        hp    = _STATS.enhanced_hp    if enhanced else _STATS.base_hp
+        speed = _STATS.enhanced_speed if enhanced else _STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=speed, enhanced=enhanced)
         raw        = game.resources.image("graphic/enemy_タケシ.png")
         w, h       = raw.get_width(), raw.get_height()

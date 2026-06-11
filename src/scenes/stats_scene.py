@@ -6,21 +6,36 @@ from src.managers.playlog import PlayLogger
 
 
 def _compute_stats(sessions: list[dict]) -> dict | None:
+    from src.core.registries import stage_ids
+
+    valid_stages = stage_ids()
+    max_stage = max(valid_stages) if valid_stages else 0
+
+    def reached_stage(session: dict) -> int:
+        try:
+            return int(session.get("stage_reached", 1))
+        except (TypeError, ValueError):
+            return 1
+
+    sessions = [
+        s for s in sessions
+        if 1 <= reached_stage(s) <= max_stage
+    ]
     n = len(sessions)
     if n == 0:
         return None
 
     cleared   = sum(1 for s in sessions if s.get("cleared"))
-    avg_stage = sum(s.get("stage_reached", 1) for s in sessions) / n
+    avg_stage = sum(reached_stage(s) for s in sessions) / n
     best_score = max(s.get("score", 0) for s in sessions)
 
     # ステージ別生存率: そのステージに到達したセッション数 / 総プレイ数
     survival: dict[int, int] = {}
-    for stage in range(1, 5):
-        survival[stage] = sum(1 for s in sessions if s.get("stage_reached", 1) >= stage)
+    for stage in valid_stages:
+        survival[stage] = sum(1 for s in sessions if reached_stage(s) >= stage)
 
     # ボス撃破タイム（boss_killedイベントのelapsed_secを平均）
-    boss_times: dict[int, list[float]] = {1: [], 2: [], 3: [], 4: []}
+    boss_times: dict[int, list[float]] = {stage: [] for stage in valid_stages}
     for s in sessions:
         for ev in s.get("events", []):
             if ev.get("type") == "boss_killed":
@@ -34,7 +49,7 @@ def _compute_stats(sessions: list[dict]) -> dict | None:
     }
 
     # ── 死亡分析（player_death イベント）──────────────────────────
-    death_times: dict[int, list[float]] = {1: [], 2: [], 3: [], 4: []}
+    death_times: dict[int, list[float]] = {stage: [] for stage in valid_stages}
     death_weapons: list[dict] = []
     for s in sessions:
         for ev in s.get("events", []):
@@ -73,6 +88,7 @@ def _compute_stats(sessions: list[dict]) -> dict | None:
         "cleared":    cleared,
         "avg_stage":  avg_stage,
         "best_score": best_score,
+        "stages":     valid_stages,
         "survival":   survival,
         "avg_boss":   avg_boss,
         "death_hotspot":   death_hotspot,
@@ -182,7 +198,7 @@ class StatsScene(Scene):
         screen.blit(sub2, (col_boss, y_head))
 
         y = y_head + 34
-        for stage in range(1, 5):
+        for stage in st["stages"]:
             reached  = st["survival"][stage]
             rate     = reached / n if n > 0 else 0.0
             avg_boss = st["avg_boss"][stage]
@@ -227,7 +243,7 @@ class StatsScene(Scene):
             return
 
         y = 156
-        for stage in range(1, 5):
+        for stage in st["stages"]:
             if stage not in hotspot:
                 continue
             zone, cnt, total = hotspot[stage]

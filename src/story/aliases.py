@@ -8,7 +8,7 @@ from __future__ import annotations
 
 # ── BGM ────────────────────────────────────────────────────────────
 BGM: dict[str, str | None] = {
-    "BGM_TITLE":    "music/bgm/The_Final_Battle.mp3",
+    "BGM_TITLE":    "music/bgm/The_Final_Battle_short.mp3",
     "BGM_STAGE1":   "music/bgm/MEGALOVANIA.mp3",
     "BGM_STAGE2":   "music/bgm/戦艦ハルバード：甲板.mp3",
     "BGM_STAGE3":   "music/bgm/とげとげタルめいろ.mp3",
@@ -32,6 +32,7 @@ SE: dict[str, str | None] = {
     "SE_BOSS_SHOT":    "music/se/dummy_boss_shot.wav",       # dummy（ボスの発射）
     "SE_KARONARU_HIT": "music/se/dummy_karonaru_hit.wav",    # dummy（先輩 被弾）
     "SE_KARONARU_RETIRE": "music/se/dummy_karonaru_retire.wav",  # dummy（先輩 退場）
+    "SE_KARONARU_ARRIVE": "music/se/dummy_karonaru_arrive.wav",  # dummy（先輩 移動出現）
     "SE_LIGHT":        None,                           # TODO(Phase4)
     "SE_BLACKHOLE":    None,                           # TODO(Phase4)
     "SE_HEAL":         None,                           # TODO(Phase4)

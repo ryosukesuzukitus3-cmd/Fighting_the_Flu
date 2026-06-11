@@ -3,6 +3,7 @@ import random
 from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_HEIGHT
+from src.core.factories import make_enemy
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -41,45 +42,14 @@ class EnemySpawner:
             else:
                 break
 
+    def spawn_terrain_events(self, events: list[dict], camera: Camera) -> None:
+        """Spawn terrain blueprints outside the enemy timeline."""
+        for event in events:
+            self._spawn_terrain_event(event, camera)
+
     def _spawn_event(self, event: dict, camera: Camera) -> None:
         enemy_type = event["type"]
-
-        # 地形（壁・障害物・デブリ）: 画面右端から流す
-        if enemy_type == "Terrain":
-            if self._terrain is not None:
-                from src.entities.terrain import Terrain
-                self._terrain.add(Terrain(
-                    camera.spawn_x(),
-                    float(event.get("y", 0)),
-                    int(event.get("w", 80)),
-                    int(event.get("h", 80)),
-                    event.get("kind", "wall"),
-                ))
-            return
-
-        # 連続地形（上下壁・洞窟など）: セグメント列として一括生成
-        if enemy_type == "TerrainStrip":
-            if self._terrain is not None:
-                from src.entities.terrain import make_terrain_strip
-                start_x = camera.x + float(event.get("start_offset", -80))
-                segments = make_terrain_strip(
-                    start_x,
-                    length=int(event.get("length", 3600)),
-                    theme=event.get("theme", "fever_cave"),
-                    segment_w=int(event.get("segment_w", 64)),
-                    seed=int(event.get("seed", self._stage_id)),
-                    gap_min=int(event.get("gap_min", 270)),
-                    gap_max=int(event.get("gap_max", 380)),
-                    center_y=int(event.get("center_y", SCREEN_HEIGHT // 2)),
-                    center_wave=int(event.get("center_wave", 42)),
-                    top_min=int(event.get("top_min", 38)),
-                    bottom_min=int(event.get("bottom_min", 42)),
-                    irregularity=int(event.get("irregularity", 36)),
-                    breakable_chance=float(event.get("breakable_chance", 0.0)),
-                    breakable_hp=int(event.get("breakable_hp", 3)),
-                    breakable_drop_chance=float(event.get("breakable_drop_chance", 0.0)),
-                )
-                self._terrain.add(*segments)
+        if self._spawn_terrain_event(event, camera):
             return
 
         count      = event.get("count", 1)
@@ -92,7 +62,7 @@ class EnemySpawner:
                 count,
                 str(event.get("surface", "bottom")),
                 camera,
-                offset=float(event.get("surface_offset", 24)),
+                offset=float(event.get("surface_offset", 20)),
                 step=float(event.get("surface_step", 56)),
             )
         # y 固定で出したい場合は "y" を指定（formation より優先）
@@ -102,7 +72,11 @@ class EnemySpawner:
         else:
             positions = self._positions(count, formation, camera)
         for wx, wy in positions:
-            enemy = self._make_enemy(enemy_type, wx, wy, enhanced=enhanced)
+            enemy = self._make_enemy(
+                enemy_type, wx, wy,
+                enhanced=enhanced,
+                surface=str(event.get("surface", "bottom")),
+            )
             if enemy:
                 self._enemies.add(enemy)
 
@@ -186,28 +160,87 @@ class EnemySpawner:
             return None
         return min(candidates) if surface == "bottom" else max(candidates)
 
-    def _make_enemy(self, enemy_type: str, wx: float, wy: float, *, enhanced: bool = False) -> Enemy | None:
-        from src.entities.enemies.virus    import EnemyVirus
-        from src.entities.enemies.takeshi  import EnemyTakeshi
-        from src.entities.enemies.broly    import EnemyBroly
-        from src.entities.enemies.pachemon import EnemyPachemon
-        from src.entities.enemies.billy    import EnemyBilly
-        from src.entities.enemies.turret   import EnemyTurret
-        if enemy_type == "EnemyVirus":
-            return EnemyVirus(self._game, wx, wy, enhanced=enhanced)
-        if enemy_type == "EnemyTakeshi":
-            return EnemyTakeshi(self._game, wx, wy, enhanced=enhanced)
-        if enemy_type == "EnemyBroly":
-            return EnemyBroly(self._game, wx, wy, target_y=self._player.sy, enhanced=enhanced)
-        if enemy_type == "EnemyPachemon":
-            return EnemyPachemon(self._game, wx, wy, self._enemy_bullets, self._player, enhanced=enhanced)
-        if enemy_type == "EnemyTurret":
-            return EnemyTurret(self._game, wx, wy, self._enemy_bullets, self._player, enhanced=enhanced)
-        if enemy_type == "EnemyBilly":
-            return EnemyBilly(self._game, wx, wy)
+    def _make_enemy(
+        self,
+        enemy_type: str,
+        wx: float,
+        wy: float,
+        *,
+        enhanced: bool = False,
+        surface: str = "bottom",
+    ) -> Enemy | None:
         if enemy_type == "Boss":
             self.boss_pending = True  # game_scene 側で confirm_spawn_boss() を呼ぶ
-        return None
+            return None
+        return make_enemy(
+            enemy_type, self._game, wx, wy,
+            enemy_bullets=self._enemy_bullets,
+            player=self._player,
+            terrain=self._terrain,
+            surface=surface,
+            enhanced=enhanced,
+        )
+
+    def _spawn_terrain_event(self, event: dict, camera: Camera) -> bool:
+        enemy_type = event.get("type")
+        if enemy_type == "Terrain":
+            if self._terrain is not None:
+                from src.entities.terrain import Terrain
+                world_x = self._terrain_world_x(event, camera)
+                self._terrain.add(Terrain(
+                    world_x,
+                    float(event.get("y", 0)),
+                    int(event.get("w", 80)),
+                    int(event.get("h", 80)),
+                    event.get("kind", "wall"),
+                    destructible=bool(event.get("destructible", False)),
+                    hp=int(event.get("hp", 5)),
+                    drop_chance=float(event.get("drop_chance", 0.0)),
+                ))
+            return True
+
+        if enemy_type == "TerrainStrip":
+            if self._terrain is not None:
+                from src.entities.terrain import make_terrain_strip
+                start_x = self._terrain_start_x(event, camera)
+                segments = make_terrain_strip(
+                    start_x,
+                    length=int(event.get("length", 3600)),
+                    theme=event.get("theme", "fever_cave"),
+                    segment_w=int(event.get("segment_w", 64)),
+                    seed=int(event.get("seed", self._stage_id)),
+                    gap_min=int(event.get("gap_min", 270)),
+                    gap_max=int(event.get("gap_max", 380)),
+                    center_y=int(event.get("center_y", SCREEN_HEIGHT // 2)),
+                    center_wave=int(event.get("center_wave", 42)),
+                    top_min=int(event.get("top_min", 38)),
+                    bottom_min=int(event.get("bottom_min", 42)),
+                    irregularity=int(event.get("irregularity", 36)),
+                    breakable_chance=float(event.get("breakable_chance", 0.0)),
+                    breakable_hp=int(event.get("breakable_hp", 3)),
+                    breakable_drop_chance=float(event.get("breakable_drop_chance", 0.0)),
+                    profile=str(event.get("profile", "normal")),
+                )
+                self._terrain.add(*segments)
+            return True
+
+        return False
+
+    def _terrain_world_x(self, event: dict, camera: Camera) -> float:
+        if "world_x" in event:
+            return float(event["world_x"])
+        if "screen_x" in event:
+            return camera.x + float(event["screen_x"])
+        if "start_offset" in event:
+            return camera.x + float(event["start_offset"])
+        return camera.spawn_x(float(event.get("spawn_margin", 50.0)))
+
+    def _terrain_start_x(self, event: dict, camera: Camera) -> float:
+        if "world_x" in event:
+            return float(event["world_x"])
+        if "screen_x" in event:
+            return camera.x + float(event["screen_x"])
+        return camera.x + float(event.get("start_offset", -80))
 
     def confirm_spawn_boss(self) -> None:
         """game_scene が ALERT 後に呼び出すことで実際にボスを生成する"""

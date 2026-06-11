@@ -47,6 +47,10 @@ class LaserBeam:
         self._terrain_block_x: float | None = None
         self._terrain_hit_timer: float = 0.0
         self.terrain_hit: tuple[object, float, float] | None = None
+        self.boss_was_hit: bool = False
+        self.boss_killed: bool = False
+        self.boss_form2_transition: bool = False
+        self.boss_form3_transition: bool = False
 
     # ── パブリックAPI ──────────────────────────────────────────────
 
@@ -171,8 +175,12 @@ class LaserBeam:
     ) -> tuple:
         self._terrain_block_x = None
         self.terrain_hit = None
+        self.boss_was_hit = False
+        self.boss_killed = False
+        self.boss_form2_transition = False
+        self.boss_form3_transition = False
         if not self.is_active:
-            return [], False
+            return [], False, False
 
         cfg    = self._cfg()
         core_w     = cfg[0]
@@ -210,11 +218,20 @@ class LaserBeam:
             if beam_rect.colliderect(boss.rect):
                 self._boss_hit_timer = boss_hit_int
                 feedback = not getattr(boss, "suppresses_hit_feedback", lambda: False)()
-                boss.take_damage(1)
+                was_form2 = bool(getattr(boss, "_form2", False))
+                was_form3 = bool(getattr(boss, "_form3", False))
+                self.boss_was_hit = True
+                self.boss_killed = bool(boss.take_damage(1))
+                self.boss_form2_transition = (
+                    not was_form2 and bool(getattr(boss, "_form2", False))
+                )
+                self.boss_form3_transition = (
+                    not was_form3 and bool(getattr(boss, "_form3", False))
+                )
                 if feedback:
                     had_hit = True
 
-        return killed, had_hit
+        return killed, had_hit, self.boss_killed
 
     def _terrain_block(
         self,

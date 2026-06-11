@@ -58,6 +58,8 @@ class SettingsManager:
 
     def get_key(self, action: str) -> int:
         """アクション名 → pygame キー定数（int）を返す。未定義時はデフォルト値を使用。"""
+        if action == "laser":
+            return pygame.K_SPACE
         bindings  = self._data.get("key_bindings", {})
         key_name  = bindings.get(action) or _DEFAULTS["key_bindings"].get(action, "K_RETURN")
         return getattr(pygame, key_name, pygame.K_RETURN)
@@ -65,6 +67,8 @@ class SettingsManager:
     def key_display(self, action: str) -> str:
         """アクション名 → 表示用キー名（例: "Z" / "SPACE" / "X"）。
         チュートリアル等でキーバインドとズレない表示を作るために使う。"""
+        if action == "laser":
+            return "SPACE"
         bindings = self._data.get("key_bindings", {})
         key_name = bindings.get(action) or _DEFAULTS["key_bindings"].get(action, "K_RETURN")
         name = key_name[2:] if key_name.startswith("K_") else key_name

@@ -15,7 +15,7 @@ TEXT_SUFFIXES = {
     ".py", ".md", ".json", ".toml", ".txt", ".yml", ".yaml", ".ini", ".cfg",
 }
 SKIP_DIRS = {
-    ".git", ".venv", ".pytest_cache", "__pycache__", "assets",
+    ".git", ".venv", ".uv-cache", ".pytest_cache", ".html", "__pycache__", "assets",
 }
 MOJIBAKE_MARKERS = tuple(chr(cp) for cp in (
     0x7E67, 0x90E2, 0x90B5, 0x96A8, 0x7B0F, 0x873F, 0x879F, 0x8B5B,

@@ -4,6 +4,7 @@ Tab: 開閉 / ← →: タブ切替 / ↑ ↓: 項目選択 / ← →: 値変更
 from __future__ import annotations
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.factories import make_enemy, make_item
 
 _PANEL_W  = 250
 _PANEL_H  = SCREEN_HEIGHT - 40
@@ -136,7 +137,7 @@ class DebugStagePanel:
         name = _ITEM_ENTRIES[idx]
         wx, wy = self._gs.player.muzzle_world(self._gs.camera)
         wx += 80
-        item = _make_item(name, wx, wy)
+        item = make_item(name, wx, wy)
         if item is not None:
             self._gs.items.add(item)
 
@@ -144,7 +145,7 @@ class DebugStagePanel:
         name = _ENEMY_ENTRIES[idx]
         world_x = self._gs.camera.spawn_x(50)
         world_y = float(SCREEN_HEIGHT // 2)
-        enemy = _make_enemy(name, self._game, world_x, world_y)
+        enemy = make_enemy(name, self._game, world_x, world_y)
         if enemy is not None:
             self._gs.enemies.add(enemy)
 
@@ -247,43 +248,3 @@ class DebugStagePanel:
         # ノート
         note_s = self._font_sm.render(note, True, (100, 140, 100))
         screen.blit(note_s, (px, py + max_visible * 18 + 4))
-
-
-# ── アイテム・敵 ファクトリ ──────────────────────────────────────
-
-def _make_item(name: str, wx: float, wy: float):
-    if name == "WeaponItem":
-        from src.entities.items.weapon_item import WeaponItem
-        return WeaponItem(wx, wy)
-    if name == "HealItem":
-        from src.entities.items.heal import HealItem
-        return HealItem(wx, wy)
-    if name == "ScoreItem":
-        from src.entities.items.score_item import ScoreItem
-        return ScoreItem(wx, wy)
-    if name == "ExtraLifeItem":
-        from src.entities.items.extra_life import ExtraLifeItem
-        return ExtraLifeItem(wx, wy)
-    return None
-
-
-def _make_enemy(name: str, game, wx: float, wy: float):
-    if name == "EnemyVirus":
-        from src.entities.enemies.virus import EnemyVirus
-        return EnemyVirus(game, wx, wy)
-    if name == "EnemyTakeshi":
-        from src.entities.enemies.takeshi import EnemyTakeshi
-        return EnemyTakeshi(game, wx, wy)
-    if name == "EnemyBroly":
-        from src.entities.enemies.broly import EnemyBroly
-        return EnemyBroly(game, wx, wy)
-    if name == "EnemyPachemon":
-        from src.entities.enemies.pachemon import EnemyPachemon
-        return EnemyPachemon(game, wx, wy)
-    if name == "EnemyBilly":
-        from src.entities.enemies.billy import EnemyBilly
-        return EnemyBilly(game, wx, wy)
-    if name == "EnemyTurret":
-        from src.entities.enemies.turret import EnemyTurret
-        return EnemyTurret(game, wx, wy)
-    return None

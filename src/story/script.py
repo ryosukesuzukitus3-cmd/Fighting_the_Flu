@@ -243,9 +243,11 @@ FINAL_SEQ: dict[str, list[Line]] = {
     # 投了勧告（回避不能 → 澤口 HP1）
     "sengen": [
         Line(BOSS_SAWAGUCHI, "詰みだ。"),
+        Line(SYS,            "投了勧告：澤口のHPを1に固定"),
         Line(S,              "避けられない……。"),
         Line(BOSS_SAWAGUCHI, "当然だ。これは外から飛んでくる弾ではない。"),
         Line(BOSS_SAWAGUCHI, "お前の内側から聞こえる声だ。"),
+        Line(SYS,            "このままでは次の被弾で終局する。"),
         Line(S,              "ここまでか……。"),
     ],
     # SCENE090 カロナール先輩・薬効最大 復帰
@@ -259,6 +261,7 @@ FINAL_SEQ: dict[str, list[Line]] = {
         Line(S,              "お前、そんなに強かったのか。"),
         Line(KM,             "さっきまでは服用直後だった。"),
         Line(KM,             "ここからが有効成分の時間だ。"),
+        Line(KM,             "まずはHPを戻す。立っていられるだけの熱を残すぞ。"),
         Line(BOSS_SAWAGUCHI, "薬ごときが、何を変える。"),
         Line(KM,             "何も変えない。熱を少し下げるだけだ。"),
         Line(KM,             "熱が少し下がれば、こいつはお前の声と自分の声を聞き分けられる。"),
@@ -267,15 +270,18 @@ FINAL_SEQ: dict[str, list[Line]] = {
     ],
     # SCENE095 最終フェーズ開始
     "act2_start": [
+        Line(SYS, "HP回復。抗反芻フィールドにより、投了王の再生は停止。"),
         Line(KM, "俺にできるのは、痛みを少し遠ざけることだけだ。"),
         Line(KM, "倒すのはお前だ、澤口。"),
         Line(S,  "十分だ。"),
     ],
     # 投了勧告・終局（カロナールが一手猶予バリアで受け止める）
     "final_sengen": [
+        Line(SYS, "投了勧告・終局：次の一撃を受ければ終わる。"),
         Line(KM, "一手猶予バリア、展開。"),
         Line(S,  "また身代わりになる気か！"),
         Line(KM, "違う。今度は落ちない。今度は、横にいる。"),
+        Line(SYS, "バリア成立。投了王のHPは1。次に当てれば終局。"),
         Line(KM, "だから指せ、澤口。"),
         Line(S,  "まだ俺の手番だ。"),
     ],
@@ -286,8 +292,9 @@ FINAL_BANNERS: dict[str, tuple[str, ...]] = {
     "true_final":  ("TRUE FINAL BOSS", "投了王サワグチ"),
     "sengen":      ("投了勧告",),
     "kouhatsu":    ("薬効発現", "カロナール先輩・薬効最大"),
-    "anti_rumin":  ("抗反芻フィールド 展開", "一手猶予バリア 発動"),
+    "anti_rumin":  ("HP全回復", "抗反芻フィールド 展開"),
     "final_sengen": ("投了勧告・終局",),
+    "final_chance": ("LAST CHANCE", "次の一撃で終局"),
 }
 
 
