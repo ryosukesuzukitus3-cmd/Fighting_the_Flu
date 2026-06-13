@@ -35,10 +35,21 @@ class SettingsManager:
             try:
                 with open(_SETTINGS_PATH, encoding="utf-8") as f:
                     loaded = json.load(f)
+                if not isinstance(loaded, dict):
+                    return
                 # key_bindings はデフォルトにマージ（欠損キーはデフォルト維持）
-                if "key_bindings" in loaded:
-                    self._data["key_bindings"].update(loaded.pop("key_bindings"))
-                self._data.update(loaded)
+                bindings = loaded.pop("key_bindings", None)
+                if isinstance(bindings, dict):
+                    valid_bindings = {
+                        action: key_name
+                        for action, key_name in bindings.items()
+                        if isinstance(action, str) and isinstance(key_name, str)
+                    }
+                    self._data["key_bindings"].update(valid_bindings)
+                for key in ("bgm_volume", "se_volume"):
+                    value = loaded.get(key)
+                    if isinstance(value, (int, float)):
+                        self._data[key] = max(0.0, min(1.0, float(value)))
             except (json.JSONDecodeError, OSError):
                 pass  # 破損ファイルはデフォルト値で継続
 
