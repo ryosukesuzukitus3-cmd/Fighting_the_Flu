@@ -82,7 +82,7 @@
 問題調査からPR作成までを任せる依頼では、Claude は以下を標準手順にする。
 
 1. `git status --short --branch` で未コミット変更を確認し、ユーザー作業を巻き込まない
-2. 作業ブランチを `codex/{短い内容}` の形式で切る（例: `codex/fix-stage4-boss-ui`）
+2. 作業ブランチは担当エージェントの小文字prefixで切る（Claude→`claude/{短い内容}`、Codex→`codex/{短い内容}`。例: `claude/fix-stage4-boss-ui`）
 3. `rg`・コード読解・`docs/design.md` で仕様とSSOTを確認し、必要なら `data/stages/*.json` も見る
 4. 見た目や挙動の疑いがある場合は `tools/run.py capture ...` でPNGを取り、必要なら `tools/run.py game` か `tools/run.py preview-boss ...` で実プレイ確認する
 5. 修正はSSOTに沿って最小範囲に入れ、手動生成が必要な資料は `tools/run.py docs` で再生成する
