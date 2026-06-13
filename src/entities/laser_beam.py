@@ -211,7 +211,8 @@ class LaserBeam:
                 if self._hit_timers.get(eid, 0.0) <= 0:
                     self._hit_timers[eid] = hit_int
                     had_hit = True
-                    if enemy.take_damage(1):
+                    damage_fn = getattr(enemy, "take_laser_damage", enemy.take_damage)
+                    if damage_fn(1):
                         killed.append(enemy)
 
         if boss is not None and self._boss_hit_timer <= 0:

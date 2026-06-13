@@ -47,15 +47,9 @@ class _Player:
     sy = 300.0
 
 
-class _LinkStub(pygame.sprite.Sprite):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__()
-        self.image = pygame.Surface((28, 28), pygame.SRCALPHA)
-        pygame.draw.circle(self.image, (90, 230, 255), (14, 14), 12, 2)
-        self.rect = self.image.get_rect(center=(x, y))
-
-    def alive(self) -> bool:
-        return True
+class _Camera:
+    def to_world_x(self, sx: float) -> float:
+        return sx
 
 
 def _scene_stub(boss: Boss):
@@ -99,7 +93,15 @@ def _cases() -> list[tuple[str, Boss, pygame.sprite.Group, str]]:
         cases.append(("boss2_core_exposed", b2w, bullets2w, "BOSS2: CORE EXPOSED AFTER BIG MOVE"))
 
         b3 = _boss(3, 622, 300)
-        b3._summoned = [_LinkStub(150, 120), _LinkStub(170, 300), _LinkStub(150, 480)]
+        from src.entities.enemies.boss_drone import MatchingZeroDrone
+        keepalive = pygame.sprite.Group()
+        b3._summoned = []
+        for i in range(3):
+            drone = MatchingZeroDrone(_Game(), b3, i)
+            keepalive.add(drone)
+            drone.update(0.0, _Camera())
+            b3._summoned.append(drone)
+        b3._preview_group = keepalive
         _force_pattern("drone_cross")
         bullets3 = pygame.sprite.Group()
         b3._shoot(bullets3, _Player())

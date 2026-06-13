@@ -832,8 +832,16 @@ class GameScene(
         for bullet, hit_enemies in hits.items():
             hit_se = "music/se/ウェポン：missile_hit.mp3" if isinstance(bullet, HomingBullet) \
                      else "music/se/ウェポン：normalshot_hit.mp3"
+            blocked_by_shield = False
             for enemy in hit_enemies:
                 bx, by = bullet.rect.centerx, bullet.rect.centery
+                if getattr(enemy, "blocks_projectile_damage", lambda b: False)(bullet):
+                    self.particles.spawn_spark(bx, by, color=(180, 110, 255), count=8, speed=320.0)
+                    self.particles.spawn_hit(bx, by, color=(120, 230, 255), count=4)
+                    self.camera.shake(1.0)
+                    self.game.sound.play_se("music/se/hit.wav", volume=0.18)
+                    blocked_by_shield = True
+                    break
                 if isinstance(bullet, HomingBullet):
                     self.particles.spawn_explosion(bx, by, color=(255, 160, 40), count=22)
                     self.camera.shake(3.0)
@@ -845,7 +853,7 @@ class GameScene(
                     self._combo_timer = COMBO_WINDOW
                 if enemy.take_damage(bullet.damage):
                     self._on_enemy_killed(enemy)
-            if not getattr(bullet, "piercing", False):
+            if blocked_by_shield or not getattr(bullet, "piercing", False):
                 bullet.kill()
 
         if self._boss is not None and self._boss_intro_state == "fighting":
@@ -980,12 +988,13 @@ class GameScene(
                     enemy.world_y + random.uniform(-40, 40),
                 ))
         else:
-            chance = DROP_CHANCE.get(etype, 0.20)
-            if random.random() < chance:
-                self.items.add(random_item(enemy.world_x, enemy.world_y))
-            if random.random() < 0.02:
-                from src.entities.items.extra_life import ExtraLifeItem
-                self.items.add(ExtraLifeItem(enemy.world_x, enemy.world_y))
+            if getattr(enemy, "drops_enabled", True):
+                chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
+                if random.random() < chance:
+                    self.items.add(random_item(enemy.world_x, enemy.world_y))
+                if random.random() < 0.02:
+                    from src.entities.items.extra_life import ExtraLifeItem
+                    self.items.add(ExtraLifeItem(enemy.world_x, enemy.world_y))
 
     def _on_form2_transition(self) -> None:
         self.camera.shake(22.0)
@@ -1480,6 +1489,15 @@ class GameScene(
 
     def _summon_boss_turrets(self, n: int) -> list:
         """Summon turrets used by boss gimmicks."""
+        if self._boss_stage_id() == 3 and self._boss is not None:
+            from src.entities.enemies.boss_drone import MatchingZeroDrone
+            spawned = []
+            for i in range(n):
+                d = MatchingZeroDrone(self.game, self._boss, i, self.enemy_bullets, self.player)
+                self.enemies.add(d)
+                spawned.append(d)
+            return spawned
+
         from src.entities.enemies.turret import EnemyTurret
         spawned = []
         for i in range(n):

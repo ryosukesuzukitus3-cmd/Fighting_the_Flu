@@ -44,11 +44,11 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.20, "dbl_aimed",   0.52),
     ],
     2: [   # 情報汚染超人野獣ブロリー（ステージ2 中級ボス）
-        (1.00, "fan7",       1.45),
-        (0.70, "mega_laser", 2.25),
-        (0.50, "wall_gap",   0.86),
-        (0.30, "burst3",     0.72),
-        (0.12, "scatter",    0.34),
+        (1.00, "fan7",       1.28),
+        (0.74, "mega_laser", 1.90),
+        (0.54, "wall_gap",   0.72),
+        (0.34, "burst3",     0.58),
+        (0.16, "scatter",    0.28),
     ],
     3: [   # 婚活要塞マッチング・ゼロ（ステージ3 中上級ボス）
         (1.00, "drone_cross", 1.35),
@@ -71,19 +71,19 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.25, "chaos",       0.20),
     ],
     "4f3": [  # 投了王サワグチ Form3（最終形態・赤黒弾幕）
-        (1.00, "curtain",   0.62),
-        (0.78, "ring16",    0.46),
-        (0.58, "chaos",     0.28),
-        (0.42, "rock_fall", 0.58),
-        (0.30, "vortex3",   0.22),
+        (1.00, "curtain",   0.52),
+        (0.78, "ring16",    0.38),
+        (0.58, "chaos",     0.22),
+        (0.42, "rock_fall", 0.45),
+        (0.30, "vortex3",   0.18),
     ],
 }
 
 # ステージ別ボス設定: (image_path, scale, max_hp)
 _BOSS_CONFIG = {
     1: ("graphic/enemy_バイキンマン68x80.png", 1.0,  80),
-    2: ("graphic/enemy_ブロリー.png",          2.0, 150),
-    3: ("graphic/boss_matching_zero.png",    0.23, 200),
+    2: ("graphic/enemy_ブロリー.png",          2.0, 200),
+    3: ("graphic/boss_matching_zero_body.png", 0.25, 200),
     4: ("graphic/enemy_fujii4dan.png",         1.2, 250),
 }
 
@@ -94,8 +94,8 @@ _FORM2_CONFIG = {
 
 # 第三形態（投了王サワグチ）: max_hp（スプライトはダミー生成）
 #   ※専用画像なし。台本「澤口の影が巨大化」に沿いプレイヤー画像を暗紫・拡大したダミー。
-_FORM3_MAX_HP   = 200   # Act1（反芻再生あり）
-_FORM3_ACT2_HP  = 180   # Act2（最終ゲージ・反芻再生なし）
+_FORM3_MAX_HP   = 260   # Act1（反芻再生あり）
+_FORM3_ACT2_HP  = 240   # Act2（最終ゲージ・反芻再生なし）
 _FORM3_SCALE    = 2.4   # プレイヤー画像に対する拡大率（影が巨大化）
 
 _TARGET_SX    = 580.0
@@ -438,6 +438,7 @@ class Boss(pygame.sprite.Sprite):
             radius=radius,
             color=(126, 102, 76),
             lifetime=3.8,
+            terrain_passthrough=True,
         )
         bullet.image.fill((0, 0, 0, 0))
         pts = []

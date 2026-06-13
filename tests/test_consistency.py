@@ -368,6 +368,129 @@ def test_boss_turret_guard_blocks_core_damage() -> None:
     assert boss.hp < hp
 
 
+def test_boss_rock_fall_bypasses_terrain_collision() -> None:
+    from src.entities.enemies.boss import Boss
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((80, 60), pygame.SRCALPHA)
+
+        def pixelfont(self, size: int):
+            return pygame.font.Font(None, size)
+
+    class Sound:
+        def play_se_alias(self, *args, **kwargs) -> None:
+            pass
+
+    class Game:
+        resources = Resources()
+        sound = Sound()
+
+    boss = Boss(Game(), 4)
+    rock = boss._rock_bullet(120.0, 220.0)
+
+    assert rock.terrain_passthrough is True
+
+
+def test_matching_zero_summons_real_shield_drones() -> None:
+    from src.entities.enemies.boss_drone import MatchingZeroDrone
+    from src.scenes.game_scene import GameScene
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((80, 72), pygame.SRCALPHA)
+
+    class Sound:
+        def play_se_alias(self, *args, **kwargs) -> None:
+            pass
+
+    class Game:
+        resources = Resources()
+        sound = Sound()
+
+    class BossStub:
+        rect = pygame.Rect(560, 240, 120, 120)
+
+    class PlayerStub:
+        sx = 140.0
+        sy = 300.0
+
+    scene = object.__new__(GameScene)
+    scene.game = Game()
+    scene._boss = BossStub()
+    scene._boss_stage_id = lambda: 3
+    scene.enemy_bullets = pygame.sprite.Group()
+    scene.player = PlayerStub()
+    scene.enemies = pygame.sprite.Group()
+
+    spawned = GameScene._summon_boss_turrets(scene, 3)
+
+    assert len(spawned) == 3
+    assert all(isinstance(d, MatchingZeroDrone) for d in spawned)
+    assert all(d.alive() for d in spawned)
+
+
+def test_matching_zero_drone_tracks_boss_and_can_be_destroyed() -> None:
+    from src.entities.enemies.boss_drone import MatchingZeroDrone
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((80, 72), pygame.SRCALPHA)
+
+    class Sound:
+        def play_se_alias(self, *args, **kwargs) -> None:
+            pass
+
+    class Game:
+        resources = Resources()
+        sound = Sound()
+
+    class Camera:
+        def to_world_x(self, sx: float) -> float:
+            return sx + 1000.0
+
+    class BossStub:
+        rect = pygame.Rect(560, 240, 120, 120)
+
+    drone = MatchingZeroDrone(Game(), BossStub(), 0)
+    drone.update(0.1, Camera())
+
+    assert drone.requires_laser is False
+    assert drone.rect.centerx < BossStub.rect.centerx
+    assert drone.world_x == drone.rect.centerx + 1000.0
+    assert drone.drops_enabled is False
+    assert drone.drop_chance == 0.0
+    assert drone.take_damage(12) is True
+
+
+def test_matching_zero_rear_drone_requires_laser_damage() -> None:
+    from src.entities.enemies.boss_drone import MatchingZeroDrone
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((80, 72), pygame.SRCALPHA)
+
+    class Sound:
+        def play_se_alias(self, *args, **kwargs) -> None:
+            pass
+
+    class Game:
+        resources = Resources()
+        sound = Sound()
+
+    class BossStub:
+        rect = pygame.Rect(560, 240, 120, 120)
+
+    drone = MatchingZeroDrone(Game(), BossStub(), 1)
+    hp = drone.hp
+
+    assert drone.requires_laser is True
+    assert drone.blocks_projectile_damage(object()) is True
+    assert drone.take_damage(99) is False
+    assert drone.hp == hp
+    assert drone.take_laser_damage(hp) is True
+
+
 def test_spawner_surface_positions_follow_bottom_terrain() -> None:
     from src.core.camera import Camera
     from src.entities.terrain import make_terrain_strip
@@ -451,6 +574,39 @@ def test_laser_beam_reports_boss_kill() -> None:
     assert hit is True
     assert boss_killed is True
     assert laser.boss_killed is True
+
+
+def test_laser_beam_uses_laser_specific_enemy_damage() -> None:
+    from src.entities.laser_beam import LaserBeam
+
+    class LaserOnlyEnemy(pygame.sprite.Sprite):
+        def __init__(self) -> None:
+            super().__init__()
+            self.image = pygame.Surface((30, 30), pygame.SRCALPHA)
+            self.rect = self.image.get_rect(center=(250, 140))
+
+        def take_damage(self, amount: int) -> bool:
+            raise AssertionError("normal damage should be blocked")
+
+        def take_laser_damage(self, amount: int) -> bool:
+            return True
+
+    enemy = LaserOnlyEnemy()
+    laser = LaserBeam()
+    laser.state = "firing"
+    laser._beam_progress = 1.0
+    laser._width_progress = 1.0
+
+    killed, hit, boss_killed = laser.hit_check(
+        pygame.sprite.Group(enemy),
+        None,
+        120.0,
+        140.0,
+    )
+
+    assert killed == [enemy]
+    assert hit is True
+    assert boss_killed is False
 
 
 def test_project_text_files_are_utf8_and_mojibake_free() -> None:
