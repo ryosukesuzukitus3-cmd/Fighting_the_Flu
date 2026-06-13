@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>fancy demo — インフルとの死闘</title>
+<style>
+  body{font-family:'Yu Gothic UI','Hiragino Sans',sans-serif;max-width:760px;margin:48px auto;
+       color:#1f2328;line-height:1.7;padding:0 20px;background:#fff}
+  h1{font-size:28px;border-bottom:2px solid #2563eb;padding-bottom:8px}
+  h2{font-size:20px;color:#2563eb;margin-top:32px}
+  .card{background:#f6f8fa;border:1px solid #d0d7de;border-radius:10px;padding:16px 20px;margin:16px 0}
+  code{background:#eef1f4;padding:2px 6px;border-radius:4px;font-family:Consolas,monospace}
+  .flow{display:block;margin:20px auto}
+</style></head>
+<body>
+  <h1>fancy HTML 描画デモ</h1>
+  <p>これは <code>pr-html</code> で <code>media</code> ブランチへ上げ、htmlpreview 経由で描画される
+     <strong>自己完結HTML</strong>（インラインCSS＋インラインSVG）です。fancy 出力もこの形式で載ります。</p>
+
+  <h2>ボス演出フロー（インラインSVG）</h2>
+  <svg class="flow" width="680" height="120" viewBox="0 0 680 120" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#2563eb"/></marker></defs>
+    <g font-family="sans-serif" font-size="13" text-anchor="middle">
+      <rect x="10"  y="40" width="110" height="40" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+      <text x="65"  y="65">ALERT</text>
+      <rect x="160" y="40" width="110" height="40" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+      <text x="215" y="65">入場</text>
+      <rect x="310" y="40" width="120" height="40" rx="8" fill="#dbeafe" stroke="#2563eb"/>
+      <text x="370" y="65">ボス名/セリフ</text>
+      <rect x="470" y="40" width="110" height="40" rx="8" fill="#fde68a" stroke="#d97706"/>
+      <text x="525" y="65">FIGHT!</text>
+      <rect x="600" y="40" width="70"  height="40" rx="8" fill="#bbf7d0" stroke="#16a34a"/>
+      <text x="635" y="65">戦闘</text>
+      <g stroke="#2563eb" stroke-width="2" marker-end="url(#a)">
+        <line x1="120" y1="60" x2="158" y2="60"/>
+        <line x1="270" y1="60" x2="308" y2="60"/>
+        <line x1="430" y1="60" x2="468" y2="60"/>
+        <line x1="580" y1="60" x2="598" y2="60"/>
+      </g>
+    </g>
+  </svg>
+
+  <div class="card"><strong>ポイント:</strong> 外部URL・ライブラリ・JS を一切使わないので、
+     htmlpreview でそのまま描画されます。</div>
+</body></html>
