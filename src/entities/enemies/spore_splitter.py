@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from src.core.constants import SCREEN_HEIGHT
+from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 _SPLITTER_STATS = enemy_stats("EnemySporeSplitter")
 _POD_STATS = enemy_stats("EnemySporePod")
+_ANCHOR_SX = SCREEN_WIDTH - 162.0
 
 
 def _pod_sprite(seed: int, enhanced: bool) -> pygame.Surface:
@@ -73,7 +74,7 @@ class EnemySporePod(Enemy):
 
 
 class EnemySporeSplitter(Enemy):
-    """倒すと複数の胞子ポッドに割れる硬めの雑魚敵。"""
+    """右前方に居座り、倒すと複数の胞子ポッドに割れる中ボス敵。"""
 
     def __init__(self, game: "Game", world_x: float, world_y: float, *, enhanced: bool = False) -> None:
         hp = _SPLITTER_STATS.enhanced_hp if enhanced else _SPLITTER_STATS.base_hp
@@ -87,13 +88,23 @@ class EnemySporeSplitter(Enemy):
         self._seed = int(world_x * 11 + world_y * 17)
         self._init_glow()
 
-    def _move(self, dt: float) -> None:
+    def _move_vertical(self, dt: float) -> None:
         self._time += dt
-        self.world_x -= self.speed * dt
         self.world_y = max(
             42.0,
             min(float(SCREEN_HEIGHT - 42), self._base_y + math.sin(self._time * 1.7) * 22.0),
         )
+
+    def update(self, dt: float, camera: "Camera") -> None:
+        self._move_vertical(dt)
+        sx = camera.to_screen_x(self.world_x)
+        target_sx = _ANCHOR_SX + math.sin(self._time * 1.15) * 12.0
+        if sx > target_sx:
+            sx = max(target_sx, sx - self.speed * dt)
+        else:
+            sx += (target_sx - sx) * min(1.0, dt * 4.5)
+        self.world_x = camera.to_world_x(sx)
+        self._place_on_screen(sx, dt)
 
     def split(self, game: "Game") -> list[EnemySporePod]:
         pods: list[EnemySporePod] = []

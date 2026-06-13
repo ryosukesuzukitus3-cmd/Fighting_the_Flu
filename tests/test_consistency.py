@@ -313,6 +313,44 @@ def test_spore_splitter_splits_into_pods() -> None:
     assert all(getattr(p, "drops_enabled", True) is False for p in pods)
 
 
+def test_miniboss_enemies_hold_front_screen_position() -> None:
+    from src.entities.enemies.cough_sprayer import EnemyCoughSprayer
+    from src.entities.enemies.spore_splitter import EnemySporeSplitter
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((72, 72), pygame.SRCALPHA)
+
+    class Game:
+        resources = Resources()
+
+    class Camera:
+        x = 0.0
+
+        def to_screen_x(self, world_x: float) -> float:
+            return world_x - self.x
+
+        def to_world_x(self, screen_x: float) -> float:
+            return screen_x + self.x
+
+    for enemy_cls in (EnemyCoughSprayer, EnemySporeSplitter):
+        camera = Camera()
+        enemy = enemy_cls(Game(), camera.to_world_x(850.0), 300.0)
+        for _ in range(180):
+            camera.x += 80.0 / 60.0
+            enemy.update(1.0 / 60.0, camera)
+
+        sx = camera.to_screen_x(enemy.world_x)
+        assert 560.0 <= sx <= 700.0
+
+        for _ in range(120):
+            camera.x += 80.0 / 60.0
+            enemy.update(1.0 / 60.0, camera)
+
+        sx = camera.to_screen_x(enemy.world_x)
+        assert 560.0 <= sx <= 700.0
+
+
 def test_boss_phase_configs_reference_known_patterns() -> None:
     from src.entities.enemies.boss import _PHASE_CONFIGS
 

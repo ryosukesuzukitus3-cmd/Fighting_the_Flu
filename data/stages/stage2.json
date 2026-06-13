@@ -64,7 +64,7 @@
     {"time": 18.0, "type": "EnemyBroly",   "count": 2, "y": 440},
     {"time": 20.0, "type": "EnemyCrawler", "count": 3, "surface": "top", "surface_step": 64, "enhanced": true},
     {"time": 20.0, "type": "EnemyVirus",   "count": 5, "y": 430, "enhanced": true},
-    {"time": 21.0, "type": "EnemyCoughSprayer", "count": 2, "formation": "line"},
+    {"time": 21.0, "type": "EnemyCoughSprayer", "count": 1, "y": 300},
     {"time": 22.0, "type": "EnemyDebrisLarge", "count": 2, "formation": "random"},
     {"time": 24.0, "type": "EnemyTurret", "count": 2, "surface": "bottom", "surface_step": 82},
     {"time": 26.0, "type": "EnemyPachemon", "count": 2, "surface": "top", "surface_step": 84, "enhanced": true},
@@ -75,7 +75,7 @@
     {"time": 35.0, "type": "EnemyCrawler", "count": 3, "surface": "bottom", "surface_step": 68, "enhanced": true},
     {"time": 36.0, "type": "EnemyTurret", "count": 2, "surface": "top", "surface_step": 86},
     {"time": 39.0, "type": "EnemyPachemon", "count": 3, "formation": "v_shape", "enhanced": true},
-    {"time": 41.0, "type": "EnemyCoughSprayer", "count": 2, "formation": "v_shape", "enhanced": true},
+    {"time": 41.0, "type": "EnemyCoughSprayer", "count": 1, "y": 300, "enhanced": true},
     {"time": 44.0, "type": "Boss", "count": 1, "formation": "single"}
   ]
 }

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from src.core.constants import SCREEN_HEIGHT
+from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
@@ -20,10 +20,11 @@ _ENH_INTERVAL = 1.05
 _BULLET_SPEED = 185.0
 _FAN_BASE = (-0.26, 0.0, 0.26)
 _FAN_ENH = (-0.38, -0.14, 0.14, 0.38)
+_ANCHOR_SX = SCREEN_WIDTH - 178.0
 
 
 class EnemyCoughSprayer(Enemy):
-    """蛇行しながら咳のような扇状弾を吐く雑魚敵。"""
+    """画面右前方に居座り、咳のような扇状弾を吐く中ボス敵。"""
 
     def __init__(
         self,
@@ -51,14 +52,22 @@ class EnemyCoughSprayer(Enemy):
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._init_glow()
 
-    def _move(self, dt: float) -> None:
+    def _move_vertical(self, dt: float) -> None:
         self._time += dt
-        self.world_x -= self.speed * dt
         wave = math.sin(self._time * 2.2) * 38.0 + math.sin(self._time * 5.1) * 10.0
         self.world_y = max(46.0, min(float(SCREEN_HEIGHT - 46), self._origin_y + wave))
 
     def update(self, dt: float, camera: "Camera") -> None:
-        super().update(dt, camera)
+        self._move_vertical(dt)
+        sx = camera.to_screen_x(self.world_x)
+        target_sx = _ANCHOR_SX + math.sin(self._time * 1.35) * 18.0
+        if sx > target_sx:
+            sx = max(target_sx, sx - self.speed * dt)
+        else:
+            sx += (target_sx - sx) * min(1.0, dt * 5.5)
+        self.world_x = camera.to_world_x(sx)
+        self._place_on_screen(sx, dt)
+
         if self._enemy_bullets is None or self._player is None:
             return
         self._shoot_timer -= dt

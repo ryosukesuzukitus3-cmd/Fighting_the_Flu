@@ -60,9 +60,7 @@ class Enemy(pygame.sprite.Sprite):
     def _move(self, dt: float) -> None:
         self.world_x -= self.speed * dt
 
-    def update(self, dt: float, camera: Camera) -> None:
-        self._move(dt)
-        sx = camera.to_screen_x(self.world_x)
+    def _place_on_screen(self, sx: float, dt: float) -> None:
         if self.enhanced and self._glow_frames:
             self._glow_time += dt
             fi         = int(self._glow_time * _GLOW_FPS) % _GLOW_FRAMES
@@ -70,6 +68,10 @@ class Enemy(pygame.sprite.Sprite):
             self.rect  = self.image.get_rect(center=(int(sx), int(self.world_y)))
         else:
             self.rect.center = (int(sx), int(self.world_y))
+
+    def update(self, dt: float, camera: Camera) -> None:
+        self._move(dt)
+        self._place_on_screen(camera.to_screen_x(self.world_x), dt)
 
     def take_damage(self, amount: int) -> bool:
         """ダメージを受ける。死亡したら True を返す"""
