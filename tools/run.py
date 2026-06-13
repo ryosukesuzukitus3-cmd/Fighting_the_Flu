@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|capture|preview-boss|boss-concepts|pr-media|pr-html|pycompile} "
+            "{check|test|docs|docs-check|balance|game|capture|preview-boss|boss-concepts|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -59,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         "boss-concepts": ([py, "tools/capture_boss_concepts.py", *argv], True),
         "pr-media":   ([py, "tools/pr_media.py", *argv], True),
         "pr-html":    ([py, "tools/pr_html.py", *argv], True),
+        "pr-report":  ([py, "tools/pr_report.py", *argv], True),
         "pycompile":  ([py, "-m", "compileall", "-q", "src", "tools", "tests", *argv], True),
     }
     if cmd not in commands:
