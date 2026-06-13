@@ -84,7 +84,13 @@ def _enemy_broly(game: "Game", wx: float, wy: float, ctx: dict):
     from src.entities.enemies.broly import EnemyBroly
     player = ctx.get("player")
     target_y = getattr(player, "sy", None)
-    return EnemyBroly(game, wx, wy, target_y=target_y, enhanced=ctx["enhanced"])
+    return EnemyBroly(
+        game, wx, wy,
+        target_y=target_y,
+        enemy_bullets=ctx.get("enemy_bullets"),
+        player=player,
+        enhanced=ctx["enhanced"],
+    )
 
 
 def _enemy_pachemon(game: "Game", wx: float, wy: float, ctx: dict):
@@ -93,6 +99,24 @@ def _enemy_pachemon(game: "Game", wx: float, wy: float, ctx: dict):
         game, wx, wy, ctx.get("enemy_bullets"), ctx.get("player"),
         enhanced=ctx["enhanced"],
     )
+
+
+def _enemy_cough_sprayer(game: "Game", wx: float, wy: float, ctx: dict):
+    from src.entities.enemies.cough_sprayer import EnemyCoughSprayer
+    return EnemyCoughSprayer(
+        game, wx, wy, ctx.get("enemy_bullets"), ctx.get("player"),
+        enhanced=ctx["enhanced"],
+    )
+
+
+def _enemy_spore_splitter(game: "Game", wx: float, wy: float, ctx: dict):
+    from src.entities.enemies.spore_splitter import EnemySporeSplitter
+    return EnemySporeSplitter(game, wx, wy, enhanced=ctx["enhanced"])
+
+
+def _enemy_spore_pod(game: "Game", wx: float, wy: float, ctx: dict):
+    from src.entities.enemies.spore_splitter import EnemySporePod
+    return EnemySporePod(game, wx, wy, enhanced=ctx["enhanced"])
 
 
 def _enemy_billy(game: "Game", wx: float, wy: float, ctx: dict):
@@ -133,6 +157,9 @@ _ENEMY_BUILDERS: dict[str, Callable] = {
     "EnemyTakeshi": _enemy_takeshi,
     "EnemyBroly": _enemy_broly,
     "EnemyPachemon": _enemy_pachemon,
+    "EnemyCoughSprayer": _enemy_cough_sprayer,
+    "EnemySporeSplitter": _enemy_spore_splitter,
+    "EnemySporePod": _enemy_spore_pod,
     "EnemyBilly": _enemy_billy,
     "EnemyTurret": _enemy_turret,
     "EnemyCrawler": _enemy_crawler,

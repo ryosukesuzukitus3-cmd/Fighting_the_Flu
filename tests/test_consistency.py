@@ -295,6 +295,24 @@ def test_large_debris_splits_into_shards() -> None:
     assert all(isinstance(s, EnemyDebrisShard) for s in shards)
 
 
+def test_spore_splitter_splits_into_pods() -> None:
+    from src.entities.enemies.spore_splitter import EnemySporePod, EnemySporeSplitter
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((72, 72), pygame.SRCALPHA)
+
+    class Game:
+        resources = Resources()
+
+    splitter = EnemySporeSplitter(Game(), 520.0, 280.0)
+    pods = splitter.split(Game())
+
+    assert len(pods) == 4
+    assert all(isinstance(p, EnemySporePod) for p in pods)
+    assert all(getattr(p, "drops_enabled", True) is False for p in pods)
+
+
 def test_boss_phase_configs_reference_known_patterns() -> None:
     from src.entities.enemies.boss import _PHASE_CONFIGS
 

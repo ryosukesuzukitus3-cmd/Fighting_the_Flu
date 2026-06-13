@@ -51,6 +51,7 @@
     {"time": 20.0, "type": "EnemyBilly",  "count": 1, "formation": "random"},
     {"time": 22.0, "type": "EnemyVirus", "count": 4, "formation": "random"},
     {"time": 26.0, "type": "EnemyTakeshi",   "count": 2, "formation": "random"},
+    {"time": 28.0, "type": "EnemyCoughSprayer", "count": 1, "y": 300},
     {"time": 30.0, "type": "EnemyVirus", "count": 5, "formation": "line"},
     {"time": 34.0, "type": "EnemyTakeshi",   "count": 2, "formation": "v_shape"},
     {"time": 38.0, "type": "Boss",        "count": 1, "formation": "single"}
