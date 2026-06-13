@@ -11,6 +11,8 @@ from src.story.script import STAGE_INTRO
 from src.story.speakers import speaker_name, speaker_color, DEFAULT_TEXT_COLOR
 
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
+_TYPE_SE_INTERVAL = 0.045
+_TYPE_SE_VOLUME = 0.16
 
 
 class StageIntroScene(Scene):
@@ -27,6 +29,7 @@ class StageIntroScene(Scene):
         self._page  = 0
         self._chars = 0.0
         self._blink = 0.0
+        self._type_se_cooldown = 0.0
 
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
@@ -37,10 +40,19 @@ class StageIntroScene(Scene):
     def _is_text_complete(self) -> bool:
         return int(self._chars) >= self._total_chars()
 
+    def _tick_type_sound(self, dt: float, previous_chars: int) -> None:
+        self._type_se_cooldown = max(0.0, self._type_se_cooldown - dt)
+        current_chars = min(int(self._chars), self._total_chars())
+        if current_chars > previous_chars and self._type_se_cooldown <= 0.0:
+            self.game.sound.play_se_alias("SE_TYPE", volume=_TYPE_SE_VOLUME)
+            self._type_se_cooldown = _TYPE_SE_INTERVAL
+
     def update(self, dt: float) -> None:
         self._blink += dt
+        previous_chars = min(int(self._chars), self._total_chars())
         if not self._is_text_complete():
-            self._chars += _TYPEWRITER_SPEED * dt
+            self._chars = min(self._chars + _TYPEWRITER_SPEED * dt, float(self._total_chars()))
+        self._tick_type_sound(dt, previous_chars)
 
         inp = self.game.input
         advance = inp.is_just_pressed(pygame.K_SPACE) or inp.is_just_pressed(pygame.K_RETURN)
@@ -50,6 +62,7 @@ class StageIntroScene(Scene):
             elif self._page < len(self._pages) - 1:
                 self._page += 1
                 self._chars = 0.0
+                self._type_se_cooldown = 0.0
             else:
                 self._go_game()
 

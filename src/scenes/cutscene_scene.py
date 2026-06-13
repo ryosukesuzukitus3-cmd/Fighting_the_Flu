@@ -17,6 +17,8 @@ from src.story.lines import Page
 from src.story.speakers import speaker_name, speaker_color, speaker_portrait, DEFAULT_TEXT_COLOR
 
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
+_TYPE_SE_INTERVAL = 0.045
+_TYPE_SE_VOLUME = 0.16
 
 
 class CutsceneScene(Scene):
@@ -42,6 +44,7 @@ class CutsceneScene(Scene):
         self._page       = 0
         self._chars      = 0.0
         self._blink      = 0.0
+        self._type_se_cooldown = 0.0
         self._shake_t    = 0.0
         self._flash_t    = 0.0
         # FX 駆動
@@ -67,6 +70,7 @@ class CutsceneScene(Scene):
 
     def _enter_page(self) -> None:
         self._chars = 0.0
+        self._type_se_cooldown = 0.0
         if not self._pages:
             return
         pg = self._cur()
@@ -86,6 +90,13 @@ class CutsceneScene(Scene):
     def _is_complete(self) -> bool:
         return int(self._chars) >= self._total_chars()
 
+    def _tick_type_sound(self, dt: float, previous_chars: int) -> None:
+        self._type_se_cooldown = max(0.0, self._type_se_cooldown - dt)
+        current_chars = min(int(self._chars), self._total_chars())
+        if current_chars > previous_chars and self._type_se_cooldown <= 0.0:
+            self.game.sound.play_se_alias("SE_TYPE", volume=_TYPE_SE_VOLUME)
+            self._type_se_cooldown = _TYPE_SE_INTERVAL
+
     def _begin_finish(self) -> None:
         """黒フェードアウトを開始する（完了時に on_complete）。"""
         if not self._fade_out_active and not self._finished:
@@ -99,8 +110,10 @@ class CutsceneScene(Scene):
         if self._flash_t  > 0: self._flash_t  -= dt
         if self._glitch_t > 0: self._glitch_t -= dt
         if self._fade_in_t > 0: self._fade_in_t -= dt
+        previous_chars = min(int(self._chars), self._total_chars())
         if not self._is_complete():
-            self._chars += _TYPEWRITER_SPEED * dt
+            self._chars = min(self._chars + _TYPEWRITER_SPEED * dt, float(self._total_chars()))
+        self._tick_type_sound(dt, previous_chars)
 
         # 黒フェードアウト中は入力を受けず、完了で on_complete
         if self._fade_out_active:

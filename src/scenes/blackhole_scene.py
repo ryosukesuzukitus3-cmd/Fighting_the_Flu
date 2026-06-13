@@ -21,6 +21,8 @@ from src.story.speakers import (
 )
 
 _TYPEWRITER_SPEED = 34.0
+_TYPE_SE_INTERVAL = 0.045
+_TYPE_SE_VOLUME = 0.16
 _CENTER = (SCREEN_WIDTH * 0.64, SCREEN_HEIGHT * 0.46)
 
 
@@ -49,6 +51,7 @@ class BlackholeScene(Scene):
         self._font_hint = self.game.resources.pixelfont(16)
         self._page = 0
         self._chars = 0.0
+        self._type_se_cooldown = 0.0
         self._time = 0.0
         self._phase = self._phase_for_page()
         self._phase_time = 0.0
@@ -71,7 +74,9 @@ class BlackholeScene(Scene):
     def update(self, dt: float) -> None:
         self._time += dt
         self._phase_time += dt
+        previous_chars = min(int(self._chars), self._total_chars())
         self._chars += _TYPEWRITER_SPEED * dt
+        self._tick_type_sound(dt, previous_chars)
         self._shake_t = max(0.0, self._shake_t - dt)
         self._flash_t = max(0.0, self._flash_t - dt)
         self._fade_in_t = max(0.0, self._fade_in_t - dt)
@@ -102,6 +107,7 @@ class BlackholeScene(Scene):
 
     def _enter_page(self) -> None:
         self._chars = 0.0
+        self._type_se_cooldown = 0.0
         if not self._pages:
             return
         new_phase = self._phase_for_page()
@@ -124,6 +130,13 @@ class BlackholeScene(Scene):
 
     def _is_text_complete(self) -> bool:
         return int(self._chars) >= self._total_chars()
+
+    def _tick_type_sound(self, dt: float, previous_chars: int) -> None:
+        self._type_se_cooldown = max(0.0, self._type_se_cooldown - dt)
+        current_chars = min(int(self._chars), self._total_chars())
+        if current_chars > previous_chars and self._type_se_cooldown <= 0.0:
+            self.game.sound.play_se_alias("SE_TYPE", volume=_TYPE_SE_VOLUME)
+            self._type_se_cooldown = _TYPE_SE_INTERVAL
 
     def _begin_finish(self) -> None:
         if not self._fade_out:

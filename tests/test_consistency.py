@@ -679,7 +679,7 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
 
 def test_manual_docs_do_not_reference_removed_items() -> None:
     design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
-    for term in ("LaserItem", "HomingItem", "ShieldItem", "shield.py"):
+    for term in ("LaserItem", "HomingItem", "ShieldItem", "shield.py", "ScoreItem", "score_item.py"):
         assert term not in design
 
 

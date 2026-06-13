@@ -165,7 +165,7 @@ self.game.shared.carry_hp = PLAYER_MAX_HP
 - チュートリアルから該当アイテム説明を削除
 - docs の AUTOGEN は手で触らず、最後に `gen_docs.py` を実行する
 
-`random_item()` は現在 `WeaponItem`, `HealItem`, `ScoreItem` のみ対応なので、大きな変更は不要。ただし `ITEM_DEFS` と説明の整合性は必ず確認する。
+`random_item()` は `ITEM_DEFS` の `drop_weight > 0` から生成候補を決める。変更時は `ITEM_DEFS` と説明の整合性を必ず確認する。
 
 ## 検証手順
 

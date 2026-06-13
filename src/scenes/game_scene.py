@@ -938,7 +938,10 @@ class GameScene(
                         break
 
         from src.entities.items.weapon_item import WeaponItem
-        for item in pygame.sprite.spritecollide(self.player, self.items, True):
+        picked_items = pygame.sprite.spritecollide(self.player, self.items, True)
+        if picked_items:
+            self.game.sound.play_se_alias("SE_ITEM", volume=0.7)
+        for item in picked_items:
             if isinstance(item, WeaponItem):
                 self._pickup_weapon_item()
             else:

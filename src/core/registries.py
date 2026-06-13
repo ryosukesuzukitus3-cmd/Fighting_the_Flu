@@ -76,7 +76,6 @@ class ItemDef:
 ITEM_DEFS: list[ItemDef] = [
     ItemDef("WeaponItem",    "武器スロット選択",    drop_weight=1),
     ItemDef("HealItem",      "HP回復（+30）",       drop_weight=3),
-    ItemDef("ScoreItem",     "スコア+1000",          drop_weight=1),
     ItemDef("ExtraLifeItem", "残機追加（1UP）",      drop_weight=0),
 ]
 

@@ -101,7 +101,10 @@ class GameScenePostBossMixin:
         if self._post_boss_next_id is not None:  # type: ignore[attr-defined]
             # 通常ボス撃破後: アイテムマグネット + 取得 + 遷移判定
             self._update_post_boss_items(dt_eff)
-            for item in pygame.sprite.spritecollide(self.player, self.items, True):  # type: ignore[attr-defined]
+            picked_items = pygame.sprite.spritecollide(self.player, self.items, True)  # type: ignore[attr-defined]
+            if picked_items:
+                self.game.sound.play_se_alias("SE_ITEM", volume=0.7)  # type: ignore[attr-defined]
+            for item in picked_items:
                 if isinstance(item, _WeaponItem):
                     # 即選択せず在庫に加算（V キーで選択）。初回は強めの導線。
                     self._pickup_weapon_item()  # type: ignore[attr-defined]

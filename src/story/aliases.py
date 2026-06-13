@@ -22,7 +22,8 @@ BGM: dict[str, str | None] = {
 
 # ── SE ─────────────────────────────────────────────────────────────
 SE: dict[str, str | None] = {
-    "SE_TYPE":         None,                           # TODO(Phase4): タイプ音ダミー
+    "SE_TYPE":         "music/se/type.wav",
+    "SE_ITEM":         "music/se/item_pickup.wav",
     "SE_ALERT":        "music/se/boss_alert.wav",
     "SE_FIGHT":        "music/se/fight.wav",
     "SE_EXPLOSION":    "music/se/game_explosion9.mp3",
