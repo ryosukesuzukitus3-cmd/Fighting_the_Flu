@@ -167,7 +167,9 @@ def main() -> None:
             if new_text == original:
                 print(f"gen_docs: no changes ({name} is already up-to-date)")
             else:
-                path.write_text(new_text, encoding="utf-8")
+                # newline="\n" で Windows でも LF 固定（.gitattributes eol=lf に合わせ、
+                # 作業ツリーが CRLF に戻るのを防ぐ）。
+                path.write_text(new_text, encoding="utf-8", newline="\n")
                 for key in updated:
                     print(f"gen_docs: updated <!-- AUTOGEN:{key} --> in {name}")
 
