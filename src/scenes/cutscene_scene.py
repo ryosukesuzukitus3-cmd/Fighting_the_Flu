@@ -230,6 +230,23 @@ class CutsceneScene(Scene):
         for gx in range(0, SCREEN_WIDTH + cell, cell):
             pygame.draw.line(screen, (34, 30, 50), (gx, 0), (gx, SCREEN_HEIGHT), 1)
 
+    # ── 描画ヘルパ ────────────────────────────────────────────────
+    _OUTLINE_OFFSETS = ((-2, 0), (2, 0), (0, -2), (0, 2),
+                        (-2, -2), (2, 2), (-2, 2), (2, -2))
+
+    def _blit_outlined(self, screen: pygame.Surface, font: pygame.font.Font,
+                       text: str, color: tuple[int, int, int],
+                       cx: int, y: int, *, outline: bool = True,
+                       x: int | None = None) -> None:
+        """中央寄せ（または x 指定）でテキストを描く。outline=True で黒い8方向縁取り。"""
+        base = font.render(text, True, color)
+        bx = (cx - base.get_width() // 2) if x is None else x
+        if outline:
+            ol = font.render(text, True, (0, 0, 0))
+            for dx, dy in self._OUTLINE_OFFSETS:
+                screen.blit(ol, (bx + dx, y + dy))
+        screen.blit(base, (bx, y))
+
     # ── 描画 ──────────────────────────────────────────────────────
     def draw(self, screen: pygame.Surface) -> None:
         self._draw_bg(screen)
@@ -267,10 +284,13 @@ class CutsceneScene(Scene):
             py   = block_top - 44 - psz - 4
             screen.blit(pimg, (px, py))
             pygame.draw.rect(screen, speaker_color(pg.speaker), (px, py, psz, psz), 2, border_radius=6)
+        # 暗い/賑やかな背景では文字に黒い縁取りを付けて可読性を上げる。
+        # 明るい窓テーマ（暗い本文＝もともと読める）では付けない。
+        outline = not is_light_bg
         if name:
             ncol = speaker_color(pg.speaker)
-            nsurf = self._font_name.render(name, True, ncol)
-            screen.blit(nsurf, (cx - nsurf.get_width() // 2, block_top - 44))
+            self._blit_outlined(screen, self._font_name, name, ncol,
+                                 cx, block_top - 44, outline=outline)
 
         # 本文（タイプライター）。文字化け中はランダム置換＋横ずれ。
         body_col = (50, 40, 30) if is_light_bg else DEFAULT_TEXT_COLOR
@@ -287,7 +307,8 @@ class CutsceneScene(Scene):
                 gcol = (210, 60, 60) if glitch else body_col
                 surf = self._font_body.render(draw_text, True, gcol)
                 gx = cx - surf.get_width() // 2 + (random.randint(-6, 6) if glitch else 0)
-                screen.blit(surf, (gx, line_y))
+                self._blit_outlined(screen, self._font_body, draw_text, gcol,
+                                    cx, line_y, outline=outline, x=gx)
             line_y += 40
 
         # ページインジケーター

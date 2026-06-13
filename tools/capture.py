@@ -54,6 +54,14 @@ _HOLD_KEYS = {
 
 _MAX_INTRO_FRAMES = 3000   # ボス演出スキップの安全上限
 
+# --cutscene の名前 → (script.py の定数名, テーマ)
+_CUTSCENES = {
+    "prologue":   ("PROLOGUE",                   "dark"),
+    "interlude1": ("INTERLUDE_STAGE1_CLEAR",     "dark"),
+    "blackhole":  ("INTERLUDE_STAGE3_BLACKHOLE", "blackhole"),
+    "epilogue":   ("EPILOGUE",                   "window"),
+}
+
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -77,6 +85,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
                    help="無敵＋HP維持で撮影中の死亡・点滅を防ぐ（既定 ON、--no-invincible で解除）")
     p.add_argument("--hold", default="fire",
                    help="毎フレーム押し続けるキー（カンマ区切り）: fire,laser,up,down,left,right")
+    p.add_argument("--cutscene", choices=sorted(_CUTSCENES),
+                   help="全画面カットシーン/モノローグを撮る（GameSceneの代わり）")
+    p.add_argument("--page", type=int, default=0, help="--cutscene 時に表示するページ番号（既定0）")
     p.add_argument("--out", default="captures/shot", help="出力先プレフィックス（既定 captures/shot）")
     return p.parse_args(argv)
 
@@ -140,8 +151,49 @@ def _skip_to_fight(scene: GameScene, args: argparse.Namespace, hold: list[int]) 
         boss._transform_form3()
 
 
+def _capture_cutscene(args: argparse.Namespace) -> int:
+    """全画面カットシーン（CutsceneScene）を指定ページで撮影する。"""
+    from src.scenes.cutscene_scene import CutsceneScene
+    import src.story.script as script
+
+    const, theme = _CUTSCENES[args.cutscene]
+    pages = getattr(script, const)
+
+    game = Game()
+    scene = CutsceneScene(game, pages, on_complete=lambda: None, theme=theme)
+    game._scene = scene
+    scene.on_enter()
+    scene._fade_in_t = 0.0  # 入場フェードを飛ばして本文を見えるようにする
+
+    page_idx = max(0, min(args.page, len(scene._pages) - 1))
+    scene._page = page_idx
+    scene._enter_page()
+
+    inp = game.input
+    for _ in range(max(1, args.frames)):
+        inp.pre_update()
+        inp.update(args.dt)
+        scene._chars = float(scene._total_chars())  # 全文を表示済みにする
+        scene.update(args.dt)
+        scene.draw(game.screen)
+
+    out = Path(args.out)
+    if not out.is_absolute():
+        out = ROOT / out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out = out.with_suffix(".png")
+    pygame.image.save(game.screen, str(out))
+    print(out)
+    pygame.quit()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+
+    if args.cutscene:
+        return _capture_cutscene(args)
+
     valid = set(stage_ids())
     if args.stage not in valid and args.stage != 99:
         print(f"unknown stage {args.stage} (available: {sorted(valid)})", file=sys.stderr)
