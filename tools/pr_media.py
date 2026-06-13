@@ -21,14 +21,20 @@ import argparse
 import base64
 import datetime
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-# gh が PATH に無い環境（インストール直後）向けのフォールバック
-_GH_FALLBACK = r"C:\Program Files\GitHub CLI\gh.exe"
+# gh が PATH に無い環境向けのフォールバック候補（shutil.which を最優先）
+_GH_FALLBACKS = [
+    os.environ.get("GH_EXE"),
+    str(Path.home() / "bin" / "gh.exe"),
+    r"C:\Program Files\GitHub CLI\gh.exe",
+    str(Path(sys.prefix) / "Scripts" / "gh.exe"),
+]
 _DEFAULT_BRANCH_NAME = "media"
 
 
@@ -36,9 +42,10 @@ def _gh_exe() -> str:
     found = shutil.which("gh")
     if found:
         return found
-    if Path(_GH_FALLBACK).exists():
-        return _GH_FALLBACK
-    raise SystemExit("gh CLI が見つかりません（PATH か C:\\Program Files\\GitHub CLI\\gh.exe）")
+    for candidate in _GH_FALLBACKS:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    raise SystemExit("gh CLI が見つかりません（PATH / GH_EXE / ~/bin / Program Files を確認してください）")
 
 
 def _gh(args: list[str], *, stdin: str | None = None) -> subprocess.CompletedProcess:
