@@ -677,6 +677,58 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     assert ".venv" in src
 
 
+def test_settings_manager_ignores_wrong_json_shapes(tmp_path, monkeypatch) -> None:
+    from src.managers import settings as settings_mod
+
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_mod, "_SETTINGS_PATH", settings_path)
+
+    settings_path.write_text("[]", encoding="utf-8")
+    manager = settings_mod.SettingsManager()
+
+    assert manager.get("bgm_volume") == 0.8
+    assert manager.get_key("fire") == pygame.K_z
+
+    settings_path.write_text(
+        json.dumps({
+            "bgm_volume": "loud",
+            "se_volume": 1.5,
+            "key_bindings": "K_SPACE",
+        }),
+        encoding="utf-8",
+    )
+    manager = settings_mod.SettingsManager()
+
+    assert manager.get("bgm_volume") == 0.8
+    assert manager.get("se_volume") == 1.0
+    assert manager.get_key("fire") == pygame.K_z
+
+
+def test_highscore_manager_filters_wrong_json_shapes(tmp_path, monkeypatch) -> None:
+    from src.managers import highscore as highscore_mod
+
+    highscore_path = tmp_path / "highscore.json"
+    monkeypatch.setattr(highscore_mod, "_HIGHSCORE_PATH", highscore_path)
+
+    highscore_path.write_text("{}", encoding="utf-8")
+    assert highscore_mod.HighScoreManager().get_scores() == []
+
+    highscore_path.write_text(
+        json.dumps([
+            {"name": "A", "score": "50", "stage": "2"},
+            {"name": "bad", "score": "nan", "stage": 1},
+            ["not", "a", "score"],
+            {"name": "B", "score": 75, "stage": 3, "rank": 99},
+        ]),
+        encoding="utf-8",
+    )
+
+    assert highscore_mod.HighScoreManager().get_scores() == [
+        {"name": "B", "score": 75, "stage": 3, "rank": 1},
+        {"name": "A", "score": 50, "stage": 2, "rank": 2},
+    ]
+
+
 def test_manual_docs_do_not_reference_removed_items() -> None:
     design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
     for term in ("LaserItem", "HomingItem", "ShieldItem", "shield.py", "ScoreItem", "score_item.py"):
