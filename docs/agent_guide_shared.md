@@ -71,6 +71,20 @@
 | 不整合があった場合 | フックが exit 2 で差し戻し、{{AGENT}} がその場で修正 |
 | `pytest` | `tests/test_consistency.py` で同じ整合性を検証 |
 
+## {{AGENT}} PR運用フロー
+
+問題調査からPR作成までを任せる依頼では、{{AGENT}} は以下を標準手順にする。
+
+1. `git status --short --branch` で未コミット変更を確認し、ユーザー作業を巻き込まない
+2. 作業ブランチを `codex/{短い内容}` の形式で切る（例: `codex/fix-stage4-boss-ui`）
+3. `rg`・コード読解・`docs/design.md` で仕様とSSOTを確認し、必要なら `data/stages/*.json` も見る
+4. 見た目や挙動の疑いがある場合は `tools/run.py capture ...` でPNGを取り、必要なら `tools/run.py game` か `tools/run.py preview-boss ...` で実プレイ確認する
+5. 修正はSSOTに沿って最小範囲に入れ、手動生成が必要な資料は `tools/run.py docs` で再生成する
+6. `tools/run.py check` と、影響範囲に応じて `tools/run.py test` / `tools/run.py pycompile` / 再キャプチャを実行する
+7. 差分・検証結果・確認したキャプチャをPR本文にまとめ、GitHub CLI が使える環境では push してPRを作成する
+
+再現に使ったキャプチャは `captures/` 配下に出力する。調査用の一時画像をPRに含めない場合は、最終差分へ混ぜず、PR本文やコメントでファイル名だけ共有する。
+
 ## ツール使用方法
 
 実行環境・文字化け事故を避けるため、可能なら直接 `python` を叩かず `tools/run.py` を使う。
@@ -93,14 +107,14 @@
 .venv/Scripts/pytest
 
 # ゲーム起動
-.venv/Scripts/python main.py
+.venv/Scripts/python tools/run.py game
 
-# バランスシート確認
-.venv/Scripts/python tools/balance_sheet.py
+# 任意状態の画面キャプチャ
+.venv/Scripts/python tools/run.py capture --stage 4 --boss --form 3
 
 # ボス弾幕プレビュー
-.venv/Scripts/python tools/preview_boss.py --stage 4 --pattern all
+.venv/Scripts/python tools/run.py preview-boss --stage 4 --pattern all
 
-# 任意状態の画面キャプチャ（見た目の自己検証用）
-.venv/Scripts/python tools/capture.py --stage 4 --boss --form 3
+# バランスシート確認
+.venv/Scripts/python tools/run.py balance
 ```
