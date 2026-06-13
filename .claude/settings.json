@@ -8,6 +8,8 @@
       "Bash(touch *)",
       "Bash(mkdir *)",
       "Bash(cp *)",
+      "Bash(rm -r tmp/*)",
+      "Bash(rm -r captures/*)",
       "Bash(.venv/Scripts/python tools/*)",
       "Bash(.venv/Scripts/python -m pytest*)",
       "Bash(.venv/Scripts/python main.py*)",
@@ -23,6 +25,11 @@
       "Bash(git rev-parse*)",
       "Bash(git remote*)",
       "Bash(git config --get*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git fetch*)",
+      "Bash(git pull --ff-only*)",
       "Bash(gh pr view*)",
       "Bash(gh pr list*)",
       "Read",
@@ -44,12 +51,11 @@
       "Write(**/secrets/**)"
     ],
     "ask": [
-      "Bash(rm *)",
       "Bash(mv *)",
       "Bash(curl *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git push *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push --force-with-lease*)",
       "Bash(git merge *)"
     ]
   },
