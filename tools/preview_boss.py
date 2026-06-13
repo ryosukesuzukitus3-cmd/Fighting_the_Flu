@@ -51,6 +51,7 @@ class _MockResources:
 
 class _MockSound:
     def play_se(self, *a, **kw): pass
+    def play_se_alias(self, *a, **kw): pass
     def play_bgm(self, *a, **kw): pass
     def stop_bgm(self, *a, **kw): pass
 

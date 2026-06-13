@@ -301,10 +301,71 @@ def test_boss_phase_configs_reference_known_patterns() -> None:
     known = {
         "fan5", "fan7", "aimed", "dbl_aimed", "ring8", "ring12", "ring16",
         "aimring6", "aimring8", "scatter", "cross", "spiral", "vortex2",
-        "vortex3", "chaos", "burst3", "wall_gap",
+        "vortex3", "chaos", "burst3", "wall_gap", "fever_lunge",
+        "mega_laser", "drone_cross", "rock_fall", "shogi_file",
+        "dash_knives", "curtain",
     }
     used = {phase[1] for phases in _PHASE_CONFIGS.values() for phase in phases}
     assert used <= known
+
+
+def test_enemy_bullet_supports_boss_special_shapes() -> None:
+    from src.entities.bullets.enemy_bullet import EnemyBullet
+
+    bullet = EnemyBullet(
+        100.0,
+        120.0,
+        0.0,
+        0.0,
+        size=(80, 12),
+        lifetime=0.1,
+        terrain_passthrough=True,
+        warning_only=True,
+    )
+    group = pygame.sprite.Group(bullet)
+
+    assert bullet.rect.size == (80, 12)
+    assert bullet.terrain_passthrough is True
+    assert bullet.warning_only is True
+
+    bullet.update(0.2)
+    assert bullet not in group
+
+
+def test_boss_turret_guard_blocks_core_damage() -> None:
+    from src.entities.enemies.boss import Boss
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            return pygame.Surface((80, 60), pygame.SRCALPHA)
+
+        def pixelfont(self, size: int):
+            return pygame.font.Font(None, size)
+
+    class Sound:
+        def play_se_alias(self, *args, **kwargs) -> None:
+            pass
+
+    class Game:
+        resources = Resources()
+        sound = Sound()
+
+    class ShieldNode:
+        def alive(self) -> bool:
+            return True
+
+    boss = Boss(Game(), 3)
+    boss._summoned = [ShieldNode()]
+    hp = boss.hp
+
+    assert boss.suppresses_hit_feedback() is True
+    assert boss.take_damage(10) is False
+    assert boss.hp == hp
+
+    boss._summoned = []
+    boss._stun_timer = 1.0
+    assert boss.take_damage(10) is False
+    assert boss.hp < hp
 
 
 def test_spawner_surface_positions_follow_bottom_terrain() -> None:

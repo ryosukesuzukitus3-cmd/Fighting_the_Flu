@@ -88,7 +88,20 @@ python tools/preview_boss.py --list
 ### 利用可能なパターン
 
 `fan5` / `fan7` / `aimed` / `dbl_aimed` / `ring8` / `ring12` / `ring16` /
-`aimring6` / `aimring8` / `scatter` / `cross` / `spiral` / `vortex2` / `vortex3` / `chaos`
+`aimring6` / `aimring8` / `scatter` / `cross` / `spiral` / `vortex2` / `vortex3` /
+`chaos` / `burst3` / `wall_gap` / `fever_lunge` / `mega_laser` / `drone_cross` /
+`rock_fall` / `shogi_file` / `dash_knives` / `curtain`
+
+---
+
+## C-1. ボスコンセプト静止画キャプチャ
+
+```bash
+python tools/capture_boss_concepts.py
+```
+
+Boss2 の装甲/弱点露出、Boss3 の要塞シールド、Form2 の高速形態、Form3 の鈍重オーラを
+`captures/boss*_*.png` に出力する。見た目調整の確認用。
 
 ---
 

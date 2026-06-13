@@ -29,54 +29,61 @@ if TYPE_CHECKING:
 #   chaos     : カオス弾幕（aimring8 + vortex2 + ランダムオフセット）
 #   burst3    : 3連狙撃（速度差つき）
 #   wall_gap  : 縦の弾壁。毎回違う位置に抜け道
+#   fever_lunge : 前進圧力をかける突進連動弾
+#   mega_laser  : 太い横レーザー＋弱点露出の後隙
+#   drone_cross : 子機/砲台と噛み合う交差狙撃
+#   rock_fall   : 上方から落石
+#   shogi_file  : 将棋駒の列弾
+#   dash_knives : 高速移動と噛み合う刺し込み弾
+#   curtain     : 画面を広く埋める終盤弾幕
 _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
     1: [   # 悪寒大王インフルX（ステージ1 入門ボス）
-        (1.00, "fan5",      2.0),
-        (0.70, "aimed",     1.3),
-        (0.45, "cross",     1.0),
-        (0.20, "dbl_aimed", 0.55),
+        (1.00, "fan5",        1.7),
+        (0.70, "fever_lunge", 1.25),
+        (0.45, "cross",       0.9),
+        (0.20, "dbl_aimed",   0.52),
     ],
     2: [   # 情報汚染超人野獣ブロリー（ステージ2 中級ボス）
-        (1.00, "fan7",      1.6),
-        (0.70, "burst3",    1.05),
-        (0.50, "wall_gap",  0.95),
-        (0.30, "ring12",    0.70),
-        (0.12, "scatter",   0.32),
+        (1.00, "fan7",       1.45),
+        (0.70, "mega_laser", 2.25),
+        (0.50, "wall_gap",   0.86),
+        (0.30, "burst3",     0.72),
+        (0.12, "scatter",    0.34),
     ],
     3: [   # 婚活要塞マッチング・ゼロ（ステージ3 中上級ボス）
-        (1.00, "ring12",   1.5),
-        (0.72, "cross",    0.95),
-        (0.50, "wall_gap", 0.82),
-        (0.30, "scatter",  0.34),
-        (0.12, "spiral",   0.60),
+        (1.00, "drone_cross", 1.35),
+        (0.72, "rock_fall",   1.10),
+        (0.50, "wall_gap",    0.78),
+        (0.30, "scatter",     0.34),
+        (0.12, "spiral",      0.55),
     ],
     4: [   # 藤井竜王 Form1（ステージ4 ラスボス）
-        (1.00, "ring12",   1.5),
-        (0.72, "wall_gap", 0.90),
-        (0.52, "spiral",   0.52),
-        (0.32, "aimring8", 0.62),
-        (0.15, "vortex2",  0.28),
+        (1.00, "shogi_file", 1.25),
+        (0.72, "wall_gap",   0.86),
+        (0.52, "spiral",     0.50),
+        (0.32, "aimring8",   0.58),
+        (0.15, "vortex2",    0.28),
     ],
     "4f2": [  # 藤井竜王 Form2（激難）
-        (1.00, "vortex3", 0.38),
-        (0.72, "wall_gap", 0.55),
-        (0.48, "ring16",  0.46),
-        (0.25, "chaos",   0.20),
+        (1.00, "dash_knives", 0.55),
+        (0.72, "vortex3",     0.36),
+        (0.48, "ring16",      0.42),
+        (0.25, "chaos",       0.20),
     ],
     "4f3": [  # 投了王サワグチ Form3（最終形態・赤黒弾幕）
-        (1.00, "cross",   0.48),
-        (0.78, "ring16",  0.52),
-        (0.58, "chaos",   0.30),
-        (0.42, "burst3",  0.32),
-        (0.30, "vortex3", 0.24),
+        (1.00, "curtain",   0.62),
+        (0.78, "ring16",    0.46),
+        (0.58, "chaos",     0.28),
+        (0.42, "rock_fall", 0.58),
+        (0.30, "vortex3",   0.22),
     ],
 }
 
 # ステージ別ボス設定: (image_path, scale, max_hp)
 _BOSS_CONFIG = {
     1: ("graphic/enemy_バイキンマン68x80.png", 1.0,  80),
-    2: ("graphic/enemy_ブロリー.png",          1.2, 150),
-    3: ("graphic/enemy_ブロリー.png",          1.2, 200),
+    2: ("graphic/enemy_ブロリー.png",          2.0, 150),
+    3: ("graphic/boss_matching_zero.png",    0.23, 200),
     4: ("graphic/enemy_fujii4dan.png",         1.2, 250),
 }
 
@@ -96,7 +103,18 @@ _ENTER_SPEED  = 200.0
 _MOVE_SPEED_Y = 100.0
 _BOUNDS_TOP   = 60.0
 _BOUNDS_BOT   = SCREEN_HEIGHT - 60.0
+_BOUNDS_LEFT  = SCREEN_WIDTH * 0.48
+_BOUNDS_RIGHT = SCREEN_WIDTH - 70.0
 _BULLET_SPEED = 220.0
+
+_MOVE_STYLES: dict[str | int, str] = {
+    1:     "fever_lunge",  # 前に出てプレイヤーを押し込む
+    2:     "heavy_laser",  # 重い横移動から大技レーザー
+    3:     "fortress",     # 盤面を広く使う子機要塞
+    4:     "shogi_board",  # 将棋盤の目を渡るように位置替え
+    "4f2": "dash",         # 赤眼化後は急接近と離脱
+    "4f3": "nightmare",    # 最終形態は画面全域を揺さぶる
+}
 
 # ─── ボス固有ギミック（ステージ/形態ごとに別特色）────────────────────
 #   shield    : 周期シールド＋反撃。シールド中は無敵＋強攻撃、解除中が大ダメージ猶予。
@@ -122,7 +140,7 @@ _WEAK_MULT   = 2.0    # 露出中の被ダメ倍率
 
 # turrets ギミック
 _TURRET_SUMMON_CD  = 9.0   # 砲台再召喚クールダウン（秒）
-_TURRET_GUARD_MULT = 0.4   # 砲台健在中の被ダメ倍率
+_TURRET_GUARD_MULT = 0.0   # 砲台健在中の被ダメ倍率（0=シールド中は本体無効）
 _TURRET_STUN_DUR   = 4.0   # 全砲台撃破後のスタン時間（秒）
 _TURRET_STUN_MULT  = 1.8   # スタン中の被ダメ倍率
 
@@ -170,6 +188,7 @@ class Boss(pygame.sprite.Sprite):
         self._summon_cd:  float = 3.0
         self._stun_timer: float = 0.0
         self._shot_se_t:  float = -1.0   # 攻撃SEの再生間隔制御
+        self._shoot_delay_override: float | None = None
 
     def _load_image(self, path: str, scale: float) -> pygame.Surface:
         raw = self.game.resources.image(path)
@@ -180,14 +199,16 @@ class Boss(pygame.sprite.Sprite):
         return raw
 
     # ─────────────────────────────────────────
+    def _form_key(self) -> str | int:
+        if self._form3:
+            return f"{self._stage_id}f3"
+        if self._form2:
+            return f"{self._stage_id}f2"
+        return self._stage_id
+
     @property
     def _phase(self) -> tuple:
-        if self._form3:
-            key = f"{self._stage_id}f3"
-        elif self._form2:
-            key = f"{self._stage_id}f2"
-        else:
-            key = self._stage_id
+        key = self._form_key()
         phases = _PHASE_CONFIGS.get(key, _PHASE_CONFIGS[1])
         ratio  = self.hp / self.max_hp
         active = phases[0]
@@ -200,9 +221,7 @@ class Boss(pygame.sprite.Sprite):
         """現在の形態に対応するギミック種別を返す（Form3 は None）。"""
         if self._form3:
             return None
-        if self._form2:
-            return _GIMMICKS.get(f"{self._stage_id}f2")
-        return _GIMMICKS.get(self._stage_id)
+        return _GIMMICKS.get(self._form_key())
 
     def _summoned_alive(self) -> int:
         self._summoned = [t for t in self._summoned if t.alive()]
@@ -214,6 +233,8 @@ class Boss(pygame.sprite.Sprite):
         if gimmick == "shield" and self._shield_active:
             return True
         if gimmick == "weakpoint" and self._weak_timer <= 0:
+            return True
+        if gimmick == "turrets" and self._summoned_alive() > 0:
             return True
         return False
 
@@ -232,20 +253,91 @@ class Boss(pygame.sprite.Sprite):
             suppress  = self._update_gimmick(dt, gimmick, enemy_bullets, player)
 
             pattern = self._phase[1]
-            speed_y = _MOVE_SPEED_Y * (2.0 if pattern in ("vortex2", "vortex3", "chaos", "scatter") else 1.0)
-            self._vy = math.copysign(speed_y, self._vy)
-            self.sy += self._vy * dt
-            if self.sy >= _BOUNDS_BOT:
-                self._vy = -abs(self._vy)
-            elif self.sy <= _BOUNDS_TOP:
-                self._vy = abs(self._vy)
+            self._update_movement(dt, player, pattern)
 
             self._shoot_timer -= dt
             if self._shoot_timer <= 0 and not suppress:
+                self._shoot_delay_override = None
                 self._shoot(enemy_bullets, player)
-                self._shoot_timer = self._phase[2]
+                self._shoot_timer = self._shoot_delay_override or self._phase[2]
 
         self.rect.center = (int(self.sx), int(self.sy))
+
+    def _approach(self, current: float, target: float, speed: float, dt: float) -> float:
+        step = speed * dt
+        if current < target:
+            return min(target, current + step)
+        return max(target, current - step)
+
+    def _approach_goal(self, sx: float, sy: float, speed: float, dt: float) -> None:
+        sx = max(_BOUNDS_LEFT, min(_BOUNDS_RIGHT, sx))
+        sy = max(_BOUNDS_TOP, min(_BOUNDS_BOT, sy))
+        self.sx = self._approach(self.sx, sx, speed, dt)
+        self.sy = self._approach(self.sy, sy, speed, dt)
+
+    def _move_vertical(self, dt: float, pattern: str) -> None:
+        speed_y = _MOVE_SPEED_Y * (2.0 if pattern in ("vortex2", "vortex3", "chaos", "scatter") else 1.0)
+        self._vy = math.copysign(speed_y, self._vy)
+        self.sy += self._vy * dt
+        if self.sy >= _BOUNDS_BOT:
+            self._vy = -abs(self._vy)
+        elif self.sy <= _BOUNDS_TOP:
+            self._vy = abs(self._vy)
+        self.sx = self._approach(self.sx, _TARGET_SX, 120.0, dt)
+
+    def _update_movement(self, dt: float, player: "Player", pattern: str) -> None:
+        style = _MOVE_STYLES.get(self._form_key())
+        mid_y = SCREEN_HEIGHT / 2.0
+
+        if style == "fever_lunge":
+            phase = self._time % 4.4
+            lunging = 2.9 <= phase <= 3.35
+            tx = 485.0 if lunging else _TARGET_SX
+            wave_y = mid_y + math.sin(self._time * 1.05) * 125.0
+            ty = wave_y * 0.85 + player.sy * 0.15
+            self._approach_goal(tx, ty, 235.0 if lunging else 95.0, dt)
+
+        elif style == "heavy_laser":
+            tx = 612.0 + math.sin(self._time * 0.28) * 16.0
+            ty = mid_y + math.sin(self._time * 0.42) * 70.0
+            ty = ty * 0.82 + player.sy * 0.18
+            self._approach_goal(tx, ty, 52.0, dt)
+
+        elif style == "fortress":
+            tx = 622.0 + math.sin(self._time * 0.24) * 10.0
+            ty = mid_y + math.sin(self._time * 0.35) * 18.0
+            self._approach_goal(tx, ty, 45.0, dt)
+
+        elif style == "shogi_board":
+            cols = (520.0, 600.0, 680.0)
+            rows = (95.0, 195.0, 300.0, 405.0, 505.0)
+            idx = int(self._time / 2.55)
+            tx = cols[idx % len(cols)]
+            ty = rows[(idx * 2 + self._shot_variant) % len(rows)]
+            self._approach_goal(tx, ty, 112.0, dt)
+
+        elif style == "dash":
+            phase = self._time % 2.8
+            if phase < 0.55:
+                tx = 430.0
+                ty = player.sy
+                speed = 620.0
+            else:
+                tx = 650.0 + math.sin(self._time * 1.4) * 32.0
+                ty = mid_y + math.sin(self._time * 2.0) * 210.0
+                speed = 270.0
+            self._approach_goal(tx, ty, speed, dt)
+
+        elif style == "nightmare":
+            tx = 590.0 + math.sin(self._time * 0.48) * 32.0
+            ty = mid_y + math.sin(self._time * 0.72) * 82.0
+            self._approach_goal(tx, ty, 90.0, dt)
+
+        else:
+            self._move_vertical(dt, pattern)
+
+        self.sx = max(_BOUNDS_LEFT, min(_BOUNDS_RIGHT, self.sx))
+        self.sy = max(_BOUNDS_TOP, min(_BOUNDS_BOT, self.sy))
 
     def _update_gimmick(self, dt: float, gimmick: str | None,
                         enemy_bullets: pygame.sprite.Group, player: "Player") -> bool:
@@ -286,7 +378,8 @@ class Boss(pygame.sprite.Sprite):
                     return True
                 self._summon_cd -= dt
                 if self._summon_cd <= 0 and self.summon_turret_fn is not None:
-                    self._summoned = list(self.summon_turret_fn(2) or [])
+                    count = 3 if self._stage_id == 3 else 2
+                    self._summoned = list(self.summon_turret_fn(count) or [])
                     self._summon_cd = _TURRET_SUMMON_CD
             return False
 
@@ -302,6 +395,79 @@ class Boss(pygame.sprite.Sprite):
         rad = math.radians(deg)
         ca, sa = math.cos(rad), math.sin(rad)
         return (nx * ca - ny * sa) * speed, (nx * sa + ny * ca) * speed
+
+    def _font(self, size: int) -> pygame.font.Font:
+        resources = getattr(self.game, "resources", None)
+        if resources is not None and hasattr(resources, "pixelfont"):
+            return resources.pixelfont(size)
+        return pygame.font.Font(None, size)
+
+    def _laser_bullet(self, by: float, *, warning: bool = False) -> EnemyBullet:
+        width = max(80, int(self.sx - 18))
+        height = 12 if warning else 46
+        bullet = EnemyBullet(
+            width / 2,
+            by,
+            0.0,
+            0.0,
+            0 if warning else 18,
+            size=(width, height),
+            color=(255, 230, 80) if warning else (255, 40, 55),
+            lifetime=0.28 if warning else 0.58,
+            terrain_passthrough=True,
+            warning_only=warning,
+        )
+        bullet.image.fill((0, 0, 0, 0))
+        if warning:
+            pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, 4, width, 4))
+            pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, 5, width, 2))
+        else:
+            pygame.draw.rect(bullet.image, (255, 35, 45, 120), (0, 0, width, height), border_radius=height // 2)
+            pygame.draw.rect(bullet.image, (255, 235, 210, 240), (0, height // 2 - 5, width, 10), border_radius=5)
+            pygame.draw.rect(bullet.image, (255, 100, 80, 190), (0, height // 2 - 15, width, 30), 2, border_radius=15)
+        return bullet
+
+    def _rock_bullet(self, sx: float, vy: float, vx: float = 0.0) -> EnemyBullet:
+        radius = random.randint(10, 17)
+        bullet = EnemyBullet(
+            sx,
+            -radius,
+            vx,
+            vy,
+            12,
+            radius=radius,
+            color=(126, 102, 76),
+            lifetime=3.8,
+        )
+        bullet.image.fill((0, 0, 0, 0))
+        pts = []
+        for i in range(9):
+            a = math.radians(i * 40 + random.uniform(-10, 10))
+            r = radius * random.uniform(0.72, 1.08)
+            pts.append((radius + math.cos(a) * r, radius + math.sin(a) * r))
+        pygame.draw.polygon(bullet.image, (126, 102, 76), pts)
+        pygame.draw.polygon(bullet.image, (190, 170, 132), pts, 2)
+        return bullet
+
+    def _shogi_bullet(self, sx: float, sy: float, vx: float, vy: float, label: str) -> EnemyBullet:
+        w, h = 30, 38
+        bullet = EnemyBullet(
+            sx,
+            sy,
+            vx,
+            vy,
+            14,
+            size=(w, h),
+            color=(214, 180, 118),
+            lifetime=3.5,
+        )
+        bullet.image.fill((0, 0, 0, 0))
+        pts = ((w // 2, 1), (w - 2, 10), (w - 5, h - 2), (5, h - 2), (2, 10))
+        pygame.draw.polygon(bullet.image, (222, 188, 120), pts)
+        pygame.draw.polygon(bullet.image, (78, 50, 26), pts, 2)
+        txt = self._font(18).render(label, True, (48, 24, 18))
+        bullet.image.blit(txt, ((w - txt.get_width()) // 2, (h - txt.get_height()) // 2 + 1))
+        return bullet
 
     def _shoot(self, enemy_bullets: pygame.sprite.Group, player: "Player") -> None:
         nx, ny  = self._aimed_dir(player)
@@ -451,6 +617,91 @@ class Boss(pygame.sprite.Sprite):
                 enemy_bullets.add(EnemyBullet(bx, by, -270.0, vy))
             enemy_bullets.add(EnemyBullet(bx, by, nx * 340, ny * 340))
 
+        # ── Stage1: 前進突き上げ。突進で距離を詰め、薄い扇と高速弾を重ねる。
+        elif pattern == "fever_lunge":
+            for deg in (-30, -15, 0, 15, 30):
+                vx, vy = self._rotated(nx, ny, deg, spd * 1.22)
+                enemy_bullets.add(EnemyBullet(bx, by, vx, vy, color=(255, 95, 75)))
+            if variant % 2 == 0:
+                enemy_bullets.add(EnemyBullet(bx - 28, by, nx * 430, ny * 430, color=(255, 210, 120)))
+
+        # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
+        elif pattern == "mega_laser":
+            if variant % 2 == 0:
+                enemy_bullets.add(self._laser_bullet(by, warning=True))
+                for off in (-56, 56):
+                    enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
+                self._shoot_delay_override = 0.62
+            else:
+                enemy_bullets.add(self._laser_bullet(by))
+                for off in (-88, 88):
+                    enemy_bullets.add(EnemyBullet(bx, by + off, -330.0, off * 0.15, 12, radius=7, color=(255, 120, 70)))
+                if self._current_gimmick() == "weakpoint":
+                    self._weak_timer = max(self._weak_timer, 1.65)
+                    self._armor = min(self._armor, _ARMOR_MAX // 2)
+                self._shoot_delay_override = 2.55
+
+        # ── Stage3: 砲台/子機の射線と交差する狙撃。
+        elif pattern == "drone_cross":
+            for origin_y in (by - 70.0, by + 70.0):
+                dx = player.sx - bx
+                dy = player.sy - origin_y
+                d = math.hypot(dx, dy) or 1.0
+                ox, oy = dx / d, dy / d
+                for deg in (-24, 0, 24):
+                    vx, vy = self._rotated(ox, oy, deg, spd * 1.25)
+                    enemy_bullets.add(EnemyBullet(bx, origin_y, vx, vy, radius=6, color=(130, 210, 255)))
+            for i in range(6):
+                a = math.radians(i * 60 + self._spiral_angle)
+                enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 185, math.sin(a) * 185, radius=5, color=(160, 180, 255)))
+            self._spiral_angle = (self._spiral_angle + spin_dir * 30) % 360
+
+        # ── Stage3/Form3: 落石。上から降る弾で横移動を要求する。
+        elif pattern == "rock_fall":
+            count = 6 + (variant % 3)
+            for i in range(count):
+                sx = 60.0 + i * (SCREEN_WIDTH - 120.0) / max(1, count - 1)
+                sx += random.uniform(-28.0, 28.0)
+                vx = random.uniform(-35.0, 35.0)
+                vy = random.uniform(225.0, 315.0)
+                enemy_bullets.add(self._rock_bullet(sx, vy, vx))
+            if variant % 2 == 0:
+                enemy_bullets.add(EnemyBullet(bx, by, nx * 360, ny * 360, radius=7, color=(205, 150, 95)))
+
+        # ── Stage4 Form1: 将棋駒の列弾。毎回違う筋に逃げ道を残す。
+        elif pattern == "shogi_file":
+            labels = ("歩", "香", "桂", "銀", "金", "角", "飛")
+            gap = variant % 5
+            for i, sy in enumerate((90.0, 190.0, 290.0, 390.0, 490.0)):
+                if i == gap:
+                    continue
+                label = labels[(variant + i) % len(labels)]
+                enemy_bullets.add(self._shogi_bullet(SCREEN_WIDTH + 18.0, sy, -245.0, (player.sy - sy) * 0.08, label))
+            if variant % 3 == 1:
+                enemy_bullets.add(self._shogi_bullet(bx, by, nx * 390, ny * 390, "王"))
+
+        # ── Stage4 Form2: ダッシュと同時に刺し込む細い高速弾。
+        elif pattern == "dash_knives":
+            for deg in (-16, -6, 6, 16):
+                vx, vy = self._rotated(nx, ny, deg, 455.0)
+                enemy_bullets.add(EnemyBullet(bx, by, vx, vy, radius=4, color=(255, 70, 130)))
+            for off in (-62, 62):
+                dx = player.sx - bx
+                dy = player.sy - (by + off)
+                d = math.hypot(dx, dy) or 1.0
+                enemy_bullets.add(EnemyBullet(bx, by + off, dx / d * 390.0, dy / d * 390.0, radius=5, color=(245, 110, 190)))
+
+        # ── Form3: 画面を広く埋めるが、2レーン分の隙間を残す。
+        elif pattern == "curtain":
+            gap = 2 + (variant % 9)
+            for i in range(15):
+                if gap <= i <= gap + 1:
+                    continue
+                sy = 34.0 + i * 38.0
+                vy = math.sin((i + variant) * 0.85) * 58.0
+                enemy_bullets.add(EnemyBullet(SCREEN_WIDTH + 18.0, sy, -248.0, vy, radius=5, color=(180, 30, 72)))
+            enemy_bullets.add(EnemyBullet(bx, by, nx * 420, ny * 420, radius=7, color=(255, 40, 80)))
+
     # ─────────────────────────────────────────
     def take_damage(self, amount: int) -> bool:
         # ── ギミックによる被ダメージ補正 ──────────────────────────
@@ -471,7 +722,7 @@ class Boss(pygame.sprite.Sprite):
             if self._stun_timer > 0:
                 dealt = int(amount * _TURRET_STUN_MULT)   # スタン中は被ダメ増
             elif self._summoned_alive() > 0:
-                dealt = max(1, int(amount * _TURRET_GUARD_MULT))  # 砲台健在で被ダメ減
+                dealt = int(amount * _TURRET_GUARD_MULT)  # 砲台健在中は本体シールド
         if dealt > 0:
             self.hit_flash_timer = 0.08   # 被弾フラッシュ
         self.hp -= dealt
