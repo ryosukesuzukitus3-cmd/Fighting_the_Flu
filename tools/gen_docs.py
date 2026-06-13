@@ -1,17 +1,24 @@
-"""design.md の AUTOGEN ブロックをコードから再生成する。
+"""design.md / CLAUDE.md / AGENTS.md の AUTOGEN ブロックをソースから再生成する。
 
 使い方:
-  python tools/gen_docs.py           # design.md を上書き更新
+  python tools/gen_docs.py           # 各ファイルを上書き更新
   python tools/gen_docs.py --check   # 差分チェックのみ（書き込まない）。差分あり→exit 1
 
 AUTOGEN ブロック形式:
   <!-- AUTOGEN:<key> START -->
   （生成内容）
   <!-- AUTOGEN:<key> END -->
+
+ブロックの種類:
+  - design.md のデータ表（enemies / items / balance / weapon_main）はコードから生成。
+  - CLAUDE.md / AGENTS.md の `agent_guide` ブロックは共有ソース
+    `docs/agent_guide_shared.md` を {{AGENT}} 置換して展開する（Claude / Codex の唯一のソース）。
+    ブロック外は各ファイル固有の自由欄として手書きできる。
 """
 from __future__ import annotations
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -26,9 +33,12 @@ import pygame
 pygame.init()
 
 DESIGN_MD = ROOT / "docs" / "design.md"
+CLAUDE_MD = ROOT / "CLAUDE.md"
+AGENTS_MD = ROOT / "AGENTS.md"
+AGENT_GUIDE_SHARED = ROOT / "docs" / "agent_guide_shared.md"
 
 
-# ── ブロック生成関数 ──────────────────────────────────────────────────
+# ── ブロック生成関数（design.md 用・コードから生成）─────────────────────
 
 def _gen_enemies() -> str:
     from src.core.registries import ENEMY_DEFS
@@ -75,7 +85,7 @@ def _gen_weapon_main() -> str:
     return "\n".join(rows)
 
 
-# ブロックキー → 生成関数のマッピング
+# ブロックキー → 生成関数のマッピング（引数なしで全ファイル共通の内容）
 _GENERATORS = {
     "enemies":      _gen_enemies,
     "items":        _gen_items,
@@ -84,18 +94,31 @@ _GENERATORS = {
 }
 
 
+def _render_agent_guide(agent: str) -> str:
+    """共有ソースを読み込み、{{AGENT}} をエージェント名に置換して返す。"""
+    text = AGENT_GUIDE_SHARED.read_text(encoding="utf-8").rstrip("\n")
+    return text.replace("{{AGENT}}", agent)
+
+
 # ── マーカー置換ロジック ────────────────────────────────────────────
 
-def _replace_blocks(text: str) -> tuple[str, list[str]]:
-    """AUTOGEN ブロックを再生成し、(新テキスト, 更新されたキー一覧) を返す。"""
-    import re
+def _replace_blocks(text: str, extra: dict[str, str] | None = None) -> tuple[str, list[str]]:
+    """AUTOGEN ブロックを再生成し、(新テキスト, 更新されたキー一覧) を返す。
+
+    extra: キー → 事前レンダリング済み文字列。_GENERATORS より優先度は低く、
+           ファイル固有の内容（agent_guide など）を渡すのに使う。
+    """
+    extra = extra or {}
     updated: list[str] = []
 
     def replacer(m: re.Match) -> str:
         key = m.group(1)
-        if key not in _GENERATORS:
+        if key in _GENERATORS:
+            content = _GENERATORS[key]()
+        elif key in extra:
+            content = extra[key]
+        else:
             return m.group(0)  # 未知キーはそのまま
-        content = _GENERATORS[key]()
         updated.append(key)
         start_marker = f"<!-- AUTOGEN:{key} START -->"
         end_marker   = f"<!-- AUTOGEN:{key} END -->"
@@ -112,29 +135,46 @@ def _replace_blocks(text: str) -> tuple[str, list[str]]:
 
 # ── エントリーポイント ────────────────────────────────────────────────
 
+def _targets() -> list[tuple[Path, dict[str, str]]]:
+    """(対象ファイル, extra) のリスト。"""
+    return [
+        (DESIGN_MD, {}),
+        (CLAUDE_MD, {"agent_guide": _render_agent_guide("Claude")}),
+        (AGENTS_MD, {"agent_guide": _render_agent_guide("Codex")}),
+    ]
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="design.md の AUTOGEN ブロックを再生成する")
+    parser = argparse.ArgumentParser(
+        description="design.md / CLAUDE.md / AGENTS.md の AUTOGEN ブロックを再生成する")
     parser.add_argument("--check", action="store_true",
                         help="差分チェックのみ（書き込まない）。差分あり→exit 1")
     args = parser.parse_args()
 
-    original = DESIGN_MD.read_text(encoding="utf-8")
-    new_text, updated = _replace_blocks(original)
+    any_drift = False
+    for path, extra in _targets():
+        original = path.read_text(encoding="utf-8")
+        new_text, updated = _replace_blocks(original, extra)
+        name = path.name
+
+        if args.check:
+            if new_text != original:
+                any_drift = True
+                print(f"AUTOGEN DRIFT: {name} の以下のブロックが最新ではありません:", file=sys.stderr)
+                for key in updated if updated else ["(不明)"]:
+                    print(f"  - {key}", file=sys.stderr)
+        else:
+            if new_text == original:
+                print(f"gen_docs: no changes ({name} is already up-to-date)")
+            else:
+                path.write_text(new_text, encoding="utf-8")
+                for key in updated:
+                    print(f"gen_docs: updated <!-- AUTOGEN:{key} --> in {name}")
 
     if args.check:
-        if new_text != original:
-            print("AUTOGEN DRIFT: design.md の以下のブロックが最新ではありません:", file=sys.stderr)
-            for key in updated if updated else ["(不明)"]:
-                print(f"  - {key}", file=sys.stderr)
+        if any_drift:
             sys.exit(1)
-        print("OK: design.md AUTOGEN ブロックは最新です。")
-    else:
-        if new_text == original:
-            print("gen_docs: no changes (design.md is already up-to-date)")
-        else:
-            DESIGN_MD.write_text(new_text, encoding="utf-8")
-            for key in updated:
-                print(f"gen_docs: updated <!-- AUTOGEN:{key} --> in design.md")
+        print("OK: AUTOGEN ブロックは最新です。")
 
 
 if __name__ == "__main__":

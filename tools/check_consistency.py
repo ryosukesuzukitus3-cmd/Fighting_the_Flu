@@ -333,7 +333,7 @@ def check_story() -> None:
 
 
 def check_docs() -> None:
-    """design.md の AUTOGEN ブロックが最新か（gen_docs.py --check）"""
+    """ガイド類（design.md / CLAUDE.md / AGENTS.md）の AUTOGEN ブロックが最新か（gen_docs.py --check）"""
     print("\n[docs]")
     import subprocess
     result = subprocess.run(
@@ -341,12 +341,15 @@ def check_docs() -> None:
         capture_output=True, text=True
     )
     if result.returncode == 0:
-        _ok("design.md AUTOGEN ブロックは最新")
+        _ok("AUTOGEN ブロックは最新（design.md / CLAUDE.md / AGENTS.md）")
     else:
-        _fail(f"design.md AUTOGEN ブロックが古い:\n{result.stderr.strip()}")
+        _fail(f"AUTOGEN ブロックが古い:\n{result.stderr.strip()}")
 
     design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
-    stale_item_terms = ("LaserItem", "HomingItem", "ShieldItem", "shield.py")
+    stale_item_terms = (
+        "LaserItem", "HomingItem", "ShieldItem", "shield.py",
+        "ScoreItem", "score_item.py",
+    )
     stale = [term for term in stale_item_terms if term in design]
     if stale:
         _fail(f"design.md に削除済みアイテム記述が残っている: {stale}")

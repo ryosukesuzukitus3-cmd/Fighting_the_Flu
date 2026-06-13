@@ -1,9 +1,3 @@
-# CLAUDE.md — インフルとの死闘 開発ガイド
-
-<!-- このファイル固有の追記は AUTOGEN ブロックの外（このコメントの上、または END 以降）に書く。
-     共有内容は docs/agent_guide_shared.md を編集し `tools/run.py docs` で両ガイドへ自動展開する。 -->
-
-<!-- AUTOGEN:agent_guide START -->
 ## SSOT 原則（反映漏れ防止）
 
 マスターデータは **1箇所だけ** に定義し、他は全てそこから導出する。
@@ -74,7 +68,7 @@
 | タイミング | 動作 |
 |---|---|
 | ターン終了時（Stopフック） | `gen_docs.py` 実行 → `check_consistency.py` 実行 |
-| 不整合があった場合 | フックが exit 2 で差し戻し、Claude がその場で修正 |
+| 不整合があった場合 | フックが exit 2 で差し戻し、{{AGENT}} がその場で修正 |
 | `pytest` | `tests/test_consistency.py` で同じ整合性を検証 |
 
 ## ツール使用方法
@@ -110,4 +104,3 @@
 # 任意状態の画面キャプチャ（見た目の自己検証用）
 .venv/Scripts/python tools/capture.py --stage 4 --boss --form 3
 ```
-<!-- AUTOGEN:agent_guide END -->
