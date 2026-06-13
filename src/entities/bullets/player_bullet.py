@@ -23,8 +23,11 @@ class NormalBullet(Bullet):
     def __init__(self, world_x: float, world_y: float) -> None:
         vx, vy = _angle_velocity(_SPEED, 0)
         super().__init__(world_x, world_y, vx=vx, vy=vy, damage=1)
+        # 暗い背景でも追えるよう、外殻＋白いコアの二層描画にする
+        # （LaserBullet / Karonaru弾と同じ表現。当たり判定サイズは従来どおり）
         self.image = pygame.Surface((14, 5), pygame.SRCALPHA)
-        pygame.draw.rect(self.image, (255, 240, 80), (0, 0, 14, 5), border_radius=2)
+        pygame.draw.rect(self.image, (255, 196, 40), (0, 0, 14, 5), border_radius=2)
+        pygame.draw.rect(self.image, (255, 255, 210), (3, 1, 8, 3), border_radius=1)
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
 
 
@@ -32,8 +35,10 @@ class WideBullet(Bullet):
     def __init__(self, world_x: float, world_y: float, angle: float = 0) -> None:
         vx, vy = _angle_velocity(_SPEED * 0.9, angle)
         super().__init__(world_x, world_y, vx=vx, vy=vy, damage=1)
+        # 青系アイテム／シアン地形に埋もれないよう外殻を濃い青、コアを白く光らせる
         self.image = pygame.Surface((12, 4), pygame.SRCALPHA)
-        pygame.draw.rect(self.image, (100, 200, 255), (0, 0, 12, 4), border_radius=2)
+        pygame.draw.rect(self.image, (40, 130, 255), (0, 0, 12, 4), border_radius=2)
+        pygame.draw.rect(self.image, (220, 245, 255), (2, 1, 7, 2), border_radius=1)
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
 
 

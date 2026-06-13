@@ -1,7 +1,56 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(touch *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(.venv/Scripts/python tools/*)",
+      "Bash(.venv/Scripts/python -m pytest*)",
+      "Bash(.venv/Scripts/python main.py*)",
+      "Bash(.venv/Scripts/pytest*)",
+      "Bash(python tools/*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git switch*)",
+      "Bash(git ls-files*)",
+      "Bash(git rev-parse*)",
+      "Bash(git remote*)",
+      "Bash(git config --get*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Read",
+      "Edit",
+      "Write"
+    ],
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(rm -rf *)",
+      "Bash(git reset *)",
+      "Bash(git rebase *)",
+      "Bash(wget *)",
+      "Read(**/.env*)",
+      "Read(id_rsa)",
+      "Read(id_ed25519)",
+      "Read(**/*token*)",
+      "Read(**/*key*)",
+      "Write(**/.env*)",
+      "Write(**/secrets/**)"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Bash(curl *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git merge *)"
     ]
   },
   "hooks": {
