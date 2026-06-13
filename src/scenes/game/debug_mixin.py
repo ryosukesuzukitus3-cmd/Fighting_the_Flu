@@ -77,8 +77,7 @@ class GameSceneDebugMixin:
         # F6: ボス即スポーン（まだボスがいない場合のみ）
         if inp.is_just_pressed(pygame.K_F6):
             if self._boss is None and self._boss_intro_state == "":  # type: ignore[attr-defined]
-                self.spawner._index      = len(self.spawner._events)  # type: ignore[attr-defined]
-                self.spawner.boss_pending = True                       # type: ignore[attr-defined]
+                self._queue_boss_spawn()  # type: ignore[attr-defined]
                 print("[DEBUG] Force boss spawn")
 
         # Ctrl+N: ステージワープ（stage_ids() でステージ数に追従）

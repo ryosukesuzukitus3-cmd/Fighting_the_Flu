@@ -242,8 +242,9 @@ class EnemySpawner:
             return camera.x + float(event["screen_x"])
         return camera.x + float(event.get("start_offset", -80))
 
-    def confirm_spawn_boss(self) -> None:
+    def confirm_spawn_boss(self, stage_id: int | None = None) -> None:
         """game_scene が ALERT 後に呼び出すことで実際にボスを生成する"""
         from src.entities.enemies.boss import Boss
-        self.boss         = Boss(self._game, stage_id=self._stage_id)
+        boss_stage_id = self._stage_id if stage_id is None else stage_id
+        self.boss         = Boss(self._game, stage_id=boss_stage_id)
         self.boss_pending = False

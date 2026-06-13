@@ -22,6 +22,27 @@
       "start_offset": -100
     }
   ],
+  "boss_terrain": [
+    {
+      "type": "TerrainStrip",
+      "theme": "fortress",
+      "profile": "normal",
+      "length": 1700,
+      "segment_w": 48,
+      "seed": 3333,
+      "gap_min": 380,
+      "gap_max": 460,
+      "center_y": 306,
+      "center_wave": 34,
+      "top_min": 38,
+      "bottom_min": 42,
+      "irregularity": 28,
+      "breakable_chance": 0.0,
+      "start_offset": -150
+    },
+    {"type": "Terrain", "screen_x": 688, "y": 78,  "w": 86, "h": 86, "kind": "wall"},
+    {"type": "Terrain", "screen_x": 714, "y": 424, "w": 94, "h": 94, "kind": "rock"}
+  ],
   "events": [
     {"time":  5.0, "type": "Terrain", "y": 0,   "w": 120, "h": 86,  "kind": "wall"},
     {"time": 12.0, "type": "Terrain", "y": 472, "w": 140, "h": 128, "kind": "rock"},

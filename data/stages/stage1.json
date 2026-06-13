@@ -21,6 +21,26 @@
       "start_offset": -90
     }
   ],
+  "boss_terrain": [
+    {
+      "type": "TerrainStrip",
+      "theme": "fever_cave",
+      "length": 1500,
+      "segment_w": 48,
+      "seed": 1111,
+      "gap_min": 390,
+      "gap_max": 470,
+      "center_y": 304,
+      "center_wave": 24,
+      "top_min": 34,
+      "bottom_min": 38,
+      "irregularity": 24,
+      "breakable_chance": 0.0,
+      "start_offset": -150
+    },
+    {"type": "Terrain", "screen_x": 700, "y": 92,  "w": 72, "h": 72, "kind": "rock"},
+    {"type": "Terrain", "screen_x": 720, "y": 438, "w": 78, "h": 78, "kind": "rock"}
+  ],
   "events": [
     {"time": 24.0, "type": "EnemyTurret", "count": 1, "surface": "bottom", "surface_offset": 20},
     {"time":  3.0, "type": "EnemyVirus", "count": 3, "formation": "line"},

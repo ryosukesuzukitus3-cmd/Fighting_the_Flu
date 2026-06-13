@@ -160,6 +160,31 @@ def test_stage_json_required_fields() -> None:
 
 # ── ボス ─────────────────────────────────────────────────────────────
 
+def test_regular_stages_define_boss_terrain() -> None:
+    for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if data.get("debug"):
+            continue
+        assert data.get("boss_terrain"), f"{p.name}: boss_terrain is empty"
+
+
+def test_boss_terrain_replaces_stage_terrain() -> None:
+    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    assert "def _replace_boss_terrain" in src
+    assert "self.terrain.empty()" in src
+    assert "self._replace_boss_terrain(self._active_boss_stage_id)" in src
+
+
+def test_debug_boss_spawn_forwards_selected_stage() -> None:
+    scene_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    spawner_src = (ROOT / "src" / "stages" / "spawner.py").read_text(encoding="utf-8")
+    panel_src = (ROOT / "src" / "scenes" / "game" / "debug_stage_panel.py").read_text(encoding="utf-8")
+
+    assert "def confirm_spawn_boss(self, stage_id: int | None = None)" in spawner_src
+    assert "confirm_spawn_boss(stage_id=self._boss_stage_id())" in scene_src
+    assert "_queue_boss_spawn(stage_for_boss)" in panel_src
+
+
 def test_preview_boss_uses_boss_phase_configs() -> None:
     src = (ROOT / "tools" / "preview_boss.py").read_text(encoding="utf-8")
     assert "_BOSS_PHASE_CONFIGS" in src, "preview_boss._ALL_PATTERNS が boss._PHASE_CONFIGS を参照していない"

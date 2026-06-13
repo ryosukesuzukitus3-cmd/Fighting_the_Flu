@@ -155,11 +155,7 @@ class DebugStagePanel:
             if self._gs._boss._stage_id == stage_for_boss:
                 self._gs._on_boss_killed()  # 同じボスを再選択 → 消す
             return
-        orig_id = self._gs._stage_id
-        self._gs._stage_id = stage_for_boss
-        self._gs.spawner._index      = len(self._gs.spawner._events)
-        self._gs.spawner.boss_pending = True
-        self._gs._stage_id = orig_id
+        self._gs._queue_boss_spawn(stage_for_boss)
 
     # ── draw ──────────────────────────────────────────────────────
 

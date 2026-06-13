@@ -21,6 +21,26 @@
       "start_offset": -90
     }
   ],
+  "boss_terrain": [
+    {
+      "type": "TerrainStrip",
+      "theme": "meme_static",
+      "length": 1600,
+      "segment_w": 48,
+      "seed": 2222,
+      "gap_min": 400,
+      "gap_max": 500,
+      "center_y": 300,
+      "center_wave": 30,
+      "top_min": 28,
+      "bottom_min": 32,
+      "irregularity": 30,
+      "breakable_chance": 0.0,
+      "start_offset": -150
+    },
+    {"type": "Terrain", "screen_x": 696, "y": 82,  "w": 76, "h": 76, "kind": "debris"},
+    {"type": "Terrain", "screen_x": 716, "y": 432, "w": 88, "h": 88, "kind": "debris"}
+  ],
   "events": [
     {"time":  6.0, "type": "Terrain", "y": 120, "w": 60,  "h": 60, "kind": "debris"},
     {"time": 16.0, "type": "Terrain", "y": 268, "w": 260, "h": 64, "kind": "debris"},

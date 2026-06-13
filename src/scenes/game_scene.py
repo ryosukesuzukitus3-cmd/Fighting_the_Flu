@@ -92,6 +92,8 @@ class GameScene(
         )
         self.spawner.spawn_terrain_events(self.stage.initial_terrain, self.camera)
         self._boss_terrain_spawned = False
+        self._pending_boss_stage_id: int | None = None
+        self._active_boss_stage_id: int | None = None
         self._boss     = None
         self.particles = ParticleSystem()
         self._buf      = pygame.Surface(self.game.screen.get_size())
@@ -244,6 +246,24 @@ class GameScene(
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
 
+    def _boss_stage_id(self) -> int:
+        return self._active_boss_stage_id or self._pending_boss_stage_id or self._stage_id
+
+    def _queue_boss_spawn(self, stage_id: int | None = None) -> None:
+        self._pending_boss_stage_id = self._stage_id if stage_id is None else stage_id
+        self.spawner._index = len(self.spawner._events)
+        self.spawner.boss_pending = True
+
+    def _boss_stage_data(self, stage_id: int) -> Stage:
+        if stage_id == self._stage_id:
+            return self.stage
+        return Stage(self.game, stage_id=stage_id)
+
+    def _replace_boss_terrain(self, stage_id: int) -> None:
+        boss_stage = self._boss_stage_data(stage_id)
+        self.terrain.empty()
+        self.spawner.spawn_terrain_events(boss_stage.boss_terrain, self.camera)
+
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
         # Hitstop slows movement updates for a short impact moment.
@@ -352,8 +372,9 @@ class GameScene(
 
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
+            self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
             if not self._boss_terrain_spawned:
-                self.spawner.spawn_terrain_events(self.stage.boss_terrain, self.camera)
+                self._replace_boss_terrain(self._active_boss_stage_id)
                 self._boss_terrain_spawned = True
             self._boss_intro_state = "alert"
             self._boss_intro_timer = ALERT_DURATION
@@ -488,7 +509,8 @@ class GameScene(
                 and self._final_phase == 0
                 and not self._boss_mid_dialogue_shown
                 and self._boss.hp / self._boss.max_hp <= 0.5):
-            mid_key = "4f2mid" if getattr(self._boss, "_form2", False) else f"{self._stage_id}mid"
+            boss_stage_id = self._boss_stage_id()
+            mid_key = "4f2mid" if getattr(self._boss, "_form2", False) else f"{boss_stage_id}mid"
             if mid_key in BOSS_MID:
                 self._enqueue_boss_dialogue(BOSS_MID[mid_key], BOSS_MID_LINE_DURATION)
                 self._boss_mid_dialogue_shown = True
@@ -514,8 +536,9 @@ class GameScene(
         if state == "alert":
             self._boss_intro_timer -= dt
             if self._boss_intro_timer <= 0:
-                self.spawner.confirm_spawn_boss()
+                self.spawner.confirm_spawn_boss(stage_id=self._boss_stage_id())
                 self._boss = self.spawner.boss
+                self._pending_boss_stage_id = None
                 # 砲台連動ギミック用の召喚コールバックを注入
                 self._boss.summon_turret_fn = self._summon_boss_turrets
                 self._boss_intro_state = "entering"
@@ -524,7 +547,7 @@ class GameScene(
             self._boss_intro_timer -= dt
             if self._boss_intro_timer <= 0:
                 # ボスセリフへ
-                pages = BOSS_INTRO.get(self._stage_id, [])
+                pages = BOSS_INTRO.get(self._boss_stage_id(), [])
                 if pages:
                     self._boss_intro_pages    = pages
                     self._boss_intro_page_idx = 0
@@ -545,10 +568,11 @@ class GameScene(
                 self._boss_intro_state = "fighting"
 
     def _start_boss_name(self) -> None:
-        self._boss_name_text   = BOSS_NAMES.get(self._stage_id, "")
+        boss_stage_id = self._boss_stage_id()
+        self._boss_name_text   = BOSS_NAMES.get(boss_stage_id, "")
         self._boss_intro_state = "boss_name"
         self._boss_intro_timer = BOSS_NAME_DURATION
-        self.game.sound.play_bgm(BOSS_BGM.get(self._stage_id, "music/bgm/決戦.mp3"))
+        self.game.sound.play_bgm(BOSS_BGM.get(boss_stage_id, "music/bgm/決戦.mp3"))
 
     def _start_fight_banner(self) -> None:
         self._boss_intro_state = "fight_banner"
@@ -968,7 +992,7 @@ class GameScene(
         self.enemy_bullets.empty()
         self.player._invincible_timer = max(self.player._invincible_timer, 2.5)
         self._form2_flash_timer = 0.5
-        f2_key = f"{self._stage_id}f2"
+        f2_key = f"{self._boss_stage_id()}f2"
         self._enqueue_boss_dialogue(BOSS_MID.get(f2_key, []), BOSS_MID_LINE_DURATION)
         self._boss_mid_dialogue_shown = False
 
@@ -1004,7 +1028,8 @@ class GameScene(
         self.player._invincible_timer = max(self.player._invincible_timer, 2.5)
         self._boss_kill_flash_timer = 1.2
         self.game.sound.stop_bgm(fadeout_ms=600)
-        self.game.sound.play_bgm(BOSS_BGM.get(self._stage_id, "music/bgm/決戦.mp3"))
+        boss_stage_id = self._boss_stage_id()
+        self.game.sound.play_bgm(BOSS_BGM.get(boss_stage_id, "music/bgm/決戦.mp3"))
         self._final_phase = 1
         self._final_seq   = ""
         self._show_final_banner("true_final", 3.0)

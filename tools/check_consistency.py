@@ -246,6 +246,8 @@ def check_stages() -> None:
         for section in ("initial_terrain", "boss_terrain"):
             for i, ev in enumerate(data.get(section, [])):
                 validate_terrain_event(f"{p.name} {section}[{i}]", ev)
+        if not data.get("boss_terrain"):
+            _fail(f"{p.name}: boss_terrain is empty")
     _ok("stage JSON: 全イベントの必須フィールド・formation OK")
 
 

@@ -161,6 +161,10 @@ class GameScenePostBossMixin:
         if getattr(self, "_is_debug_stage", False):  # type: ignore[attr-defined]
             self._boss = None  # type: ignore[attr-defined]
             self._boss_intro_state = ""  # type: ignore[attr-defined]
+            self._active_boss_stage_id = None  # type: ignore[attr-defined]
+            self._pending_boss_stage_id = None  # type: ignore[attr-defined]
+            self._boss_terrain_spawned = False  # type: ignore[attr-defined]
+            self.terrain.empty()  # type: ignore[attr-defined]
             self.enemy_bullets.empty()  # type: ignore[attr-defined]
             self.laser.state = "ready"  # type: ignore[attr-defined]
             return
