@@ -81,15 +81,71 @@
 
 問題調査からPR作成までを任せる依頼では、Claude は以下を標準手順にする。
 
-1. `git status --short --branch` で未コミット変更を確認し、ユーザー作業を巻き込まない
-2. 作業ブランチは担当エージェントの小文字prefixで切る（Claude→`claude/{短い内容}`、Codex→`codex/{短い内容}`。例: `claude/fix-stage4-boss-ui`）
-3. `rg`・コード読解・`docs/design.md` で仕様とSSOTを確認し、必要なら `data/stages/*.json` も見る
-4. 見た目や挙動の疑いがある場合は `tools/run.py capture ...` でPNGを取り、必要なら `tools/run.py game` か `tools/run.py preview-boss ...` で実プレイ確認する
-5. 修正はSSOTに沿って最小範囲に入れ、手動生成が必要な資料は `tools/run.py docs` で再生成する
-6. `tools/run.py check` と、影響範囲に応じて `tools/run.py test` / `tools/run.py pycompile` / 再キャプチャを実行する
-7. 差分・検証結果・確認したキャプチャをPR本文にまとめ、GitHub CLI が使える環境では push してPRを作成する
+1. 管理用フォルダ `C:\02_work\01_Fighting_the_Flu` では編集せず、タスク別 worktree で作業する
+2. `git status --short --branch` で未コミット変更を確認し、ユーザー作業を巻き込まない
+3. 作業ブランチは担当エージェントの小文字prefixで切る（Claude→`claude/{短い内容}`、Codex→`codex/{短い内容}`。例: `claude/fix-stage4-boss-ui`）
+4. worktree フォルダは `C:\02_work\01_Fighting_the_Flu-worktrees\flu-{agent}-{短い内容}` に作る
+5. worktree ごとに `.venv` を作成し、管理用フォルダの `.venv` は標準運用では共用しない
+6. `rg`・コード読解・`docs/design.md` で仕様とSSOTを確認し、必要なら `data/stages/*.json` も見る
+7. 見た目や挙動の疑いがある場合は `tools/run.py capture ...` でPNGを取り、必要なら `tools/run.py game` か `tools/run.py preview-boss ...` で実プレイ確認する
+8. 修正はSSOTに沿って最小範囲に入れ、手動生成が必要な資料は `tools/run.py docs` で再生成する
+9. `tools/run.py check` と、影響範囲に応じて `tools/run.py test` / `tools/run.py pycompile` / 再キャプチャを実行する
+10. 差分・検証結果・確認したキャプチャをPR本文にまとめ、GitHub CLI が使える環境では push してPRを作成する
 
 再現に使ったキャプチャは `captures/` 配下に出力する。調査用の一時画像をPRに含めない場合は、最終差分へ混ぜず、PR本文やコメントでファイル名だけ共有する。
+
+### worktree 運用
+
+`C:\02_work\01_Fighting_the_Flu` は管理用 main フォルダとして扱い、`main` の同期・worktree 作成・worktree 削除だけに使う。実作業は必ず `C:\02_work\01_Fighting_the_Flu-worktrees` 配下のタスク別 worktree で行う。
+
+```powershell
+# Codex の新規タスク
+cd C:\02_work\01_Fighting_the_Flu
+git fetch --prune origin
+git worktree add C:\02_work\01_Fighting_the_Flu-worktrees\flu-codex-some-task -b codex/some-task origin/main
+
+# Claude の新規タスク
+cd C:\02_work\01_Fighting_the_Flu
+git fetch --prune origin
+git worktree add C:\02_work\01_Fighting_the_Flu-worktrees\flu-claude-some-task -b claude/some-task origin/main
+```
+
+各 worktree の初回セットアップは、その worktree 内で行う。
+
+```powershell
+cd C:\02_work\01_Fighting_the_Flu-worktrees\flu-codex-some-task
+py -3 -m venv .venv
+.venv\Scripts\python -m pip install -U pip
+.venv\Scripts\python -m pip install -e ".[dev]" markdown
+.venv\Scripts\python tools\run.py check
+```
+
+`tools\run.py pr-report --fancy` を使うタスクだけ、追加で `anthropic` を入れる。
+
+```powershell
+.venv\Scripts\python -m pip install anthropic
+```
+
+PR がマージされたら、該当 worktree とマージ済みブランチを削除する。未コミット変更がある worktree は削除しない。
+
+```powershell
+cd C:\02_work\01_Fighting_the_Flu
+git worktree remove C:\02_work\01_Fighting_the_Flu-worktrees\flu-codex-some-task
+git branch -d codex/some-task
+git push origin --delete codex/some-task
+```
+
+### PR 可視化
+
+PR 本文に載せる画像やHTMLは `media` ブランチへアップロードする。`media` はホスティング専用ブランチで、`main` にはマージしない。
+
+```powershell
+.venv\Scripts\python tools\run.py pr-media captures\before.png captures\after.png
+.venv\Scripts\python tools\run.py pr-html .html\report.html
+.venv\Scripts\python tools\run.py pr-report docs\design.md
+```
+
+`gh` は `PATH` を優先し、見つからない場合は `GH_EXE`、`~/bin/gh.exe`、`C:\Program Files\GitHub CLI\gh.exe`、現在の venv の `Scripts\gh.exe` の順に探す。
 
 ## ツール使用方法
 
