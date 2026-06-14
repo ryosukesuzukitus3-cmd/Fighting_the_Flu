@@ -32,7 +32,9 @@ class Speaker:
     key:     str
     name:    str                      # ネームプレート表示名（""=非表示）
     color:   tuple[int, int, int]
-    portrait: str | None = None       # 会話ウィンドウ表示用ポートレート画像（None=非表示）
+    portrait: str | None = None       # 顔アイコン画像（戦闘パネル等。None=非表示）
+    tachie:   str | None = None       # 立ち絵（全身）画像。ストーリーパネルで優先使用。
+                                      # None のときは portrait（顔）にフォールバックする。
 
 
 # key → Speaker。name が "" の話者はネームプレートを描画しない。
@@ -69,6 +71,27 @@ def speaker_color(key: str) -> tuple[int, int, int]:
 
 
 def speaker_portrait(key: str) -> str | None:
-    """話者のポートレート画像パスを返す（未設定/未登録は None=非表示）。"""
+    """話者の顔アイコン画像パスを返す（未設定/未登録は None=非表示）。"""
     sp = SPEAKERS.get(key)
     return sp.portrait if sp is not None else None
+
+
+def speaker_tachie(key: str) -> str | None:
+    """話者の立ち絵画像パスを返す（未設定は None＝顔アイコンにフォールバック）。"""
+    sp = SPEAKERS.get(key)
+    return sp.tachie if sp is not None else None
+
+
+# ── 陣営（立ち絵の左右割り当て用） ────────────────────────────────
+# 味方は左、敵は右。味方同士は主人公(澤口)を左、先輩を右に置く。
+ALLY_SPEAKERS = {SAWAGUCHI, KARONARU, KARONARU_MAX}
+
+
+def is_ally(key: str) -> bool:
+    return key in ALLY_SPEAKERS
+
+
+def is_character(key: str) -> bool:
+    """立ち絵/顔を持つ登場人物か（Narration/SYSTEM 等は False）。"""
+    sp = SPEAKERS.get(key)
+    return bool(sp and (sp.portrait or sp.tachie))

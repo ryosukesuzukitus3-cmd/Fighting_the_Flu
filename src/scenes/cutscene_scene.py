@@ -55,6 +55,8 @@ class CutsceneScene(Scene):
         self._fade_out_active = False
         self._fade_out_t = 0.0
         self._finished   = False    # on_complete 多重呼び防止
+        self._story_active  = None   # 直近に話した登場人物（立ち絵ハイライト用）
+        self._story_partner = None   # その前に話した登場人物（会話相手）
         if self._stop_bgm:
             self.game.sound.stop_bgm()
         elif self._bgm_alias:
@@ -74,6 +76,11 @@ class CutsceneScene(Scene):
         if not self._pages:
             return
         pg = self._cur()
+        # 立ち絵ハイライト用に直近2人の登場人物を記録（味方左/敵右の割り当ては描画時）
+        from src.story.speakers import is_character
+        if is_character(pg.speaker) and pg.speaker != self._story_active:
+            self._story_partner = self._story_active
+            self._story_active = pg.speaker
         if pg.se:
             self.game.sound.play_se_alias(pg.se)
         if "shake" in pg.fx or "blackhole" in pg.fx:
@@ -272,11 +279,15 @@ class CutsceneScene(Scene):
         pg = self._cur()
 
         glitch = self._glitch_t > 0
+        from src.scenes.dialogue_panel import story_sides
+        left_sp, right_sp = story_sides(self._story_active, self._story_partner)
         draw_story_panel(
             screen,
             self.game.resources,
             pg.speaker,
             pg.lines,
+            left_speaker=left_sp,
+            right_speaker=right_sp,
             chars=int(self._chars),
             page_index=self._page,
             total_pages=len(self._pages),
@@ -288,6 +299,7 @@ class CutsceneScene(Scene):
             text_transform=self._glitch_text if glitch else None,
             text_color=(210, 60, 60) if glitch else None,
             text_jitter=6 if glitch else 0,
+            center=("center" in pg.fx),   # 強調ページ（fx に "center"）は中央寄せ
         )
 
         # フラッシュ（白）
