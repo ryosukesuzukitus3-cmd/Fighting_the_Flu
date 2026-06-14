@@ -306,10 +306,14 @@ class GameScene(
 
         inp = self.game.input
 
-        # Pause toggle.
-        if not self._upgrading and inp.is_action_just_pressed("pause"):
-            self._paused = not self._paused
+        # Pause toggle (open only). Closing is handled in _update_pause(), so we
+        # return here to keep the same keypress from being consumed twice in one
+        # frame (open then immediately close), which left pause unusable.
+        if (not self._upgrading and not self._paused
+                and inp.is_action_just_pressed("pause")):
+            self._paused = True
             self._pause_cursor = 0
+            return
 
         # Open weapon upgrade when stock is available.
         if (not self._upgrading and not self._paused
