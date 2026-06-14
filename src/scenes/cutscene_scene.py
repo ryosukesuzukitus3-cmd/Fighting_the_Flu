@@ -13,8 +13,8 @@ import pygame
 
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.scenes.dialogue_panel import DARK_STYLE, LIGHT_STYLE, draw_story_panel
 from src.story.lines import Page
-from src.story.speakers import speaker_name, speaker_color, speaker_portrait, DEFAULT_TEXT_COLOR
 
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
 _TYPE_SE_INTERVAL = 0.045
@@ -271,59 +271,24 @@ class CutsceneScene(Scene):
             return
         pg = self._cur()
 
-        # 話者ネームプレート（テキストブロックの上・中央）
-        name = speaker_name(pg.speaker)
-        block_top = cy - (len(pg.lines) * 40) // 2
-        # 発言者ポートレート（ネームプレートのさらに上・中央）。画像が無い話者は非表示。
-        portrait = speaker_portrait(pg.speaker)
-        if portrait:
-            raw  = self.game.resources.image(portrait)
-            psz  = 88
-            pimg = pygame.transform.smoothscale(raw, (psz, psz)).convert_alpha()
-            px   = cx - psz // 2
-            py   = block_top - 44 - psz - 4
-            screen.blit(pimg, (px, py))
-            pygame.draw.rect(screen, speaker_color(pg.speaker), (px, py, psz, psz), 2, border_radius=6)
-        # 暗い/賑やかな背景では文字に黒い縁取りを付けて可読性を上げる。
-        # 明るい窓テーマ（暗い本文＝もともと読める）では付けない。
-        outline = not is_light_bg
-        if name:
-            ncol = speaker_color(pg.speaker)
-            self._blit_outlined(screen, self._font_name, name, ncol,
-                                 cx, block_top - 44, outline=outline)
-
-        # 本文（タイプライター）。文字化け中はランダム置換＋横ずれ。
-        body_col = (50, 40, 30) if is_light_bg else DEFAULT_TEXT_COLOR
         glitch = self._glitch_t > 0
-        chars_left = int(self._chars)
-        line_y = block_top
-        for ln in pg.lines:
-            if chars_left <= 0:
-                break
-            visible = ln[:chars_left]
-            chars_left -= len(ln)
-            if visible:
-                draw_text = self._glitch_text(visible) if glitch else visible
-                gcol = (210, 60, 60) if glitch else body_col
-                surf = self._font_body.render(draw_text, True, gcol)
-                gx = cx - surf.get_width() // 2 + (random.randint(-6, 6) if glitch else 0)
-                self._blit_outlined(screen, self._font_body, draw_text, gcol,
-                                    cx, line_y, outline=outline, x=gx)
-            line_y += 40
-
-        # ページインジケーター
-        dot_col = (130, 110, 80) if is_light_bg else (80, 100, 130)
-        dots = "  ".join("●" if i == self._page else "○" for i in range(len(self._pages)))
-        dsurf = self._font_hint.render(dots, True, dot_col)
-        screen.blit(dsurf, (SCREEN_WIDTH // 2 - dsurf.get_width() // 2, SCREEN_HEIGHT - 80))
-
-        # ヒント（点滅）
-        if self._is_complete() and int(self._blink * 2) % 2 == 0:
-            hint_col = (120, 100, 70) if is_light_bg else (100, 120, 160)
-            is_last = (self._page == len(self._pages) - 1)
-            txt = "ENTER: 続ける   X: スキップ" if is_last else "ENTER: 次へ   X: スキップ"
-            hsurf = self._font_hint.render(txt, True, hint_col)
-            screen.blit(hsurf, (SCREEN_WIDTH // 2 - hsurf.get_width() // 2, SCREEN_HEIGHT - 46))
+        draw_story_panel(
+            screen,
+            self.game.resources,
+            pg.speaker,
+            pg.lines,
+            chars=int(self._chars),
+            page_index=self._page,
+            total_pages=len(self._pages),
+            complete=self._is_complete(),
+            blink=self._blink,
+            hint_last="ENTER: 続ける   X: スキップ",
+            hint_next="ENTER: 次へ   X: スキップ",
+            style=LIGHT_STYLE if is_light_bg else DARK_STYLE,
+            text_transform=self._glitch_text if glitch else None,
+            text_color=(210, 60, 60) if glitch else None,
+            text_jitter=6 if glitch else 0,
+        )
 
         # フラッシュ（白）
         if self._flash_t > 0:

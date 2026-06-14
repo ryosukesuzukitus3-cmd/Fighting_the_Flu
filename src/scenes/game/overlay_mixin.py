@@ -8,6 +8,12 @@ from src.scenes.game.config import (
     BOSS_DIALOGUE_DURATION, BOSS_NAME_DURATION,
     ALERT_DURATION, FIGHT_BANNER_DURATION,
 )
+from src.scenes.dialogue_panel import (
+    COMBAT_BLUE_STYLE,
+    COMBAT_PURPLE_STYLE,
+    COMBAT_RED_STYLE,
+    draw_combat_panel,
+)
 from src.story.speakers import speaker_name, speaker_color, speaker_portrait
 
 
@@ -133,25 +139,17 @@ class GameSceneOverlayMixin:
         line  = pages[idx]
         total = len(pages)
 
-        box_h = 80
-        box_y = SCREEN_HEIGHT - box_h - 20
-
-        overlay = pygame.Surface((SCREEN_WIDTH - 40, box_h), pygame.SRCALPHA)
-        overlay.fill((10, 0, 30, 210))
-        pygame.draw.rect(overlay, (180, 60, 60, 200),
-                         (0, 0, SCREEN_WIDTH - 40, box_h), 2, border_radius=6)
-        screen.blit(overlay, (20, box_y))
-
-        self._draw_speaker_nameplate(screen, line.speaker, 20, box_y)
-        text_x = self._draw_speaker_portrait(screen, line.speaker, 20, box_y, box_h)
-
-        surf = self._intro_dialogue_font.render(line.text, True, (255, 240, 200))  # type: ignore[attr-defined]
-        screen.blit(surf, (text_x, box_y + (box_h - surf.get_height()) // 2))
-
-        # ページ番号 + ENTERヒント
-        hint_font = self.game.resources.pixelfont(16)  # type: ignore[attr-defined]
-        hint = hint_font.render(f"{idx + 1}/{total}  ENTER: 次へ", True, (140, 120, 160))
-        screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 28, box_y + box_h - hint.get_height() - 4))
+        hint = f"{idx + 1}/{total}  ENTER: 次へ" if idx < total - 1 else "ENTER: 戦闘開始"
+        draw_combat_panel(
+            screen,
+            self.game.resources,  # type: ignore[attr-defined]
+            line.speaker,
+            (line.text,),
+            page_index=idx,
+            total_pages=total,
+            hint_text=hint,
+            style=COMBAT_RED_STYLE,
+        )
 
     # ── FIGHT! バナー ──────────────────────────────────────────
     def _draw_fight_banner(self, screen: pygame.Surface) -> None:
@@ -174,24 +172,19 @@ class GameSceneOverlayMixin:
         if self._boss_dialogue_font is None:  # type: ignore[attr-defined]
             self._boss_dialogue_font = self.game.resources.pixelfont(26)  # type: ignore[attr-defined]
 
-        t = self._boss_dialogue_timer / BOSS_DIALOGUE_DURATION  # type: ignore[attr-defined]
+        line_dur = getattr(self, "_boss_dialogue_line_dur", BOSS_DIALOGUE_DURATION)
+        t = self._boss_dialogue_timer / line_dur  # type: ignore[attr-defined]
         alpha = 240 if t > 0.15 else int(240 * (t / 0.15))
 
-        box_h = 64
-        box_y = SCREEN_HEIGHT - box_h - 20
-        overlay = pygame.Surface((SCREEN_WIDTH - 40, box_h), pygame.SRCALPHA)
-        overlay.fill((10, 0, 30, min(200, alpha)))
-        pygame.draw.rect(overlay, (100, 80, 160, min(alpha, 180)),
-                         (0, 0, SCREEN_WIDTH - 40, box_h), 2, border_radius=6)
-        screen.blit(overlay, (20, box_y))
-
         speaker = getattr(self, "_boss_dialogue_speaker", "")
-        self._draw_speaker_nameplate(screen, speaker, 20, box_y, alpha=alpha)
-        text_x = self._draw_speaker_portrait(screen, speaker, 20, box_y, box_h, alpha=alpha)
-
-        text = self._boss_dialogue_font.render(self._boss_dialogue_text, True, (255, 240, 200))  # type: ignore[attr-defined]
-        text.set_alpha(alpha)
-        screen.blit(text, (text_x, box_y + (box_h - text.get_height()) // 2))
+        draw_combat_panel(
+            screen,
+            self.game.resources,  # type: ignore[attr-defined]
+            speaker,
+            (self._boss_dialogue_text,),  # type: ignore[attr-defined]
+            style=COMBAT_PURPLE_STYLE,
+            alpha=alpha,
+        )
 
     # ── ボス撃破後セリフ（ENTERで送る）────────────────────────
     def _draw_defeat_dialogue(self, screen: pygame.Surface) -> None:
@@ -205,24 +198,17 @@ class GameSceneOverlayMixin:
         line  = pages[idx]
         total = len(pages)
 
-        box_h = 80
-        box_y = SCREEN_HEIGHT - box_h - 20
-
-        overlay = pygame.Surface((SCREEN_WIDTH - 40, box_h), pygame.SRCALPHA)
-        overlay.fill((0, 10, 30, 210))
-        pygame.draw.rect(overlay, (60, 120, 180, 200),
-                         (0, 0, SCREEN_WIDTH - 40, box_h), 2, border_radius=6)
-        screen.blit(overlay, (20, box_y))
-
-        self._draw_speaker_nameplate(screen, line.speaker, 20, box_y)
-        text_x = self._draw_speaker_portrait(screen, line.speaker, 20, box_y, box_h)
-
-        surf = self._defeat_dialogue_font.render(line.text, True, (200, 230, 255))  # type: ignore[attr-defined]
-        screen.blit(surf, (text_x, box_y + (box_h - surf.get_height()) // 2))
-
-        hint_font = self.game.resources.pixelfont(16)  # type: ignore[attr-defined]
         if idx < total - 1:
-            hint = hint_font.render(f"{idx + 1}/{total}  ENTER: 次へ", True, (100, 140, 180))
+            hint = f"{idx + 1}/{total}  ENTER: 次へ"
         else:
-            hint = hint_font.render("ENTER: 続ける", True, (100, 180, 140))
-        screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 28, box_y + box_h - hint.get_height() - 4))
+            hint = "ENTER: 続ける"
+        draw_combat_panel(
+            screen,
+            self.game.resources,  # type: ignore[attr-defined]
+            line.speaker,
+            (line.text,),
+            page_index=idx,
+            total_pages=total,
+            hint_text=hint,
+            style=COMBAT_BLUE_STYLE,
+        )
