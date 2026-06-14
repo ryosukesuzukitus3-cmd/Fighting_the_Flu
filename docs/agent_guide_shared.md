@@ -31,7 +31,7 @@
 
 ### ステージを追加するとき
 
-1. `data/stages/stage{N}.json` を作成（`stage_id`・`bgm`・`events` を記述）
+1. `data/stages/stage{N}.json` を作成（`stage_id`・`bgm`・`terrain_layout`・`events` / `world_events` を記述）
 2. `src/scenes/game/config.py` > `STAGE_NAMES`・`BOSS_NAMES` に追加
 3. `src/story/script.py` > `STAGE_INTRO`・`BOSS_INTRO`・`BOSS_MID`・`BOSS_DEFEAT` にセリフを追加
 4. `src/entities/enemies/boss.py` > `_BOSS_CONFIG`・`_PHASE_CONFIGS` に追加

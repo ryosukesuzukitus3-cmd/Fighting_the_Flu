@@ -386,7 +386,7 @@ Player.update()
 | クラス | ファイル | 責務 |
 |---|---|---|
 | `Stage` | stages/stage.py | ステージ全体の管理（JSONロード・クリア判定） |
-| `EnemySpawner` | stages/spawner.py | ステージJSONに基づく敵の時間スケジュール管理 |
+| `EnemySpawner` | stages/spawner.py | ステージJSONに基づく time / world_x イベント管理 |
 
 ### 5.4 プール系（core/pools）
 
@@ -508,7 +508,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 │   │       └── heal.py                 HealItem（HP回復）
 │   ├── stages/
 │   │   ├── stage.py                    Stage（JSONロード・クリア判定）
-│   │   └── spawner.py                  EnemySpawner（時間スケジュール管理）
+│   │   └── spawner.py                  EnemySpawner（time / world_x イベント管理）
 │   └── managers/
 │       ├── resource.py                 ResourceManager（素材ロード・キャッシュ）
 │       ├── sound.py                    SoundManager（BGMストリーミング・SE再生）
@@ -561,23 +561,21 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 {
   "stage_id": 1,
   "bgm": "The_world_of_spirit_short.mp3",
-  "events": [
+  "terrain_layout": [
     {
-      "time": 0.0,
       "type": "TerrainStrip",
       "theme": "fever_cave",
       "length": 4400,
       "gap_min": 380,
       "gap_max": 480,
+      "start_offset": -90,
       "breakable_chance": 0.1
-    },
-    {
-      "time": 24.0,
-      "type": "EnemyTurret",
-      "count": 1,
-      "surface": "bottom",
-      "surface_offset": 20
-    },
+    }
+  ],
+  "world_events": [
+    {"type": "EnemyTurret", "x": 2770, "count": 1, "surface": "bottom", "surface_offset": 20}
+  ],
+  "events": [
     {
       "time": 3.0,
       "type": "EnemyVirus",
@@ -601,6 +599,11 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 }
 ```
 
+地形や固定配置は `terrain_layout` / `world_events` に `world_x` 基準で書く。これにより、山・砦・ゲート・砲台足場・中ボス戦闘エリアを、時間経過ではなくステージ座標に固定して設計できる。
+既存互換として、スクロールに依存しない通常ウェーブやボス登場は `events` の `time` スケジュールを使える。
+
+#### 時間イベント（`events`）
+
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | ○ | ステージ開始からの経過秒数（出現タイミング） |
@@ -612,6 +615,27 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `surface_offset` / `surface_step` | — | `surface` 指定時の表面からの中心オフセット・複数出現時の横間隔 |
 | `enhanced` | — | `true` で強化版パラメータを使用（省略時は通常版） |
 
+#### world_xイベント（`world_events`）
+
+`world_events` は画面右端が対象Xに近づいたタイミングで出現する。`x` / `world_x` は配置座標、`trigger_x` は発火判定だけを別にしたい場合に使う。
+
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `type` | ○ | 敵の種別。`EnemyTurret` など固定配置したい敵に使う |
+| `x` / `world_x` | △ | 配置X座標。`trigger_x` だけを使う場合以外は指定する |
+| `trigger_x` | — | 出現判定X。省略時は `x` / `world_x` |
+| `count` | — | 出現数（既定1） |
+| `formation` | △ | `line` / `v_shape` / `random`。`y` / `surface` 指定時は省略可 |
+| `y` | — | 配置Y座標を固定 |
+| `surface` | — | `top` / `bottom`。TerrainStrip や固定地形ブロックの表面に吸着する |
+| `preload` / `spawn_margin` | — | 画面右端から何px手前で生成するか（既定80px） |
+
+#### 地形レイアウト（`terrain_layout`）
+
+`terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
+固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `turret_mount` を使える。`gate` / `breakable_gate` は既定で破壊可能になる。
+連続地形は `TerrainStrip` のほか、`cave_section` / `corridor` を別名として使える。
+
 #### 地形イベント（`type: "Terrain"`）
 
 上下の壁・障害物・デブリをステージごとに配置する（宇宙系はデブリまばら、岩石系は壁・岩が多い等、
@@ -619,12 +643,14 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
-| `time` | ○ | 出現タイミング（秒） |
-| `type` | ○ | `"Terrain"` |
+| `time` | △ | `events` に書く場合の出現タイミング（秒）。`terrain_layout` では不要 |
+| `type` | ○ | `"Terrain"` / `"solid"` / `"platform"` / `"gate"` / `"breakable_gate"` / `"turret_mount"` |
+| `x` / `world_x` | — | ワールドX座標。省略時は `screen_x` / `start_offset` / 画面右端基準 |
+| `screen_x` / `start_offset` | — | カメラ位置からの相対配置 |
 | `y` | ○ | 配置Y座標（左上基準） |
 | `w` / `h` | ○ | 幅・高さ（px） |
 | `kind` | ○ | 見た目種別（`wall` / `rock` / `debris`） |
-| `destructible` | — | `true` で破壊可能地形にする（城門・封鎖壁など） |
+| `destructible` | — | `true` で破壊可能地形にする（城門・封鎖壁など）。`gate` / `breakable_gate` は既定で `true` |
 | `hp` | — | 破壊可能地形のHP |
 | `drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
 
@@ -635,8 +661,8 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
-| `time` | ○ | 生成タイミング（秒） |
-| `type` | ○ | `"TerrainStrip"` |
+| `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
+| `type` | ○ | `"TerrainStrip"` / `"cave_section"` / `"corridor"` |
 | `theme` | ○ | 見た目テーマ（`fever_cave` / `debris` / `meme_static` / `fortress` / `shogi_void`） |
 | `length` | ○ | 生成する横幅（px） |
 | `segment_w` | — | 1セグメントの横幅（既定64px） |
@@ -648,6 +674,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `breakable_chance` | — | 通路側に張り出した破壊可能岩の出現率（0.0〜1.0）。壁全体は消えない |
 | `breakable_hp` | — | 破壊可能岩のHP |
 | `breakable_drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
+| `x` / `world_x` | — | ワールドX座標。省略時は `start_offset` 基準 |
 | `start_offset` | — | 生成開始Xの補正（画面左から始める場合は負値） |
 | `seed` | — | 形状・模様の固定乱数シード |
 

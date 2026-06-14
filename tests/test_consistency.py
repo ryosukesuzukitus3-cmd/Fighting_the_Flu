@@ -52,16 +52,20 @@ def test_balance_sheet_enemy_keys_match_registry() -> None:
 
 def test_stage_json_enemy_types_in_registry() -> None:
     from src.core.registries import ENEMY_NAMES
-    valid = set(ENEMY_NAMES) | {"Boss", "Terrain", "TerrainStrip"}
+    terrain_types = {
+        "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
+        "turret_mount", "cave_section", "corridor",
+    }
+    valid = set(ENEMY_NAMES) | {"Boss"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
-        for ev in data.get("events", []):
+        for ev in data.get("events", []) + data.get("world_events", []):
             t = ev.get("type", "")
             assert t in valid, f"{p.name}: 未知の type '{t}'"
-        for section in ("initial_terrain", "boss_terrain"):
+        for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for ev in data.get(section, []):
                 t = ev.get("type", "")
-                assert t in {"Terrain", "TerrainStrip"}, (
+                assert t in terrain_types, (
                     f"{p.name} {section}: 未知の type '{t}'"
                 )
 
@@ -119,24 +123,26 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_terrain_kinds = {"wall", "rock", "debris"}
+    rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
+    strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
 
     def assert_terrain_event(section: str, i: int, ev: dict) -> None:
-        assert ev.get("type") in {"Terrain", "TerrainStrip"}, (
+        assert ev.get("type") in rect_terrain_types | strip_terrain_types, (
             f"{section}[{i}]: terrain section only allows Terrain/TerrainStrip"
         )
-        if ev.get("type") == "Terrain":
-            for field in ("y", "w", "h", "kind"):
+        if ev.get("type") in rect_terrain_types:
+            for field in ("y", "w", "h"):
                 assert field in ev, f"{section}[{i}](Terrain): missing '{field}'"
-            assert ev["kind"] in valid_terrain_kinds, (
-                f"{section}[{i}](Terrain): unknown kind '{ev['kind']}'"
+            assert ev.get("kind", "wall") in valid_terrain_kinds, (
+                f"{section}[{i}](Terrain): unknown kind '{ev.get('kind', 'wall')}'"
             )
         else:
-            for field in ("theme", "length"):
+            for field in ("length",):
                 assert field in ev, f"{section}[{i}](TerrainStrip): missing '{field}'"
-            assert ev["theme"] in valid_strip_themes, (
-                f"{section}[{i}](TerrainStrip): unknown theme '{ev['theme']}'"
+            assert ev.get("theme", "fever_cave") in valid_strip_themes, (
+                f"{section}[{i}](TerrainStrip): unknown theme '{ev.get('theme', 'fever_cave')}'"
             )
 
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
@@ -177,12 +183,105 @@ def test_stage_json_required_fields() -> None:
                     assert ev["formation"] in valid_formations, (
                         f"{p.name} events[{i}]: 未知の formation '{ev['formation']}'"
                     )
-        for section in ("initial_terrain", "boss_terrain"):
+        for i, ev in enumerate(data.get("world_events", [])):
+            assert "type" in ev, f"{p.name} world_events[{i}]: missing 'type'"
+            assert ("x" in ev or "world_x" in ev or "trigger_x" in ev), (
+                f"{p.name} world_events[{i}]: missing 'x' / 'world_x' / 'trigger_x'"
+            )
+            if "surface" in ev:
+                assert ev["surface"] in {"top", "bottom"}, (
+                    f"{p.name} world_events[{i}]: invalid surface '{ev['surface']}'"
+                )
+        for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for i, ev in enumerate(data.get(section, [])):
                 assert_terrain_event(f"{p.name} {section}", i, ev)
 
 
 # ── ボス ─────────────────────────────────────────────────────────────
+
+def test_stage_supports_world_layout_fields() -> None:
+    from src.stages.stage import Stage
+
+    stage = Stage(object(), 1)
+    legacy_stage = Stage(object(), 2)
+
+    assert stage.initial_terrain == []
+    assert stage.terrain_layout
+    assert stage.terrain_layout[0]["type"] == "TerrainStrip"
+    assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
+    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 2770 for ev in stage.world_events)
+    assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
+
+
+def test_world_event_turret_spawns_at_authored_x_on_surface() -> None:
+    from src.core.camera import Camera
+    from src.entities.terrain import make_terrain_strip
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    camera.x = 119.0
+    terrain = pygame.sprite.Group(*make_terrain_strip(
+        900,
+        length=320,
+        segment_w=64,
+        seed=8,
+        gap_min=380,
+        gap_max=380,
+    ))
+    enemies = pygame.sprite.Group()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=enemies,
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[
+            {"type": "EnemyTurret", "x": 1000, "count": 1, "surface": "bottom", "surface_offset": 24}
+        ],
+        player=object(),
+        terrain=terrain,
+    )
+
+    spawner.update(1.0 / 60.0, camera)
+    assert len(enemies) == 0
+
+    camera.x = 121.0
+    spawner.update(1.0 / 60.0, camera)
+    turret = next(iter(enemies))
+    surface_y = spawner._surface_y_at(1000, "bottom")
+    assert type(turret).__name__ == "EnemyTurret"
+    assert turret.world_x == 1000
+    assert surface_y is not None
+    assert turret.world_y == surface_y - 24
+
+
+def test_world_event_surface_can_use_authored_terrain_block() -> None:
+    from src.core.camera import Camera
+    from src.entities.terrain import Terrain
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    camera.x = 121.0
+    terrain = pygame.sprite.Group(Terrain(940, 420, 160, 36, "wall"))
+    enemies = pygame.sprite.Group()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=enemies,
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[
+            {"type": "EnemyTurret", "x": 1000, "count": 1, "surface": "bottom", "surface_offset": 24}
+        ],
+        player=object(),
+        terrain=terrain,
+    )
+
+    spawner.update(1.0 / 60.0, camera)
+    turret = next(iter(enemies))
+
+    assert spawner._surface_y_at(1000, "bottom") == 420
+    assert turret.world_x == 1000
+    assert turret.world_y == 396
+
 
 def test_regular_stages_define_boss_terrain() -> None:
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):

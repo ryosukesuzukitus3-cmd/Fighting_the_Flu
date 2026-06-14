@@ -76,6 +76,9 @@ class EnemyCrawler(Enemy):
                 candidates.append(float(getattr(ter, "surface_y", ter.rect.top)))
             elif self._surface == "top" and side == "top":
                 candidates.append(float(getattr(ter, "surface_y", ter.rect.bottom)))
+            elif not side:
+                y = float(getattr(ter, "y", ter.rect.top))
+                candidates.append(y if self._surface == "bottom" else y + ter.rect.height)
         if not candidates:
             return None
         return min(candidates) if self._surface == "bottom" else max(candidates)

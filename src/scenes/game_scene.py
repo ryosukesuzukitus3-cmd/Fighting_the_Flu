@@ -91,8 +91,9 @@ class GameScene(
             self.game, self.enemies, self.enemy_bullets,
             self.stage.events, self.player, stage_id=self._stage_id,
             terrain=self.terrain,
+            world_events=self.stage.world_events,
         )
-        self.spawner.spawn_terrain_events(self.stage.initial_terrain, self.camera)
+        self.spawner.spawn_terrain_events(self.stage.terrain_layout, self.camera)
         self._boss_terrain_spawned = False
         self._pending_boss_stage_id: int | None = None
         self._active_boss_stage_id: int | None = None
@@ -254,7 +255,7 @@ class GameScene(
 
     def _queue_boss_spawn(self, stage_id: int | None = None) -> None:
         self._pending_boss_stage_id = self._stage_id if stage_id is None else stage_id
-        self.spawner._index = len(self.spawner._events)
+        self.spawner.skip_all_events()
         self.spawner.boss_pending = True
 
     def _boss_stage_data(self, stage_id: int) -> Stage:
