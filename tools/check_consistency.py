@@ -104,20 +104,24 @@ def check_enemies() -> None:
         if extra:
             _fail(f"balance_sheet._ENEMY_BASE に余分: {sorted(extra)}")
 
-    # stage JSON の type が ENEMY_NAMES ∪ {'Boss','Terrain','TerrainStrip'} に含まれるか
-    valid_types = set(ENEMY_NAMES) | {"Boss", "Terrain", "TerrainStrip"}
+    # stage JSON の type が敵・ボス・地形エイリアスに含まれるか
+    terrain_types = {
+        "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
+        "turret_mount", "cave_section", "corridor",
+    }
+    valid_types = set(ENEMY_NAMES) | {"Boss"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
-        for ev in data.get("events", []):
+        for ev in data.get("events", []) + data.get("world_events", []):
             t = ev.get("type", "")
             if t not in valid_types:
                 _fail(f"{p.name}: 未知の type '{t}'")
-        for section in ("initial_terrain", "boss_terrain"):
+        for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for ev in data.get(section, []):
                 t = ev.get("type", "")
-                if t not in {"Terrain", "TerrainStrip"}:
+                if t not in terrain_types:
                     _fail(f"{p.name} {section}: 未知の type '{t}'")
-    _ok("stage JSON: 全 type が ENEMY_NAMES ∪ {{'Boss','Terrain','TerrainStrip'}} に含まれる")
+    _ok("stage JSON: 全 type が敵・ボス・地形エイリアスに含まれる")
 
 
 def check_items() -> None:
@@ -177,24 +181,26 @@ def check_stages() -> None:
     # stage JSON 必須フィールド検証
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_terrain_kinds = {"wall", "rock", "debris"}
+    rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
+    strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
 
     def validate_terrain_event(label: str, ev: dict) -> None:
-        if ev.get("type") == "Terrain":
-            for field in ("y", "w", "h", "kind"):
+        if ev.get("type") in rect_terrain_types:
+            for field in ("y", "w", "h"):
                 if field not in ev:
                     _fail(f"{label}(Terrain): 必須フィールド '{field}' が欠如")
-            if ev.get("kind") not in valid_terrain_kinds:
+            if ev.get("kind", "wall") not in valid_terrain_kinds:
                 _fail(f"{label}(Terrain): 未知の kind '{ev.get('kind')}'")
-        elif ev.get("type") == "TerrainStrip":
-            for field in ("theme", "length"):
+        elif ev.get("type") in strip_terrain_types:
+            for field in ("length",):
                 if field not in ev:
                     _fail(f"{label}(TerrainStrip): 必須フィールド '{field}' が欠如")
-            if ev.get("theme") not in valid_strip_themes:
+            if ev.get("theme", "fever_cave") not in valid_strip_themes:
                 _fail(f"{label}(TerrainStrip): 未知の theme '{ev.get('theme')}'")
         else:
-            _fail(f"{label}: terrain section only allows Terrain/TerrainStrip")
+            _fail(f"{label}: terrain section only allows terrain aliases")
 
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
@@ -243,7 +249,14 @@ def check_stages() -> None:
                         _fail(f"{p.name} events[{i}]: 必須フィールド 'formation' が欠如")
                     elif ev.get("formation") not in valid_formations:
                         _fail(f"{p.name} events[{i}]: 未知の formation '{ev.get('formation')}'")
-        for section in ("initial_terrain", "boss_terrain"):
+        for i, ev in enumerate(data.get("world_events", [])):
+            if "type" not in ev:
+                _fail(f"{p.name} world_events[{i}]: missing 'type'")
+            if "x" not in ev and "world_x" not in ev and "trigger_x" not in ev:
+                _fail(f"{p.name} world_events[{i}]: missing 'x' / 'world_x' / 'trigger_x'")
+            if "surface" in ev and ev.get("surface") not in {"top", "bottom"}:
+                _fail(f"{p.name} world_events[{i}]: invalid surface '{ev.get('surface')}'")
+        for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for i, ev in enumerate(data.get(section, [])):
                 validate_terrain_event(f"{p.name} {section}[{i}]", ev)
         if not data.get("boss_terrain"):

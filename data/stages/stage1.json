@@ -1,7 +1,7 @@
 {
   "stage_id": 1,
   "bgm": "The_world_of_spirit_short.mp3",
-  "initial_terrain": [
+  "terrain_layout": [
     {
       "type": "TerrainStrip",
       "theme": "fever_cave",
@@ -41,8 +41,10 @@
     {"type": "Terrain", "screen_x": 700, "y": 92,  "w": 72, "h": 72, "kind": "rock"},
     {"type": "Terrain", "screen_x": 720, "y": 438, "w": 78, "h": 78, "kind": "rock"}
   ],
+  "world_events": [
+    {"type": "EnemyTurret", "x": 2770, "count": 1, "surface": "bottom", "surface_offset": 20}
+  ],
   "events": [
-    {"time": 24.0, "type": "EnemyTurret", "count": 1, "surface": "bottom", "surface_offset": 20},
     {"time":  3.0, "type": "EnemyVirus", "count": 3, "formation": "line"},
     {"time":  6.0, "type": "EnemyVirus", "count": 4, "formation": "line"},
     {"time": 10.0, "type": "EnemyVirus", "count": 4, "formation": "v_shape"},
