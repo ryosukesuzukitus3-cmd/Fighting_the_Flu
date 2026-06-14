@@ -214,18 +214,18 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, page_inde
 
     # 立ち絵（ウィンドウより先に描いて、ウィンドウ下部が重なる＝奥行き感）
     if show_portrait:
-        size = 320
-        base_y = rect.y - size + 112
+        size = 300                       # 少し小さく
+        base_y = rect.y - size + 108
         if left_speaker is None and right_speaker is None:
             left_speaker, right_speaker = story_sides(speaker, None)
         if left_speaker:
             img = _tachie_image(resources, left_speaker, size, flip=False, active=(left_speaker == speaker))
             if img:
-                screen.blit(img, (rect.x - 30, base_y))
+                screen.blit(img, (rect.x, base_y))                 # 画面端から余白＝中央寄り
         if right_speaker:
             img = _tachie_image(resources, right_speaker, size, flip=False, active=(right_speaker == speaker))
             if img:
-                screen.blit(img, (rect.right - size + 30, base_y))
+                screen.blit(img, (rect.right - size, base_y))
 
     _draw_window(screen, rect, style, 255)
     _draw_name_tab(screen, resources, rect, speaker, style, 255)
