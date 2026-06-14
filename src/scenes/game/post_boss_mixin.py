@@ -102,9 +102,8 @@ class GameScenePostBossMixin:
             # 通常ボス撃破後: アイテムマグネット + 取得 + 遷移判定
             self._update_post_boss_items(dt_eff)
             picked_items = pygame.sprite.spritecollide(self.player, self.items, True)  # type: ignore[attr-defined]
-            if picked_items:
-                self.game.sound.play_se_alias("SE_ITEM", volume=0.7)  # type: ignore[attr-defined]
             for item in picked_items:
+                self._play_item_pickup_sound(item)  # type: ignore[attr-defined]
                 if isinstance(item, _WeaponItem):
                     # 即選択せず在庫に加算（V キーで選択）。初回は強めの導線。
                     self._pickup_weapon_item()  # type: ignore[attr-defined]
@@ -214,8 +213,9 @@ class GameScenePostBossMixin:
         else:
             # ラスボス: スロー + 爆発 + 閃光
             self._post_boss_slow    = FINAL_SLOW_FACTOR  # type: ignore[attr-defined]
-            self._boss_boom_timers  = [0.5, 1.0, 1.6, 2.4]  # type: ignore[attr-defined]
+            self._boss_boom_timers  = [0.25, 0.65, 1.05]  # type: ignore[attr-defined]
             self._boss_kill_flash_timer = 1.2  # type: ignore[attr-defined]
+            self.game.sound.play_bgm("music/bgm/FFVI_勝利のファンファーレ.mp3", loops=0)  # type: ignore[attr-defined]
 
         self._boss_boom_x = bx  # type: ignore[attr-defined]
         self._boss_boom_y = by  # type: ignore[attr-defined]
@@ -224,10 +224,10 @@ class GameScenePostBossMixin:
 
         # 撃破後セリフ設定（爆発演出が落ち着く 2.5 秒後に表示開始）
         pages = BOSS_DEFEAT.get(sid, [])   # list[Line]
-        self._defeat_dialogue_pages  = pages  # type: ignore[attr-defined]
+        self._defeat_dialogue_pages  = [] if is_final else pages  # type: ignore[attr-defined]
         self._defeat_dialogue_index  = 0  # type: ignore[attr-defined]
         self._defeat_dialogue_active = False  # type: ignore[attr-defined]
-        self._defeat_dialogue_delay  = 2.5 if pages else 0.0  # type: ignore[attr-defined]
+        self._defeat_dialogue_delay  = 0.0 if is_final else (2.5 if pages else 0.0)  # type: ignore[attr-defined]
 
     def _go_next_after_boss(self) -> None:
         """ボス後フェーズ終了: 武器・HPを引き継いで次シーンへ遷移する。"""

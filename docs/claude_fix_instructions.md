@@ -146,7 +146,6 @@ self.game.shared.carry_hp = PLAYER_MAX_HP
 - `src/scenes/game/debug_stage_panel.py`
 - `src/entities/items/weapon_item.py`
 - `src/entities/items/shield.py`
-- `src/entities/items/extra_life.py`
 - `src/scenes/tutorial_scene.py`
 - `docs/design.md` は手編集せず `tools/gen_docs.py` で更新
 
@@ -155,7 +154,6 @@ self.game.shared.carry_hp = PLAYER_MAX_HP
 - `LaserItem` と `HomingItem` は今後使わないので削除する
 - ランダムドロップ対象外で今後使わない説明も消す
 - `ShieldItem` が通常ゲームで使われていないなら削除候補。ただしウェポン選択の `BARRIER` とは別物なので混同しない
-- `ExtraLifeItem` はレアドロップとして `game_scene.py` で使われているため、削除しない
 
 具体作業:
 

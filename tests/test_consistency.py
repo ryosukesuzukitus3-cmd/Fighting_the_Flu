@@ -80,6 +80,30 @@ def test_random_item_pool_matches_item_drop_weights() -> None:
     assert random_item_names() == {d.name for d in ITEM_DEFS if d.drop_weight > 0}
 
 
+def test_extra_life_item_is_retired() -> None:
+    from src.core.registries import ITEM_NAMES
+    from src.core.factories import item_factory_names, random_item_names
+
+    assert "ExtraLifeItem" not in ITEM_NAMES
+    assert "ExtraLifeItem" not in item_factory_names()
+    assert "ExtraLifeItem" not in random_item_names()
+    assert not (ROOT / "src" / "entities" / "items" / "extra_life.py").exists()
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    assert "extra_life" not in game_src
+
+
+def test_item_pickup_sounds_are_split_by_item_type() -> None:
+    from src.story.aliases import SE
+
+    assert SE["SE_ITEM_WEAPON"] == "music/se/item_weapon_pickup.wav"
+    assert SE["SE_ITEM_HEAL"] == "music/se/item_heal_pickup.wav"
+    assert SE["SE_HEAL"] == SE["SE_ITEM_HEAL"]
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    post_boss_src = (ROOT / "src" / "scenes" / "game" / "post_boss_mixin.py").read_text(encoding="utf-8")
+    assert "def _play_item_pickup_sound" in game_src
+    assert "_play_item_pickup_sound(item)" in post_boss_src
+
+
 # ── ステージ ─────────────────────────────────────────────────────────
 
 def test_stage_ids_match_stage_names_and_boss_config() -> None:
@@ -731,7 +755,10 @@ def test_highscore_manager_filters_wrong_json_shapes(tmp_path, monkeypatch) -> N
 
 def test_manual_docs_do_not_reference_removed_items() -> None:
     design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
-    for term in ("LaserItem", "HomingItem", "ShieldItem", "shield.py", "ScoreItem", "score_item.py"):
+    for term in (
+        "LaserItem", "HomingItem", "ShieldItem", "shield.py",
+        "ScoreItem", "score_item.py", "ExtraLifeItem", "extra_life.py", "1UP",
+    ):
         assert term not in design
 
 
@@ -773,6 +800,28 @@ def test_boss_gimmick_draw_ignores_missing_boss() -> None:
     scene = object.__new__(GameScene)
     scene._boss = None
     GameScene._draw_boss_gimmick(scene, pygame.Surface((32, 32)))
+
+
+def test_boss_intro_waits_for_midboss_cleanup_and_keeps_bgm() -> None:
+    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+
+    assert "_BOSS_GATE_ENEMIES" in src
+    assert "EnemyCoughSprayer" in src
+    assert "EnemySporeSplitter" in src
+    assert "def _boss_gate_blocked" in src
+    assert "def _start_boss_alert" in src
+    assert "play_bgm(BOSS_BGM.get" in src
+    assert "play_bgm_if_new(BOSS_BGM.get" in src
+
+
+def test_final_boss_post_defeat_does_not_require_extra_dialogue_wait() -> None:
+    from src.scenes.game.config import POST_BOSS_FINAL_TIMEOUT
+
+    src = (ROOT / "src" / "scenes" / "game" / "post_boss_mixin.py").read_text(encoding="utf-8")
+    assert POST_BOSS_FINAL_TIMEOUT <= 2.5
+    assert "[] if is_final else pages" in src
+    assert "0.0 if is_final else" in src
+    assert "FFVI_勝利のファンファーレ.mp3" in src
 
 
 def test_stage3_blackhole_uses_actor_scene() -> None:
