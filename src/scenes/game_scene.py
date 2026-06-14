@@ -46,6 +46,7 @@ from src.core.balance import (
 # ボス演出シーケンス状態
 # "" -> alert -> entering -> boss_name -> boss_dialogue -> fight_banner -> fighting
 _BOSS_INTRO_FREEZE = {"boss_name", "boss_dialogue", "fight_banner"}
+_BOSS_GATE_ENEMIES = {"EnemyBilly", "EnemyCoughSprayer", "EnemySporeSplitter"}
 
 
 def _hit_rect_collide(player, other) -> bool:
@@ -95,6 +96,7 @@ class GameScene(
         self._pending_boss_stage_id: int | None = None
         self._active_boss_stage_id: int | None = None
         self._boss     = None
+        self._boss_wait_notice_timer = 0.0
         self.particles = ParticleSystem()
         self._buf      = pygame.Surface(self.game.screen.get_size())
 
@@ -376,15 +378,19 @@ class GameScene(
 
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
-            self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
-            if not self._boss_terrain_spawned:
-                self._replace_boss_terrain(self._active_boss_stage_id)
-                self._boss_terrain_spawned = True
-            self._boss_intro_state = "alert"
-            self._boss_intro_timer = ALERT_DURATION
-            self.camera.scroll_speed = 0.0
-            self.game.sound.stop_bgm(fadeout_ms=800)
-            self.laser.state = "ready"
+            if self._boss_gate_blocked():
+                self._boss_wait_notice_timer -= dt
+                if self._boss_wait_notice_timer <= 0.0:
+                    self._boss_wait_notice_timer = 1.4
+                    self._spawn_popup(
+                        "DEFEAT MID-BOSS FIRST",
+                        SCREEN_WIDTH // 2,
+                        78,
+                        color=(255, 190, 90),
+                        life=1.2,
+                    )
+            else:
+                self._start_boss_alert()
 
         # ボス存在時の更新
         if self._boss is not None:
@@ -533,6 +539,20 @@ class GameScene(
         if self._is_debug_stage and self._debug_panel is not None:
             self._debug_panel.update(dt)
 
+    def _boss_gate_blocked(self) -> bool:
+        return any(type(enemy).__name__ in _BOSS_GATE_ENEMIES for enemy in self.enemies)
+
+    def _start_boss_alert(self) -> None:
+        self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
+        if not self._boss_terrain_spawned:
+            self._replace_boss_terrain(self._active_boss_stage_id)
+            self._boss_terrain_spawned = True
+        self._boss_intro_state = "alert"
+        self._boss_intro_timer = ALERT_DURATION
+        self.camera.scroll_speed = 0.0
+        self.game.sound.play_bgm(BOSS_BGM.get(self._active_boss_stage_id, "music/bgm/決戦.mp3"))
+        self.laser.state = "ready"
+
     def _update_boss_intro(self, dt: float) -> None:
         state = self._boss_intro_state
         inp   = self.game.input
@@ -576,7 +596,7 @@ class GameScene(
         self._boss_name_text   = BOSS_NAMES.get(boss_stage_id, "")
         self._boss_intro_state = "boss_name"
         self._boss_intro_timer = BOSS_NAME_DURATION
-        self.game.sound.play_bgm(BOSS_BGM.get(boss_stage_id, "music/bgm/決戦.mp3"))
+        self.game.sound.play_bgm_if_new(BOSS_BGM.get(boss_stage_id, "music/bgm/決戦.mp3"))
 
     def _start_fight_banner(self) -> None:
         self._boss_intro_state = "fight_banner"
@@ -784,7 +804,14 @@ class GameScene(
         ter.kill()
         self.particles.spawn_explosion(sx, sy, color=(255, 130, 70), count=18)
         self.particles.spawn_spark(sx, sy, color=(255, 180, 90), count=18, speed=420.0)
+        self.particles.spawn_glow(sx, sy, color=(255, 210, 120), count=10, speed=120.0)
         self.camera.shake(4.0)
+        terrain_score = 25 * combo_multiplier(max(1, self._combo_count))
+        self.game.shared.score += terrain_score
+        self._combo_count += 1
+        self._combo_timer = COMBO_WINDOW
+        self._combo_pulse = 0.8
+        self._spawn_popup(f"BREAK +{terrain_score}", sx, sy - 18, color=(255, 200, 110), life=1.1)
         if drop_chance > 0.0 and random.random() < drop_chance:
             self.items.add(random_item(world_x, world_y, spread=16.0))
 
@@ -941,12 +968,10 @@ class GameScene(
                         bullet.kill()   # 被弾した弾は相殺
                         break
 
-        from src.entities.items.weapon_item import WeaponItem
         picked_items = pygame.sprite.spritecollide(self.player, self.items, True)
-        if picked_items:
-            self.game.sound.play_se_alias("SE_ITEM", volume=0.7)
         for item in picked_items:
-            if isinstance(item, WeaponItem):
+            self._play_item_pickup_sound(item)
+            if type(item).__name__ == "WeaponItem":
                 self._pickup_weapon_item()
             else:
                 item.apply(self.player)
@@ -999,9 +1024,15 @@ class GameScene(
                 chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
                 if random.random() < chance:
                     self.items.add(random_item(enemy.world_x, enemy.world_y))
-                if random.random() < 0.02:
-                    from src.entities.items.extra_life import ExtraLifeItem
-                    self.items.add(ExtraLifeItem(enemy.world_x, enemy.world_y))
+
+    def _play_item_pickup_sound(self, item) -> None:
+        item_type = type(item).__name__
+        if item_type == "WeaponItem":
+            self.game.sound.play_se_alias("SE_ITEM_WEAPON", volume=0.75)
+        elif item_type == "HealItem":
+            self.game.sound.play_se_alias("SE_ITEM_HEAL", volume=0.75)
+        else:
+            self.game.sound.play_se_alias("SE_ITEM", volume=0.7)
 
     def _on_form2_transition(self) -> None:
         self.camera.shake(22.0)

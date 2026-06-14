@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 _WAVE_AMP  = 70.0   # 振れ幅 px
 _WAVE_FREQ = 1.2    # Hz
-_FEINT_INTERVAL = 0.72
-_FEINT_SPEED = 245.0
+_FEINT_INTERVAL = 0.95
+_FEINT_MAX_OFFSET = 46.0
 
 _STATS = enemy_stats("EnemyTakeshi")
 
@@ -31,25 +31,27 @@ class EnemyTakeshi(Enemy):
         self._origin_y = world_y
         self._time: float = random.uniform(0.0, math.tau)
         self._feint_timer = _FEINT_INTERVAL * random.uniform(0.45, 0.9)
-        self._feint_vy = 0.0
+        self._feint_offset = 0.0
+        self._feint_target = 0.0
         self._init_glow()
 
     def _move(self, dt: float) -> None:
         self._time += dt
         self._feint_timer -= dt
         if self._feint_timer <= 0.0:
-            phase = 1.0 if math.sin(self._time * 3.7) >= 0 else -1.0
-            self._feint_vy = phase * (_FEINT_SPEED * (1.25 if self.enhanced else 1.0))
-            self._feint_timer = _FEINT_INTERVAL * (0.85 if self.enhanced else 1.0)
+            direction = 1.0 if math.sin(self._time * 2.8) >= 0 else -1.0
+            amp = _FEINT_MAX_OFFSET * (1.2 if self.enhanced else 1.0)
+            self._feint_target = direction * random.uniform(amp * 0.45, amp)
+            self._feint_timer = _FEINT_INTERVAL * random.uniform(0.75, 1.15)
 
-        self._feint_vy *= max(0.0, 1.0 - dt * 6.5)
-        lunge = 1.0 + (0.35 if abs(self._feint_vy) > 50.0 else 0.0)
-        self.world_x -= self.speed * lunge * dt
+        self._feint_offset += (self._feint_target - self._feint_offset) * min(1.0, dt * 5.0)
+        self._feint_target *= max(0.0, 1.0 - dt * 1.8)
+        self.world_x -= self.speed * dt
 
         amp = _WAVE_AMP * (1.12 if self.enhanced else 1.0)
         wave = amp * math.sin(2 * math.pi * _WAVE_FREQ * self._time)
-        wobble = 18.0 * math.sin(self._time * 5.6)
+        wobble = 12.0 * math.sin(self._time * 5.0)
         self.world_y = max(
             44.0,
-            min(float(SCREEN_HEIGHT - 44), self._origin_y + wave + wobble + self._feint_vy * 0.18),
+            min(float(SCREEN_HEIGHT - 44), self._origin_y + wave + wobble + self._feint_offset),
         )

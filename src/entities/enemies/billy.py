@@ -32,6 +32,7 @@ class EnemyBilly(Enemy):
 
         self.image = EnemyBilly._base_image
         self.rect  = self.image.get_rect(center=(int(world_x), int(world_y)))
+        self._flash_base_image = self.image
 
         self._shake_timer: float = 0.0
 

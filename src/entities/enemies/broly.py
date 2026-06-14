@@ -14,6 +14,8 @@ _CHARGE_SPEED   = 520.0
 _APPROACH_TIME  = 0.9   # 秒：突進準備までの助走時間
 _WINDUP_TIME    = 0.36  # 秒：警告ラインを出してから突進
 
+_BEAM_FADE_TIME = 0.46
+
 _ENH_CHARGE   = 650.0
 _STATS        = enemy_stats("EnemyBroly")
 
@@ -40,6 +42,7 @@ class EnemyBroly(Enemy):
         self._timer: float = 0.0
         self._vy:    float = 0.0
         self._warning_fired = False
+        self._beam_fired = False
         self._shock_fired = False
         self._init_glow()
 
@@ -65,6 +68,7 @@ class EnemyBroly(Enemy):
                 dy = self._target_y - self.world_y
                 d = abs(dy) if abs(dy) > 1 else 1
                 self._vy = (dy / d) * (215.0 if self.enhanced else 170.0)
+                self._fire_charge_beam()
                 self._fire_shock()
         elif self._state == "charge":
             self.world_x -= self._charge_speed * dt
@@ -76,19 +80,71 @@ class EnemyBroly(Enemy):
         from src.entities.bullets.enemy_bullet import EnemyBullet
 
         self._warning_fired = True
-        self._enemy_bullets.add(
-            EnemyBullet(
-                SCREEN_WIDTH / 2,
-                self._target_y,
-                0.0,
-                0.0,
-                size=(SCREEN_WIDTH + 40, 12),
-                color=(255, 70, 70),
-                lifetime=_WINDUP_TIME,
-                terrain_passthrough=True,
-                warning_only=True,
-            )
+        beam = EnemyBullet(
+            SCREEN_WIDTH / 2,
+            self._target_y,
+            0.0,
+            0.0,
+            size=(SCREEN_WIDTH + 76, 46),
+            color=(255, 70, 70),
+            lifetime=_WINDUP_TIME,
+            terrain_passthrough=True,
+            warning_only=True,
         )
+        self._paint_warning_beam(beam.image)
+        self._enemy_bullets.add(beam)
+        self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.35)
+
+    def _paint_warning_beam(self, surf: pygame.Surface) -> None:
+        surf.fill((0, 0, 0, 0))
+        w, h = surf.get_size()
+        cy = h // 2
+        pygame.draw.rect(surf, (255, 20, 18, 96), (0, 0, w, h), border_radius=h // 2)
+        pygame.draw.rect(surf, (255, 38, 12, 168), (0, cy - 14, w, 28), border_radius=14)
+        pygame.draw.rect(surf, (255, 120, 36, 210), (0, cy - 8, w, 16), border_radius=8)
+        pygame.draw.rect(surf, (255, 248, 185, 255), (0, cy - 3, w, 6), border_radius=3)
+        for x in range(-18, w, 34):
+            pygame.draw.line(surf, (255, 225, 90, 185), (x, 3), (x + 24, h - 4), 3)
+        for x in range(18, w, 76):
+            pygame.draw.polygon(
+                surf,
+                (255, 245, 180, 175),
+                [(x, cy - 15), (x + 18, cy), (x, cy + 15)],
+            )
+        for off in (-18, 18):
+            pygame.draw.line(surf, (255, 75, 45, 220), (0, cy + off), (w, cy + off), 3)
+
+    def _fire_charge_beam(self) -> None:
+        if self._enemy_bullets is None or self._beam_fired:
+            return
+        from src.entities.bullets.enemy_bullet import EnemyBullet
+
+        self._beam_fired = True
+        beam = EnemyBullet(
+            SCREEN_WIDTH / 2,
+            self.world_y,
+            0.0,
+            0.0,
+            size=(SCREEN_WIDTH + 84, 40),
+            color=(255, 110, 40),
+            lifetime=_BEAM_FADE_TIME,
+            terrain_passthrough=True,
+            warning_only=True,
+            fade_shrink=True,
+        )
+        self._paint_charge_beam(beam.image)
+        beam._base_image = beam.image.copy()
+        self._enemy_bullets.add(beam)
+
+    def _paint_charge_beam(self, surf: pygame.Surface) -> None:
+        surf.fill((0, 0, 0, 0))
+        w, h = surf.get_size()
+        cy = h // 2
+        pygame.draw.rect(surf, (255, 80, 24, 148), (0, cy - 16, w, 32), border_radius=16)
+        pygame.draw.rect(surf, (255, 165, 58, 230), (0, cy - 9, w, 18), border_radius=9)
+        pygame.draw.rect(surf, (255, 250, 210, 255), (0, cy - 3, w, 6), border_radius=3)
+        for x in range(-8, w, 42):
+            pygame.draw.line(surf, (255, 245, 170, 180), (x, cy - 14), (x + 24, cy + 14), 3)
 
     def _fire_shock(self) -> None:
         if self._enemy_bullets is None or self._shock_fired:
