@@ -122,7 +122,7 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
-    valid_terrain_kinds = {"wall", "rock", "debris"}
+    valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
@@ -220,10 +220,12 @@ def test_stage1_uses_authored_setpieces_instead_of_random_breakable_walls() -> N
 
     strip = stage.terrain_layout[0]
     terrain_types = [ev.get("type") for ev in stage.terrain_layout]
+    setpiece_kinds = {ev.get("kind") for ev in stage.terrain_layout[1:]}
     world_types = [ev.get("type") for ev in stage.world_events]
 
     assert strip["type"] == "TerrainStrip"
     assert strip.get("breakable_chance", 0.0) == 0.0
+    assert setpiece_kinds == {"clot"}
     assert terrain_types.count("turret_mount") >= 3
     assert "breakable_gate" in terrain_types
     assert world_types.count("EnemyTurret") >= 2

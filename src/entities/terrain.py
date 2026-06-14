@@ -18,6 +18,7 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "wall":   ((70, 72, 82),  (110, 114, 128)),   # 金属/コンクリの壁
     "rock":   ((96, 78, 60),  (140, 116, 86)),    # 岩石
     "debris": ((84, 86, 96),  (130, 134, 150)),   # 宇宙デブリ
+    "clot":   ((122, 32, 38), (226, 86, 66)),     # Stage1 血栓
 }
 
 
@@ -60,11 +61,24 @@ class Terrain(pygame.sprite.Sprite):
     ) -> pygame.Surface:
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        radius = 8 if kind != "wall" else 3
+        radius = min(18, max(8, min(w, h) // 3)) if kind == "clot" else (8 if kind != "wall" else 3)
         pygame.draw.rect(surf, base, (0, 0, w, h), border_radius=radius)
         pygame.draw.rect(surf, edge, (0, 0, w, h), 2, border_radius=radius)
         # ざらつき（決定的擬似ランダムの斑点）
         rng = random.Random((w * 73856093) ^ (h * 19349663) ^ hash(kind))
+        if kind == "clot":
+            inner = pygame.Rect(max(4, w // 10), max(4, h // 6), max(4, w * 8 // 10), max(4, h * 2 // 3))
+            pygame.draw.ellipse(surf, (174, 44, 48, 95), inner)
+            pygame.draw.ellipse(surf, (246, 116, 84, 120), inner, 2)
+            pit = inner.inflate(-max(8, w // 5), -max(6, h // 3))
+            if pit.width > 3 and pit.height > 3:
+                pygame.draw.ellipse(surf, (72, 14, 20, 80), pit)
+            for _ in range(max(2, (w * h) // 2400)):
+                nw = rng.randint(8, max(9, min(28, w // 3)))
+                nh = rng.randint(5, max(6, min(18, h // 2)))
+                nx = rng.randint(3, max(3, w - nw - 3))
+                ny = rng.randint(3, max(3, h - nh - 3))
+                pygame.draw.ellipse(surf, (210, 70, 62, 90), (nx, ny, nw, nh), 1)
         for _ in range(max(3, (w * h) // 900)):
             sx = rng.randint(2, max(2, w - 3))
             sy = rng.randint(2, max(2, h - 3))

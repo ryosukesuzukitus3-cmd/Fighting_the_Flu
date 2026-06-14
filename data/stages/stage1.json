@@ -18,14 +18,14 @@
       "breakable_chance": 0.0,
       "start_offset": -90
     },
-    {"type": "Terrain", "x": 760,  "y": 106, "w": 76,  "h": 48,  "kind": "rock", "destructible": true, "hp": 3, "drop_chance": 0.22},
-    {"type": "Terrain", "x": 980,  "y": 438, "w": 92,  "h": 50,  "kind": "rock", "destructible": true, "hp": 3, "drop_chance": 0.28},
-    {"type": "turret_mount", "x": 1560, "y": 418, "w": 210, "h": 36, "kind": "rock"},
-    {"type": "Terrain", "x": 1880, "y": 88,  "w": 92,  "h": 54,  "kind": "rock", "destructible": true, "hp": 3, "drop_chance": 0.25},
-    {"type": "turret_mount", "x": 2090, "y": 426, "w": 190, "h": 34, "kind": "rock"},
-    {"type": "breakable_gate", "x": 2440, "y": 146, "w": 78,  "h": 120, "kind": "rock", "hp": 5, "drop_chance": 0.35},
-    {"type": "breakable_gate", "x": 2520, "y": 374, "w": 86,  "h": 94,  "kind": "rock", "hp": 5, "drop_chance": 0.35},
-    {"type": "turret_mount", "x": 2700, "y": 420, "w": 190, "h": 36, "kind": "rock"}
+    {"type": "Terrain", "x": 740,  "y": 96,  "w": 94,  "h": 58,  "kind": "clot", "destructible": true, "hp": 3, "drop_chance": 0.22},
+    {"type": "Terrain", "x": 970,  "y": 430, "w": 116, "h": 58,  "kind": "clot", "destructible": true, "hp": 3, "drop_chance": 0.28},
+    {"type": "turret_mount", "x": 1540, "y": 414, "w": 230, "h": 42, "kind": "clot"},
+    {"type": "Terrain", "x": 1860, "y": 82,  "w": 110, "h": 62,  "kind": "clot", "destructible": true, "hp": 3, "drop_chance": 0.25},
+    {"type": "turret_mount", "x": 2080, "y": 422, "w": 210, "h": 40, "kind": "clot"},
+    {"type": "breakable_gate", "x": 2428, "y": 112, "w": 88,  "h": 146, "kind": "clot", "hp": 5, "drop_chance": 0.35},
+    {"type": "breakable_gate", "x": 2536, "y": 354, "w": 92,  "h": 120, "kind": "clot", "hp": 5, "drop_chance": 0.35},
+    {"type": "turret_mount", "x": 2700, "y": 418, "w": 210, "h": 42, "kind": "clot"}
   ],
   "boss_terrain": [
     {
@@ -44,8 +44,8 @@
       "breakable_chance": 0.0,
       "start_offset": -150
     },
-    {"type": "Terrain", "screen_x": 700, "y": 92,  "w": 72, "h": 72, "kind": "rock"},
-    {"type": "Terrain", "screen_x": 720, "y": 438, "w": 78, "h": 78, "kind": "rock"}
+    {"type": "Terrain", "screen_x": 700, "y": 92,  "w": 72, "h": 72, "kind": "clot"},
+    {"type": "Terrain", "screen_x": 720, "y": 438, "w": 78, "h": 78, "kind": "clot"}
   ],
   "world_events": [
     {"type": "EnemyVirus", "x": 1120, "count": 3, "formation": "line"},

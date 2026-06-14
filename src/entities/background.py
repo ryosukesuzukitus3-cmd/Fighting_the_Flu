@@ -58,8 +58,8 @@ class ScrollingBackground:
             # 血球（漂う赤い円）と血管うねりの位相
             self._cells = [
                 (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(0, SCREEN_HEIGHT),
-                 rnd.uniform(6, 16), rnd.uniform(0.06, 0.22), rnd.uniform(0, 6.28))
-                for _ in range(14)
+                 rnd.uniform(10, 22), rnd.uniform(0.05, 0.20), rnd.uniform(0, 6.28))
+                for _ in range(26)
             ]
             # 洞窟奥の縦ひだ。地形の手前に出すぎないよう低コントラストにする。
             self._ribs = [
@@ -140,12 +140,20 @@ class ScrollingBackground:
         # 脈打つ血球
         pulse = 0.5 + 0.5 * math.sin(t * 2.0)
         for (cx, cy, r, sf, ph) in self._cells:
-            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 80) - 40
+            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 120) - 60
             rr = int(r * (0.8 + 0.4 * pulse))
-            s = pygame.Surface((rr * 2 + 2, rr * 2 + 2), pygame.SRCALPHA)
-            pygame.draw.circle(s, (150, 30, 40, 70), (rr + 1, rr + 1), rr)
-            pygame.draw.circle(s, (200, 70, 80, 90), (rr + 1, rr + 1), max(1, rr // 2))
-            screen.blit(s, (int(x), int(cy)))
+            w = max(8, int(rr * 2.4))
+            h = max(5, int(rr * 1.35))
+            s = pygame.Surface((w + 6, h + 6), pygame.SRCALPHA)
+            outer = pygame.Rect(3, 3, w, h)
+            pygame.draw.ellipse(s, (170, 34, 42, 86), outer)
+            pygame.draw.ellipse(s, (224, 76, 78, 108), outer, 2)
+            inner = outer.inflate(-max(5, w // 3), -max(4, h // 2))
+            if inner.width > 2 and inner.height > 2:
+                pygame.draw.ellipse(s, (84, 12, 20, 60), inner)
+            angle = math.sin(t * 0.55 + ph) * 9
+            s = pygame.transform.rotate(s, angle)
+            screen.blit(s, (int(x), int(cy + math.sin(t * 0.8 + ph) * 8)))
 
     # ── Stage2 ミーム汚染（走査ノイズ）─────────────────────────
     def _draw_meme(self, screen: pygame.Surface, camera_x: float) -> None:
