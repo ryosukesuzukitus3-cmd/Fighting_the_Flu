@@ -14,7 +14,7 @@ from src.core.registries import ENEMY_DROP_CHANCE as DROP_CHANCE
 
 # ── ボス撃破後の遷移 ────────────────────────────────────────────
 POST_BOSS_AUTO_TIMEOUT  = 30.0   # 通常ボス: 30秒で自動遷移
-POST_BOSS_FINAL_TIMEOUT = 4.5    # ラスボス: 4.5秒で自動クリア
+POST_BOSS_FINAL_TIMEOUT = 2.4    # ラスボス: 短い余韻のあと自動クリア
 POST_BOSS_EDGE_MARGIN   = 30     # 右端から何px以内で次ステージ遷移
 MAGNET_SPEED            = 90.0   # ボス後アイテム引き寄せ速度 px/秒
 FINAL_SLOW_FACTOR       = 0.18   # ラスボス撃破時スロー倍率

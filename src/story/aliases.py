@@ -24,6 +24,8 @@ BGM: dict[str, str | None] = {
 SE: dict[str, str | None] = {
     "SE_TYPE":         "music/se/type.wav",
     "SE_ITEM":         "music/se/item_pickup.wav",
+    "SE_ITEM_WEAPON":  "music/se/item_weapon_pickup.wav",
+    "SE_ITEM_HEAL":    "music/se/item_heal_pickup.wav",
     "SE_ALERT":        "music/se/boss_alert.wav",
     "SE_FIGHT":        "music/se/fight.wav",
     "SE_EXPLOSION":    "music/se/game_explosion9.mp3",
@@ -36,7 +38,7 @@ SE: dict[str, str | None] = {
     "SE_KARONARU_ARRIVE": "music/se/dummy_karonaru_arrive.wav",  # dummy（先輩 移動出現）
     "SE_LIGHT":        None,                           # TODO(Phase4)
     "SE_BLACKHOLE":    None,                           # TODO(Phase4)
-    "SE_HEAL":         None,                           # TODO(Phase4)
+    "SE_HEAL":         "music/se/item_heal_pickup.wav",
     "SE_ERROR":        None,                           # TODO(Phase4)
 }
 

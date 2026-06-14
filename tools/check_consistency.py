@@ -349,6 +349,7 @@ def check_docs() -> None:
     stale_item_terms = (
         "LaserItem", "HomingItem", "ShieldItem", "shield.py",
         "ScoreItem", "score_item.py",
+        "ExtraLifeItem", "extra_life.py", "1UP",
     )
     stale = [term for term in stale_item_terms if term in design]
     if stale:

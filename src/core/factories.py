@@ -24,15 +24,9 @@ def _heal_item_class():
     return HealItem
 
 
-def _extra_life_item_class():
-    from src.entities.items.extra_life import ExtraLifeItem
-    return ExtraLifeItem
-
-
 _ITEM_CLASSES: dict[str, Callable] = {
     "WeaponItem": _weapon_item_class,
     "HealItem": _heal_item_class,
-    "ExtraLifeItem": _extra_life_item_class,
 }
 
 

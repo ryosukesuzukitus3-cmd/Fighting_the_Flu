@@ -26,9 +26,11 @@ class Enemy(pygame.sprite.Sprite):
         self.hp       = hp
         self.speed    = speed  # 左向き移動速度 px/秒
         self.enhanced = enhanced
+        self.hit_flash_timer: float = 0.0
 
         self._glow_time:   float = 0.0
         self._glow_frames: list  = []
+        self._flash_base_image: pygame.Surface | None = None
 
         # サブクラスで上書きする
         self.image = pygame.Surface((40, 40))
@@ -37,6 +39,7 @@ class Enemy(pygame.sprite.Sprite):
 
     def _init_glow(self) -> None:
         """強化個体の赤グロウフレームを事前生成。サブクラス __init__ 末尾で呼ぶ。"""
+        self._flash_base_image = self.image
         if not self.enhanced:
             return
         bw, bh   = self.image.get_width(), self.image.get_height()
@@ -61,13 +64,22 @@ class Enemy(pygame.sprite.Sprite):
         self.world_x -= self.speed * dt
 
     def _place_on_screen(self, sx: float, dt: float) -> None:
+        if self.hit_flash_timer > 0:
+            self.hit_flash_timer = max(0.0, self.hit_flash_timer - dt)
         if self.enhanced and self._glow_frames:
             self._glow_time += dt
             fi         = int(self._glow_time * _GLOW_FPS) % _GLOW_FRAMES
-            self.image = self._glow_frames[fi]
-            self.rect  = self.image.get_rect(center=(int(sx), int(self.world_y)))
+            base_image = self._glow_frames[fi]
         else:
-            self.rect.center = (int(sx), int(self.world_y))
+            base_image = self._flash_base_image or self.image
+            self._flash_base_image = base_image
+        if self.hit_flash_timer > 0:
+            img = base_image.copy()
+            img.fill((175, 175, 175), special_flags=pygame.BLEND_RGB_ADD)
+            self.image = img
+        else:
+            self.image = base_image
+        self.rect = self.image.get_rect(center=(int(sx), int(self.world_y)))
 
     def update(self, dt: float, camera: Camera) -> None:
         self._move(dt)
@@ -75,6 +87,7 @@ class Enemy(pygame.sprite.Sprite):
 
     def take_damage(self, amount: int) -> bool:
         """ダメージを受ける。死亡したら True を返す"""
+        self.hit_flash_timer = 0.08
         self.hp -= amount
         return self.hp <= 0
 

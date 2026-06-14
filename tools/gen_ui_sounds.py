@@ -61,9 +61,43 @@ def _item_pickup_sound() -> list[float]:
     return samples
 
 
+def _item_weapon_pickup_sound() -> list[float]:
+    base = _tone(0.09, 740.0, volume=0.34, decay=12.0)
+    mid = [0.0] * int(RATE * 0.025) + _tone(0.12, 1110.0, volume=0.32, decay=10.0)
+    high = [0.0] * int(RATE * 0.055) + _tone(0.13, 1660.0, volume=0.24, decay=9.5)
+    samples = []
+    for i in range(max(len(base), len(mid), len(high))):
+        t = i / RATE
+        shimmer = math.sin(2.0 * math.pi * 2960.0 * t) * math.exp(-t * 12.5) * 0.07
+        samples.append(
+            (base[i] if i < len(base) else 0.0)
+            + (mid[i] if i < len(mid) else 0.0)
+            + (high[i] if i < len(high) else 0.0)
+            + shimmer
+        )
+    return samples
+
+
+def _item_heal_pickup_sound() -> list[float]:
+    lower = _tone(0.12, 520.0, volume=0.28, decay=9.0)
+    soft = [0.0] * int(RATE * 0.02) + _tone(0.16, 1040.0, volume=0.24, decay=7.5)
+    samples = []
+    for i in range(max(len(lower), len(soft))):
+        t = i / RATE
+        breath = math.sin(2.0 * math.pi * 780.0 * t) * math.exp(-t * 5.5) * 0.08
+        samples.append(
+            (lower[i] if i < len(lower) else 0.0)
+            + (soft[i] if i < len(soft) else 0.0)
+            + breath
+        )
+    return samples
+
+
 def main() -> None:
     _write_wav("type.wav", _type_sound())
     _write_wav("item_pickup.wav", _item_pickup_sound())
+    _write_wav("item_weapon_pickup.wav", _item_weapon_pickup_sound())
+    _write_wav("item_heal_pickup.wav", _item_heal_pickup_sound())
 
 
 if __name__ == "__main__":
