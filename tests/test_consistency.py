@@ -213,6 +213,24 @@ def test_stage_supports_world_layout_fields() -> None:
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
 
 
+def test_stage1_uses_authored_setpieces_instead_of_random_breakable_walls() -> None:
+    from src.stages.stage import Stage
+
+    stage = Stage(object(), 1)
+
+    strip = stage.terrain_layout[0]
+    terrain_types = [ev.get("type") for ev in stage.terrain_layout]
+    world_types = [ev.get("type") for ev in stage.world_events]
+
+    assert strip["type"] == "TerrainStrip"
+    assert strip.get("breakable_chance", 0.0) == 0.0
+    assert terrain_types.count("turret_mount") >= 3
+    assert "breakable_gate" in terrain_types
+    assert world_types.count("EnemyTurret") >= 2
+    assert stage.events == []
+    assert stage.world_events[-1]["type"] == "Boss"
+
+
 def test_world_event_turret_spawns_at_authored_x_on_surface() -> None:
     from src.core.camera import Camera
     from src.entities.terrain import make_terrain_strip

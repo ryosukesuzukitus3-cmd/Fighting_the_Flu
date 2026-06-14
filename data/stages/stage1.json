@@ -15,11 +15,17 @@
       "top_min": 30,
       "bottom_min": 34,
       "irregularity": 56,
-      "breakable_chance": 0.1,
-      "breakable_hp": 3,
-      "breakable_drop_chance": 0.35,
+      "breakable_chance": 0.0,
       "start_offset": -90
-    }
+    },
+    {"type": "Terrain", "x": 760,  "y": 106, "w": 76,  "h": 48,  "kind": "rock", "destructible": true, "hp": 3, "drop_chance": 0.22},
+    {"type": "Terrain", "x": 980,  "y": 438, "w": 92,  "h": 50,  "kind": "rock", "destructible": true, "hp": 3, "drop_chance": 0.28},
+    {"type": "turret_mount", "x": 1560, "y": 418, "w": 210, "h": 36, "kind": "rock"},
+    {"type": "Terrain", "x": 1880, "y": 88,  "w": 92,  "h": 54,  "kind": "rock", "destructible": true, "hp": 3, "drop_chance": 0.25},
+    {"type": "turret_mount", "x": 2090, "y": 426, "w": 190, "h": 34, "kind": "rock"},
+    {"type": "breakable_gate", "x": 2440, "y": 146, "w": 78,  "h": 120, "kind": "rock", "hp": 5, "drop_chance": 0.35},
+    {"type": "breakable_gate", "x": 2520, "y": 374, "w": 86,  "h": 94,  "kind": "rock", "hp": 5, "drop_chance": 0.35},
+    {"type": "turret_mount", "x": 2700, "y": 420, "w": 190, "h": 36, "kind": "rock"}
   ],
   "boss_terrain": [
     {
@@ -42,20 +48,22 @@
     {"type": "Terrain", "screen_x": 720, "y": 438, "w": 78, "h": 78, "kind": "rock"}
   ],
   "world_events": [
-    {"type": "EnemyTurret", "x": 2770, "count": 1, "surface": "bottom", "surface_offset": 20}
+    {"type": "EnemyVirus", "x": 1120, "count": 3, "formation": "line"},
+    {"type": "EnemyVirus", "x": 1370, "count": 4, "formation": "line"},
+    {"type": "EnemyVirus", "x": 1670, "count": 4, "formation": "v_shape"},
+    {"type": "EnemyCrawler", "x": 1660, "count": 2, "surface": "bottom", "surface_offset": 20, "surface_step": 76},
+    {"type": "EnemyTurret", "x": 1710, "count": 1, "surface": "bottom", "surface_offset": 20},
+    {"type": "EnemyTakeshi", "x": 1970, "count": 2, "formation": "line"},
+    {"type": "EnemyCrawler", "x": 2160, "count": 2, "surface": "bottom", "surface_offset": 20, "surface_step": 72},
+    {"type": "EnemyVirus", "x": 2280, "count": 5, "formation": "v_shape"},
+    {"type": "EnemyBilly", "x": 2450, "count": 1, "formation": "random"},
+    {"type": "EnemyVirus", "x": 2620, "count": 4, "formation": "random"},
+    {"type": "EnemyTurret", "x": 2770, "count": 1, "surface": "bottom", "surface_offset": 20},
+    {"type": "EnemyTakeshi", "x": 2920, "count": 2, "formation": "random"},
+    {"type": "EnemyCoughSprayer", "x": 3100, "count": 1, "y": 300},
+    {"type": "EnemyVirus", "x": 3300, "count": 5, "formation": "line"},
+    {"type": "EnemyTakeshi", "x": 3620, "count": 2, "formation": "v_shape"},
+    {"type": "Boss", "x": 3920, "count": 1, "formation": "single"}
   ],
-  "events": [
-    {"time":  3.0, "type": "EnemyVirus", "count": 3, "formation": "line"},
-    {"time":  6.0, "type": "EnemyVirus", "count": 4, "formation": "line"},
-    {"time": 10.0, "type": "EnemyVirus", "count": 4, "formation": "v_shape"},
-    {"time": 14.0, "type": "EnemyTakeshi",   "count": 2, "formation": "line"},
-    {"time": 18.0, "type": "EnemyVirus", "count": 5, "formation": "v_shape"},
-    {"time": 20.0, "type": "EnemyBilly",  "count": 1, "formation": "random"},
-    {"time": 22.0, "type": "EnemyVirus", "count": 4, "formation": "random"},
-    {"time": 26.0, "type": "EnemyTakeshi",   "count": 2, "formation": "random"},
-    {"time": 28.0, "type": "EnemyCoughSprayer", "count": 1, "y": 300},
-    {"time": 30.0, "type": "EnemyVirus", "count": 5, "formation": "line"},
-    {"time": 34.0, "type": "EnemyTakeshi",   "count": 2, "formation": "v_shape"},
-    {"time": 38.0, "type": "Boss",        "count": 1, "formation": "single"}
-  ]
+  "events": []
 }
