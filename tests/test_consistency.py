@@ -281,6 +281,7 @@ def test_stage_backgrounds_draw_all_stages() -> None:
 # ── docs ─────────────────────────────────────────────────────────────
 
 def test_terrain_strip_can_spawn_breakable_segments() -> None:
+    from src.core.constants import SCREEN_HEIGHT
     from src.entities.terrain import make_terrain_strip
 
     segments = make_terrain_strip(
@@ -293,6 +294,10 @@ def test_terrain_strip_can_spawn_breakable_segments() -> None:
     )
     breakables = [s for s in segments if getattr(s, "destructible", False)]
     assert breakables
+    assert all(
+        (target.y > 0 if target.side == "top" else target.y + target.rect.height < SCREEN_HEIGHT)
+        for target in breakables
+    )
 
     target = breakables[0]
     assert target.take_damage(1) is False
@@ -410,6 +415,32 @@ def test_enemy_bullet_supports_boss_special_shapes() -> None:
 
     bullet.update(0.2)
     assert bullet not in group
+
+    fading = EnemyBullet(
+        100.0,
+        120.0,
+        0.0,
+        0.0,
+        size=(80, 24),
+        lifetime=1.0,
+        terrain_passthrough=True,
+        warning_only=True,
+        fade_shrink=True,
+    )
+    start_h = fading.rect.height
+    fading.update(0.5)
+    assert fading.rect.height < start_h
+    assert fading.image.get_alpha() is not None and fading.image.get_alpha() < 255
+
+
+def test_broly_beam_has_warning_and_fadeout() -> None:
+    src = (ROOT / "src" / "entities" / "enemies" / "broly.py").read_text(encoding="utf-8")
+
+    assert "_fire_warning()" in src
+    assert "warning_only=True" in src
+    assert "_fire_charge_beam()" in src
+    assert "fade_shrink=True" in src
+    assert "_paint_charge_beam" in src
 
 
 def test_boss_turret_guard_blocks_core_damage() -> None:

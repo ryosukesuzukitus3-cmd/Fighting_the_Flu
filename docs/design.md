@@ -645,8 +645,8 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `top_min` / `bottom_min` | — | 上下壁の最低厚み |
 | `irregularity` | — | セグメントごとの局所的な凹凸量 |
 | `profile` | — | 形状プロファイル（`normal` / `mountain` / `ceiling`）。山斜面・天井せり出しを作る |
-| `breakable_chance` | — | 破壊可能セグメントの出現率（0.0〜1.0） |
-| `breakable_hp` | — | 破壊可能セグメントのHP |
+| `breakable_chance` | — | 通路側に張り出した破壊可能岩の出現率（0.0〜1.0）。壁全体は消えない |
+| `breakable_hp` | — | 破壊可能岩のHP |
 | `breakable_drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
 | `start_offset` | — | 生成開始Xの補正（画面左から始める場合は負値） |
 | `seed` | — | 形状・模様の固定乱数シード |

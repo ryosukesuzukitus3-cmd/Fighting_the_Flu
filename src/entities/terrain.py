@@ -396,20 +396,46 @@ def make_terrain_strip(
 
         if top_h > 0:
             destructible = i > 6 and rng.random() < breakable_chance
-            segments.append(TerrainStripSegment(
-                wx, 0, segment_w, top_h,
-                side="top", theme=theme, seed=seed, index=i,
-                destructible=destructible,
-                hp=breakable_hp,
-                drop_chance=breakable_drop_chance,
-            ))
+            if destructible:
+                protrusion_h = min(54, max(1, top_h - 8), max(18, top_h // 2))
+                base_h = top_h - protrusion_h
+                if base_h > 0:
+                    segments.append(TerrainStripSegment(
+                        wx, 0, segment_w, base_h,
+                        side="top", theme=theme, seed=seed, index=i * 2,
+                    ))
+                segments.append(TerrainStripSegment(
+                    wx, base_h, segment_w, protrusion_h,
+                    side="top", theme=theme, seed=seed, index=i * 2 + 1,
+                    destructible=True,
+                    hp=breakable_hp,
+                    drop_chance=breakable_drop_chance,
+                ))
+            else:
+                segments.append(TerrainStripSegment(
+                    wx, 0, segment_w, top_h,
+                    side="top", theme=theme, seed=seed, index=i * 2,
+                ))
         if bottom_h > 0:
             destructible = i > 6 and rng.random() < breakable_chance
-            segments.append(TerrainStripSegment(
-                wx, bottom_y, segment_w, bottom_h,
-                side="bottom", theme=theme, seed=seed, index=i,
-                destructible=destructible,
-                hp=breakable_hp,
-                drop_chance=breakable_drop_chance,
-            ))
+            if destructible:
+                protrusion_h = min(54, max(1, bottom_h - 8), max(18, bottom_h // 2))
+                base_h = bottom_h - protrusion_h
+                segments.append(TerrainStripSegment(
+                    wx, bottom_y, segment_w, protrusion_h,
+                    side="bottom", theme=theme, seed=seed, index=i * 2 + 1,
+                    destructible=True,
+                    hp=breakable_hp,
+                    drop_chance=breakable_drop_chance,
+                ))
+                if base_h > 0:
+                    segments.append(TerrainStripSegment(
+                        wx, bottom_y + protrusion_h, segment_w, base_h,
+                        side="bottom", theme=theme, seed=seed, index=i * 2,
+                    ))
+            else:
+                segments.append(TerrainStripSegment(
+                    wx, bottom_y, segment_w, bottom_h,
+                    side="bottom", theme=theme, seed=seed, index=i * 2,
+                ))
     return segments
