@@ -7,8 +7,8 @@ from __future__ import annotations
 import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.scenes.dialogue_panel import DARK_STYLE, draw_story_panel
 from src.story.script import STAGE_INTRO
-from src.story.speakers import speaker_name, speaker_color, DEFAULT_TEXT_COLOR
 
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
 _TYPE_SE_INTERVAL = 0.045
@@ -85,35 +85,18 @@ class StageIntroScene(Scene):
         pygame.draw.line(screen, (60, 60, 80), (80, 110), (SCREEN_WIDTH - 80, 110), 1)
 
         pg = self._pages[self._page]
-        block_top = cy - (len(pg.lines) * 40) // 2
-
-        # 話者ネームプレート
-        name = speaker_name(pg.speaker)
-        if name:
-            nsurf = self._font_name.render(name, True, speaker_color(pg.speaker))
-            screen.blit(nsurf, (cx - nsurf.get_width() // 2, block_top - 44))
-
-        # テキスト（タイプライター）
-        chars_left = int(self._chars)
-        line_y = block_top
-        for ln in pg.lines:
-            if chars_left <= 0:
-                break
-            visible = ln[:chars_left]
-            chars_left -= len(ln)
-            if visible:
-                surf = self._font_body.render(visible, True, DEFAULT_TEXT_COLOR)
-                screen.blit(surf, (cx - surf.get_width() // 2, line_y))
-            line_y += 40
-
-        # ページインジケーター
-        dots = "  ".join("●" if i == self._page else "○" for i in range(len(self._pages)))
-        dot_surf = self._font_hint.render(dots, True, (80, 100, 130))
-        screen.blit(dot_surf, (cx - dot_surf.get_width() // 2, SCREEN_HEIGHT - 80))
-
-        # ヒント（点滅）
-        if self._is_text_complete() and int(self._blink * 2) % 2 == 0:
-            is_last = self._pages[self._page].last
-            hint_txt = "SPACE: ゲーム開始   X: スキップ" if is_last else "SPACE: 次へ   X: スキップ"
-            hint = self._font_hint.render(hint_txt, True, (100, 120, 160))
-            screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 46))
+        is_last = self._pages[self._page].last
+        draw_story_panel(
+            screen,
+            self.game.resources,
+            pg.speaker,
+            pg.lines,
+            chars=int(self._chars),
+            page_index=self._page,
+            total_pages=len(self._pages),
+            complete=self._is_text_complete(),
+            blink=self._blink,
+            hint_last="SPACE: ゲーム開始   X: スキップ" if is_last else "SPACE: 次へ   X: スキップ",
+            hint_next="SPACE: 次へ   X: スキップ",
+            style=DARK_STYLE,
+        )

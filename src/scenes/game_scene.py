@@ -21,6 +21,7 @@ from src.scenes.game.upgrade_mixin  import GameSceneUpgradeMixin
 from src.scenes.game.overlay_mixin  import GameSceneOverlayMixin
 from src.scenes.game.post_boss_mixin import GameScenePostBossMixin
 from src.scenes.game.debug_mixin    import GameSceneDebugMixin
+from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
 
 # ゲームシーン専用定数
 from src.scenes.game.config import (
@@ -1337,26 +1338,20 @@ class GameScene(
         line  = pages[idx]
         total = len(pages)
 
-        box_h = 88
-        box_y = SCREEN_HEIGHT - box_h - 20
-        overlay = pygame.Surface((SCREEN_WIDTH - 40, box_h), pygame.SRCALPHA)
-        overlay.fill((14, 0, 24, 220))
-        pygame.draw.rect(overlay, (170, 60, 160, 210),
-                         (0, 0, SCREEN_WIDTH - 40, box_h), 2, border_radius=6)
-        screen.blit(overlay, (20, box_y))
-
-        self._draw_speaker_nameplate(screen, line.speaker, 20, box_y)
-        text_x = self._draw_speaker_portrait(screen, line.speaker, 20, box_y, box_h)
-
-        surf = self._final_dialogue_font.render(line.text, True, (255, 235, 245))
-        screen.blit(surf, (text_x, box_y + (box_h - surf.get_height()) // 2))
-
-        hint_font = self.game.resources.pixelfont(16)
         if idx < total - 1:
-            hint = hint_font.render(f"{idx + 1}/{total}  ENTER: NEXT", True, (180, 130, 190))
+            hint = f"{idx + 1}/{total}  ENTER: 次へ"
         else:
-            hint = hint_font.render("ENTER: OK", True, (160, 200, 150))
-        screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 28, box_y + box_h - hint.get_height() - 4))
+            hint = "ENTER: OK"
+        draw_combat_panel(
+            screen,
+            self.game.resources,
+            line.speaker,
+            (line.text,),
+            page_index=idx,
+            total_pages=total,
+            hint_text=hint,
+            style=COMBAT_PURPLE_STYLE,
+        )
 
     def _update_bg_text(self, dt: float) -> None:
         if not self._bg_text_pool:
