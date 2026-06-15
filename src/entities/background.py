@@ -55,11 +55,12 @@ class ScrollingBackground:
         rnd = random.Random(sid * 1000 + 7)
         self._cells: list = []
         if sid == 1:
-            # 血球（漂う赤い円）と血管うねりの位相
+            # Distant blood cells. Tuple: x, y, rx, ry, angle, parallax, phase.
             self._cells = [
                 (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(0, SCREEN_HEIGHT),
-                 rnd.uniform(6, 16), rnd.uniform(0.06, 0.22), rnd.uniform(0, 6.28))
-                for _ in range(14)
+                 rnd.uniform(18, 42), rnd.uniform(9, 19), rnd.uniform(-0.55, 0.55),
+                 rnd.uniform(0.05, 0.18), rnd.uniform(0, 6.28))
+                for _ in range(22)
             ]
             # 洞窟奥の縦ひだ。地形の手前に出すぎないよう低コントラストにする。
             self._ribs = [
@@ -94,8 +95,9 @@ class ScrollingBackground:
     # ── 描画 ─────────────────────────────────────────────────────
     def draw(self, screen: pygame.Surface, camera_x: float) -> None:
         screen.fill(_BASE_COLOR.get(self.stage_id, (5, 5, 20)))
-        for layer in self._layers:
-            layer.draw(screen, camera_x)
+        if self.stage_id != 1:
+            for layer in self._layers:
+                layer.draw(screen, camera_x)
         # フレーム毎に時間を進める（静止時でもテーマを動かす）
         self._time += 1.0 / 60.0
         if   self.stage_id == 1: self._draw_vessel(screen, camera_x)
@@ -139,13 +141,25 @@ class ScrollingBackground:
                 pygame.draw.lines(screen, col, False, pts, 6)
         # 脈打つ血球
         pulse = 0.5 + 0.5 * math.sin(t * 2.0)
-        for (cx, cy, r, sf, ph) in self._cells:
-            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 80) - 40
-            rr = int(r * (0.8 + 0.4 * pulse))
-            s = pygame.Surface((rr * 2 + 2, rr * 2 + 2), pygame.SRCALPHA)
-            pygame.draw.circle(s, (150, 30, 40, 70), (rr + 1, rr + 1), rr)
-            pygame.draw.circle(s, (200, 70, 80, 90), (rr + 1, rr + 1), max(1, rr // 2))
-            screen.blit(s, (int(x), int(cy)))
+        for (cx, cy, rx, ry, angle, sf, ph) in self._cells:
+            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 120) - 60
+            y = cy + math.sin(t * 0.55 + ph) * 8
+            scale = 0.92 + 0.10 * pulse + 0.06 * math.sin(t * 0.7 + ph)
+            rw = max(10, int(rx * scale))
+            rh = max(5, int(ry * (1.0 + 0.08 * math.sin(t + ph))))
+            cell = pygame.Surface((rw * 2 + 8, rh * 2 + 8), pygame.SRCALPHA)
+            rect = pygame.Rect(4, 4, rw * 2, rh * 2)
+            pygame.draw.ellipse(cell, (154, 30, 40, 72), rect)
+            pygame.draw.ellipse(cell, (218, 82, 78, 58), rect, 2)
+            pygame.draw.ellipse(cell, (74, 12, 20, 46), rect.inflate(-max(6, rw), -max(4, rh // 2)))
+            pygame.draw.ellipse(
+                cell,
+                (255, 138, 118, 42),
+                (rect.left + rw // 3, rect.top + rh // 4, max(5, rw // 2), max(3, rh // 3)),
+                1,
+            )
+            rotated = pygame.transform.rotate(cell, math.degrees(angle))
+            screen.blit(rotated, (int(x - rotated.get_width() / 2), int(y - rotated.get_height() / 2)))
 
     # ── Stage2 ミーム汚染（走査ノイズ）─────────────────────────
     def _draw_meme(self, screen: pygame.Surface, camera_x: float) -> None:
