@@ -30,6 +30,16 @@ class StageIntroScene(Scene):
         self._chars = 0.0
         self._blink = 0.0
         self._type_se_cooldown = 0.0
+        self._story_active  = None   # 立ち絵ハイライト用（直近に話した登場人物）
+        self._story_partner = None   # その前に話した登場人物（会話相手）
+        self._track_speaker()
+
+    def _track_speaker(self) -> None:
+        from src.story.speakers import is_character
+        sp = self._pages[self._page].speaker
+        if is_character(sp) and sp != self._story_active:
+            self._story_partner = self._story_active
+            self._story_active = sp
 
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
@@ -63,6 +73,7 @@ class StageIntroScene(Scene):
                 self._page += 1
                 self._chars = 0.0
                 self._type_se_cooldown = 0.0
+                self._track_speaker()
             else:
                 self._go_game()
 
@@ -86,11 +97,15 @@ class StageIntroScene(Scene):
 
         pg = self._pages[self._page]
         is_last = self._pages[self._page].last
+        from src.scenes.dialogue_panel import story_sides
+        left_sp, right_sp = story_sides(self._story_active, self._story_partner)
         draw_story_panel(
             screen,
             self.game.resources,
             pg.speaker,
             pg.lines,
+            left_speaker=left_sp,
+            right_speaker=right_sp,
             chars=int(self._chars),
             page_index=self._page,
             total_pages=len(self._pages),

@@ -65,8 +65,6 @@ class BlackholeScene(Scene):
         self._fade_out_t = 0.0
         self._fade_out = False
         self._finished = False
-        self._story_active = None    # 立ち絵ハイライト用（直近に話した登場人物）
-        self._story_partner = None   # その前に話した登場人物（会話相手）
         self.game.sound.stop_bgm(fadeout_ms=500)
         self._enter_page()
 
@@ -117,10 +115,6 @@ class BlackholeScene(Scene):
             self._phase = new_phase
             self._phase_time = 0.0
         pg = self._cur()
-        from src.story.speakers import is_character
-        if is_character(pg.speaker) and pg.speaker != self._story_active:
-            self._story_partner = self._story_active
-            self._story_active = pg.speaker
         if pg.se:
             self.game.sound.play_se_alias(pg.se)
         if "shake" in pg.fx or "blackhole" in pg.fx:
@@ -310,14 +304,14 @@ class BlackholeScene(Scene):
             return
         pg = self._cur()
         # 他シーンと同じ会話パネル（V2）に統一。立ち絵は左右割り当て、ノイズ演出は維持。
-        from src.scenes.dialogue_panel import DARK_STYLE, draw_story_panel, story_sides
-        left_sp, right_sp = story_sides(self._story_active, self._story_partner)
+        from src.scenes.dialogue_panel import DARK_STYLE, draw_story_panel
         noisy = pg.speaker == KARONARU and self._noise_level > 0.1
         transform = (lambda s: self._noisy_text(s, self._noise_level)) if noisy else None
+        # ブラックホールの渦が隠れないよう立ち絵は出さない（パネルのみ統一）
         draw_story_panel(
             screen, self.game.resources, pg.speaker, pg.lines,
             chars=int(self._chars), complete=self._is_text_complete(),
-            left_speaker=left_sp, right_speaker=right_sp, style=DARK_STYLE,
+            show_portrait=False, style=DARK_STYLE,
             text_transform=transform,
             text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
         )
