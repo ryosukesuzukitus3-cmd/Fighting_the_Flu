@@ -303,51 +303,21 @@ class BlackholeScene(Scene):
         if not self._pages:
             return
         pg = self._cur()
-        box_h = 130
-        box_y = SCREEN_HEIGHT - box_h - 16
-        box = pygame.Surface((SCREEN_WIDTH - 36, box_h), pygame.SRCALPHA)
-        box.fill((8, 4, 18, 220))
-        pygame.draw.rect(box, (130, 80, 180, 220), box.get_rect(), 2, border_radius=6)
-        screen.blit(box, (18, box_y))
+        # 他シーンと同じ会話パネル（V2）に統一。立ち絵は左右割り当て、ノイズ演出は維持。
+        from src.scenes.dialogue_panel import DARK_STYLE, draw_story_panel
+        noisy = pg.speaker == KARONARU and self._noise_level > 0.1
+        transform = (lambda s: self._noisy_text(s, self._noise_level)) if noisy else None
+        # ブラックホールの渦が隠れないよう立ち絵は出さない（パネルのみ統一）
+        draw_story_panel(
+            screen, self.game.resources, pg.speaker, pg.lines,
+            chars=int(self._chars), complete=self._is_text_complete(),
+            show_portrait=False, style=DARK_STYLE,
+            text_transform=transform,
+            text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
+        )
         if self._noise_level > 0.03:
-            self._draw_signal_noise(screen, pygame.Rect(18, box_y, SCREEN_WIDTH - 36, box_h))
-
-        x = 34
-        portrait = speaker_portrait(pg.speaker)
-        if portrait:
-            try:
-                raw = self.game.resources.image(portrait)
-                pimg = pygame.transform.smoothscale(raw, (62, 62)).convert_alpha()
-                screen.blit(pimg, (x, box_y + 16))
-                pygame.draw.rect(screen, speaker_color(pg.speaker), (x, box_y + 16, 62, 62), 2)
-                x += 78
-            except Exception:
-                pass
-
-        name = speaker_name(pg.speaker)
-        if name:
-            ns = self._font_name.render(name, True, speaker_color(pg.speaker))
-            screen.blit(ns, (x, box_y + 14))
-
-        chars_left = int(self._chars)
-        y = box_y + 44
-        for line in pg.lines:
-            if chars_left <= 0:
-                break
-            visible = line[:chars_left]
-            chars_left -= len(line)
-            if visible:
-                if pg.speaker == KARONARU and self._noise_level > 0.1:
-                    visible = self._noisy_text(visible, self._noise_level)
-                surf = self._font_body.render(visible, True, DEFAULT_TEXT_COLOR)
-                jitter = int(random.uniform(-2, 3) * self._noise_level)
-                screen.blit(surf, (x + jitter, y))
-            y += 30
-
-        progress = f"{self._page + 1}/{len(self._pages)}"
-        hint = "ENTER" if self._is_text_complete() else progress
-        hs = self._font_hint.render(hint, True, (190, 160, 220))
-        screen.blit(hs, (SCREEN_WIDTH - hs.get_width() - 30, box_y + box_h - 24))
+            panel = pygame.Rect(40, SCREEN_HEIGHT - 210, SCREEN_WIDTH - 80, 176)
+            self._draw_signal_noise(screen, panel)
 
     def _draw_signal_noise(self, screen: pygame.Surface, rect: pygame.Rect) -> None:
         noise = max(0.0, min(1.0, self._noise_level))
