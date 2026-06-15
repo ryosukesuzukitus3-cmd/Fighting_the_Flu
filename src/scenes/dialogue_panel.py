@@ -198,10 +198,10 @@ def _tachie_image(resources, speaker, size, *, flip, active):
     if flip:
         img = pygame.transform.flip(img, True, False)
     if not active:
-        img.set_alpha(150)
+        # 非発言側は「薄く」ではなく「暗く」（不透明のまま陰に落とす）
         shade = pygame.Surface((size, size), pygame.SRCALPHA)
-        shade.fill((6, 8, 22, 130))
-        img.blit(shade, (0, 0))
+        shade.fill((92, 94, 112))
+        img.blit(shade, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
     return img
 
 
