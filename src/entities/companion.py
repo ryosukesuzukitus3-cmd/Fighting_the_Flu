@@ -7,7 +7,6 @@
 from __future__ import annotations
 import math
 import random
-from collections import deque
 from typing import Callable, TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
@@ -23,9 +22,9 @@ _REVIVE_INVINCIBLE = 1.6  # 復帰直後の無敵時間（秒）
 _BLINK_INTERVAL   = 0.1
 _RETURN_TIME      = 24.0  # 撤退後復帰までの時間（秒・従来の3倍）
 _SHOOT_COOLDOWN   = 0.5   # ショットクールダウン（秒）
-_TRAIL_MAX_POINTS = 96    # 自機軌跡の保存点数
-_FOLLOW_DISTANCE  = 82.0  # 自機の軌跡上で後ろに取る距離
-_MIN_TRAIL_STEP   = 1.0   # 履歴に点を追加する最小移動距離
+_FOLLOW_OFFSET_X  = 66.0  # 澤口の左にどれだけ離れて位置取りするか
+_FOLLOW_OFFSET_Y  = 46.0  # 澤口の下にどれだけ離れて位置取りするか
+_FOLLOW_LERP      = 7.5    # 追従の基本追従率（澤口の speed_multiplier で増減）
 _SPRITE_R         = 16    # ダミースプライト半径（px）
 
 
@@ -80,9 +79,6 @@ class Karonaru(pygame.sprite.Sprite):
         self._target_sx: float = self.sx
         self._target_sy: float = self.sy
 
-        # 追従用位置履歴（自機の中心位置）
-        self._history: deque[tuple[float, float]] = deque(maxlen=_TRAIL_MAX_POINTS)
-
         # HP / 無敵
         self.hp:     int  = _MAX_HP
         self.max_hp: int  = _MAX_HP
@@ -127,10 +123,14 @@ class Karonaru(pygame.sprite.Sprite):
                 self._revive(player)
             return
 
-        self._append_player_point(player)
-        self._target_sx, self._target_sy = self._sample_trail_point()
-        self.sx = self._target_sx
-        self.sy = self._target_sy
+        # 澤口の左下に位置取りする（軌跡なぞりは廃止。被弾しやすい正面/直線上を外す）。
+        # 速度は澤口の速度（weapon.speed_multiplier）に連動して上がる。
+        mult = getattr(getattr(player, "weapon", None), "speed_multiplier", 1.0)
+        target_x = float(player.rect.centerx) - _FOLLOW_OFFSET_X
+        target_y = float(player.rect.centery) + _FOLLOW_OFFSET_Y
+        k = min(1.0, _FOLLOW_LERP * mult * dt)
+        self.sx += (target_x - self.sx) * k
+        self.sy += (target_y - self.sy) * k
 
         # 壁クランプ
         hw = self.rect.width  // 2
@@ -156,45 +156,11 @@ class Karonaru(pygame.sprite.Sprite):
             self._fire(player_bullets, camera)
             self._shoot_cooldown = _SHOOT_COOLDOWN
 
-    def _append_player_point(self, player) -> None:
-        px = float(player.rect.centerx)
-        py = float(player.rect.centery)
-        if not self._history:
-            self.reseed_trail(player)
-            return
-        lx, ly = self._history[-1]
-        if math.hypot(px - lx, py - ly) >= _MIN_TRAIL_STEP:
-            self._history.append((px, py))
-
-    def _sample_trail_point(self) -> tuple[float, float]:
-        if not self._history:
-            return self.sx, self.sy
-
-        points = list(self._history)
-        remaining = _FOLLOW_DISTANCE
-        for i in range(len(points) - 1, 0, -1):
-            x1, y1 = points[i]
-            x0, y0 = points[i - 1]
-            seg = math.hypot(x1 - x0, y1 - y0)
-            if seg <= 0.0:
-                continue
-            if remaining <= seg:
-                t = remaining / seg
-                return x1 + (x0 - x1) * t, y1 + (y0 - y1) * t
-            remaining -= seg
-        return points[0]
-
     def reseed_trail(self, player, *, snap: bool = True) -> None:
-        px = float(player.rect.centerx)
-        py = float(player.rect.centery)
-        self._history.clear()
-        start_x = px - _FOLLOW_DISTANCE
-        steps = 8
-        for i in range(steps):
-            t = i / (steps - 1)
-            self._history.append((start_x + (px - start_x) * t, py))
+        """復帰/合流時に澤口の左下へ位置を合わせる（旧・軌跡シード互換のAPI名）。"""
         if snap:
-            self.sx, self.sy = self._sample_trail_point()
+            self.sx = float(player.rect.centerx) - _FOLLOW_OFFSET_X
+            self.sy = float(player.rect.centery) + _FOLLOW_OFFSET_Y
             self.rect.center = (int(self.sx), int(self.sy))
 
     def _fire(self, player_bullets: pygame.sprite.Group, camera: "Camera") -> None:
@@ -256,15 +222,4 @@ class Karonaru(pygame.sprite.Sprite):
         if self._state != "active" or not self._blink_visible:
             return
         surf.blit(self.image, self.rect)
-        self._draw_hp_pips(surf)
-
-    def _draw_hp_pips(self, surf: pygame.Surface) -> None:
-        """HP ドット（緑ピップ）を頭上に描画する。"""
-        pip_w, pip_h, pip_gap = 6, 4, 3
-        total_w = self.max_hp * pip_w + (self.max_hp - 1) * pip_gap
-        px = self.rect.centerx - total_w // 2
-        py = self.rect.top - 9
-        for i in range(self.max_hp):
-            color = (80, 220, 100) if i < self.hp else (40, 60, 40)
-            pygame.draw.rect(surf, color, (px, py, pip_w, pip_h), border_radius=1)
-            px += pip_w + pip_gap
+        # HP 表示（緑ピップ）は廃止（先輩のHPは出さない）。
