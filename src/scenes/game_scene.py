@@ -774,7 +774,11 @@ class GameScene(
                 continue
             sx, sy = bullet.rect.center
             self._strike_terrain(ter, getattr(bullet, "damage", 1), sx, sy, allow_damage=True)
-            self._ricochet_bullet(bullet, ter, screen_space=False)
+            from src.entities.bullets.player_bullet import HomingBullet
+            if isinstance(bullet, HomingBullet):
+                bullet.kill()   # ホーミングは壁で跳ね返さず消滅させる
+            else:
+                self._ricochet_bullet(bullet, ter, screen_space=False)
 
         for bullet in list(self.enemy_bullets):
             if (getattr(bullet, "_terrain_bounced", False)
