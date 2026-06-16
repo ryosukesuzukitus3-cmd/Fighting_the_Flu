@@ -122,7 +122,7 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
-    valid_terrain_kinds = {"wall", "rock", "debris"}
+    valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
@@ -211,6 +211,20 @@ def test_stage_supports_world_layout_fields() -> None:
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
     assert any(ev["type"] == "EnemyTurret" and ev["x"] == 2770 for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
+
+
+def test_stage1_uses_authored_blood_cell_setpieces() -> None:
+    data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
+    layout = data["terrain_layout"][0]
+    world_events = data["world_events"]
+
+    assert layout["type"] == "TerrainStrip"
+    assert layout["theme"] == "fever_cave"
+    assert layout["breakable_chance"] == 0.0
+    assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
+    assert any(ev.get("type") == "breakable_gate" and ev.get("kind") == "clot" for ev in world_events)
+    assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
+    assert data["events"] == []
 
 
 def test_world_event_turret_spawns_at_authored_x_on_surface() -> None:

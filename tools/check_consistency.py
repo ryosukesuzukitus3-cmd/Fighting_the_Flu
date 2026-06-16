@@ -180,7 +180,7 @@ def check_stages() -> None:
 
     # stage JSON 必須フィールド検証
     valid_formations = {"line", "v_shape", "random", "single"}
-    valid_terrain_kinds = {"wall", "rock", "debris"}
+    valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES

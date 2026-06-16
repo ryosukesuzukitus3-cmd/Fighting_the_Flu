@@ -8,16 +8,16 @@
       "length": 4400,
       "segment_w": 48,
       "seed": 101,
-      "gap_min": 380,
-      "gap_max": 480,
+      "gap_min": 390,
+      "gap_max": 460,
       "center_y": 304,
-      "center_wave": 46,
+      "center_wave": 38,
       "top_min": 30,
       "bottom_min": 34,
-      "irregularity": 56,
-      "breakable_chance": 0.1,
+      "irregularity": 40,
+      "breakable_chance": 0.0,
       "breakable_hp": 3,
-      "breakable_drop_chance": 0.35,
+      "breakable_drop_chance": 0.0,
       "start_offset": -90
     }
   ],
@@ -38,24 +38,33 @@
       "breakable_chance": 0.0,
       "start_offset": -150
     },
-    {"type": "Terrain", "screen_x": 700, "y": 92,  "w": 72, "h": 72, "kind": "rock"},
-    {"type": "Terrain", "screen_x": 720, "y": 438, "w": 78, "h": 78, "kind": "rock"}
+    {"type": "Terrain", "screen_x": 700, "y": 92, "w": 92, "h": 74, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.35},
+    {"type": "Terrain", "screen_x": 716, "y": 430, "w": 108, "h": 70, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.35}
   ],
   "world_events": [
-    {"type": "EnemyTurret", "x": 2770, "count": 1, "surface": "bottom", "surface_offset": 20}
+    {"type": "EnemyVirus", "x": 360, "count": 3, "formation": "line"},
+    {"type": "EnemyVirus", "x": 700, "count": 4, "formation": "line"},
+    {"type": "Terrain", "x": 780, "y": 96, "w": 110, "h": 70, "kind": "clot", "destructible": true, "hp": 4, "drop_chance": 0.35},
+    {"type": "EnemyVirus", "x": 1020, "count": 4, "formation": "v_shape"},
+    {"type": "Terrain", "x": 1030, "y": 426, "w": 126, "h": 58, "kind": "clot", "destructible": true, "hp": 4, "drop_chance": 0.35},
+    {"type": "EnemyTakeshi", "x": 1320, "count": 2, "formation": "line"},
+    {"type": "turret_mount", "x": 1540, "y": 416, "w": 260, "h": 48, "kind": "clot"},
+    {"type": "Terrain", "x": 1840, "y": 88, "w": 104, "h": 68, "kind": "clot", "destructible": true, "hp": 4, "drop_chance": 0.35},
+    {"type": "EnemyVirus", "x": 1580, "count": 4, "formation": "v_shape"},
+    {"type": "EnemyBilly", "x": 1780, "count": 1, "y": 258},
+    {"type": "EnemyVirus", "x": 2040, "count": 4, "formation": "random"},
+    {"type": "turret_mount", "x": 2080, "y": 412, "w": 220, "h": 46, "kind": "clot"},
+    {"type": "EnemyTakeshi", "x": 2260, "count": 2, "formation": "random"},
+    {"type": "EnemyCoughSprayer", "x": 2380, "count": 1, "y": 300},
+    {"type": "breakable_gate", "x": 2420, "y": 88, "w": 88, "h": 158, "kind": "clot", "hp": 7, "drop_chance": 0.5},
+    {"type": "breakable_gate", "x": 2548, "y": 366, "w": 104, "h": 128, "kind": "clot", "hp": 6, "drop_chance": 0.45},
+    {"type": "EnemyVirus", "x": 2680, "count": 5, "formation": "line"},
+    {"type": "turret_mount", "x": 2640, "y": 418, "w": 260, "h": 48, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 2770, "count": 1, "surface": "bottom", "surface_offset": 20},
+    {"type": "EnemyTakeshi", "x": 3060, "count": 2, "formation": "v_shape"},
+    {"type": "Terrain", "x": 3180, "y": 112, "w": 128, "h": 60, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.35},
+    {"type": "EnemyVirus", "x": 3500, "count": 3, "formation": "random"},
+    {"type": "Boss", "x": 3920, "count": 1, "formation": "single", "preload": 70}
   ],
-  "events": [
-    {"time":  3.0, "type": "EnemyVirus", "count": 3, "formation": "line"},
-    {"time":  6.0, "type": "EnemyVirus", "count": 4, "formation": "line"},
-    {"time": 10.0, "type": "EnemyVirus", "count": 4, "formation": "v_shape"},
-    {"time": 14.0, "type": "EnemyTakeshi",   "count": 2, "formation": "line"},
-    {"time": 18.0, "type": "EnemyVirus", "count": 5, "formation": "v_shape"},
-    {"time": 20.0, "type": "EnemyBilly",  "count": 1, "formation": "random"},
-    {"time": 22.0, "type": "EnemyVirus", "count": 4, "formation": "random"},
-    {"time": 26.0, "type": "EnemyTakeshi",   "count": 2, "formation": "random"},
-    {"time": 28.0, "type": "EnemyCoughSprayer", "count": 1, "y": 300},
-    {"time": 30.0, "type": "EnemyVirus", "count": 5, "formation": "line"},
-    {"time": 34.0, "type": "EnemyTakeshi",   "count": 2, "formation": "v_shape"},
-    {"time": 38.0, "type": "Boss",        "count": 1, "formation": "single"}
-  ]
+  "events": []
 }

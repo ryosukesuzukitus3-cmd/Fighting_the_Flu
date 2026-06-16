@@ -18,6 +18,7 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "wall":   ((70, 72, 82),  (110, 114, 128)),   # 金属/コンクリの壁
     "rock":   ((96, 78, 60),  (140, 116, 86)),    # 岩石
     "debris": ((84, 86, 96),  (130, 134, 150)),   # 宇宙デブリ
+    "clot":   ((126, 24, 34), (230, 82, 76)),
 }
 
 
@@ -58,6 +59,13 @@ class Terrain(pygame.sprite.Sprite):
         destructible: bool = False,
         damage_ratio: float = 0.0,
     ) -> pygame.Surface:
+        if kind == "clot":
+            return Terrain._make_clot_surface(
+                w, h,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+            )
+
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         radius = 8 if kind != "wall" else 3
@@ -88,6 +96,86 @@ class Terrain(pygame.sprite.Sprite):
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
         return surf
 
+    @staticmethod
+    def _make_clot_surface(
+        w: int,
+        h: int,
+        *,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+    ) -> pygame.Surface:
+        rng = random.Random((w * 92837111) ^ (h * 689287499) ^ 0xC107)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+
+        if w >= h * 1.35:
+            pygame.draw.ellipse(surf, (78, 12, 20, 210), (2, int(h * 0.16), w - 4, int(h * 0.72)))
+            pygame.draw.ellipse(surf, (160, 34, 42, 185), (5, int(h * 0.10), w - 10, int(h * 0.78)))
+            count = max(4, min(9, w // 40))
+            for i in range(count):
+                cx = int((i + 0.5) * w / count + rng.randint(-8, 8))
+                cy = int(h * (0.50 + rng.uniform(-0.12, 0.10)))
+                cw = max(26, min(int(h * rng.uniform(0.82, 1.28)), max(28, w // 3)))
+                ch = max(20, min(int(h * rng.uniform(0.48, 0.78)), h - 6))
+                Terrain._draw_blood_cell(surf, (cx, cy), (cw, ch), rng)
+        else:
+            pygame.draw.ellipse(surf, (78, 12, 20, 210), (int(w * 0.10), 2, int(w * 0.80), h - 4))
+            pygame.draw.ellipse(surf, (160, 34, 42, 185), (int(w * 0.06), 5, int(w * 0.86), h - 10))
+            count = max(4, min(8, h // 34))
+            for i in range(count):
+                cx = int(w * (0.50 + rng.uniform(-0.12, 0.12)))
+                cy = int((i + 0.5) * h / count + rng.randint(-8, 8))
+                cw = max(24, min(int(w * rng.uniform(0.58, 0.86)), w - 6))
+                ch = max(24, min(int(w * rng.uniform(0.52, 0.82)), max(28, h // 3)))
+                Terrain._draw_blood_cell(surf, (cx, cy), (cw, ch), rng)
+
+        pygame.draw.ellipse(surf, (250, 105, 92, 110), surf.get_rect().inflate(-5, -5), 2)
+        pygame.draw.ellipse(surf, (255, 180, 132, 45), surf.get_rect().inflate(-16, -18), 1)
+
+        if destructible:
+            crack_col = (255, 190, 115)
+            node_col = (255, 112, 82)
+            crack_count = 4 + int(max(0.0, min(1.0, damage_ratio)) * 8)
+            for _ in range(crack_count):
+                x = rng.randint(8, max(8, w - 9))
+                y = rng.randint(8, max(8, h - 9))
+                pts = [(x, y)]
+                for _step in range(rng.randint(2, 5)):
+                    x += rng.randint(-16, 16)
+                    y += rng.randint(-12, 12)
+                    pts.append((max(4, min(w - 5, x)), max(4, min(h - 5, y))))
+                pygame.draw.lines(surf, crack_col, False, pts, 2)
+            for _ in range(max(2, (w * h) // 6000)):
+                sx = rng.randint(10, max(10, w - 11))
+                sy = rng.randint(10, max(10, h - 11))
+                pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
+
+        return surf
+
+    @staticmethod
+    def _draw_blood_cell(
+        surf: pygame.Surface,
+        center: tuple[int, int],
+        size: tuple[int, int],
+        rng: random.Random,
+    ) -> None:
+        cx, cy = center
+        w, h = size
+        rect = pygame.Rect(0, 0, w, h)
+        rect.center = (cx, cy)
+        rect.clamp_ip(surf.get_rect().inflate(-4, -4))
+        base = rng.choice(((174, 34, 44, 230), (192, 42, 48, 220), (150, 28, 38, 235)))
+        edge = (248, 105, 94, 155)
+        hollow = (86, 12, 22, 110)
+        shine = (255, 152, 130, 70)
+
+        pygame.draw.ellipse(surf, (50, 8, 14, 100), rect.move(2, 3))
+        pygame.draw.ellipse(surf, base, rect)
+        pygame.draw.ellipse(surf, edge, rect, 2)
+        inner = rect.inflate(-max(8, w // 3), -max(6, h // 3))
+        pygame.draw.ellipse(surf, hollow, inner)
+        glint = pygame.Rect(rect.left + w // 6, rect.top + h // 6, max(8, w // 3), max(4, h // 5))
+        pygame.draw.ellipse(surf, shine, glint, 1)
+
     def take_damage(self, amount: int) -> bool:
         """破壊されたら True。破壊不能地形は常に False。"""
         if not self.destructible:
@@ -116,11 +204,11 @@ class Terrain(pygame.sprite.Sprite):
 
 _STRIP_THEMES: dict[str, dict] = {
     "fever_cave": {
-        "base": (92, 22, 28),
-        "dark": (38, 8, 12),
-        "edge": (210, 70, 62),
-        "glow": (255, 105, 70),
-        "spot": (130, 34, 42),
+        "base": (86, 24, 30),
+        "dark": (58, 16, 22),
+        "edge": (198, 76, 70),
+        "glow": (238, 106, 84),
+        "spot": (118, 38, 44),
     },
     "debris": {
         "base": (74, 76, 86),
@@ -227,8 +315,10 @@ class TerrainStripSegment(pygame.sprite.Sprite):
 
         # 有機的な凹凸と危険縁。
         pts = []
-        for x in range(0, w + 9, 8):
-            jitter = rng.randint(0, min(16, max(4, h // 3)))
+        edge_step = 16 if theme == "fever_cave" else 8
+        max_jitter = min(7 if theme == "fever_cave" else 16, max(4, h // 3))
+        for x in range(0, w + edge_step + 1, edge_step):
+            jitter = rng.randint(0, max_jitter)
             y = h - jitter if side == "top" else jitter
             pts.append((x, y))
         if side == "top":
