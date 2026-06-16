@@ -233,8 +233,8 @@ _STRIP_THEMES: dict[str, dict] = {
     "fever_cave": {
         "base": (86, 24, 30),
         "dark": (58, 16, 22),
-        "edge": (198, 76, 70),
-        "glow": (238, 106, 84),
+        "edge": (168, 62, 60),
+        "glow": (198, 78, 68),
         "spot": (118, 38, 44),
     },
     "debris": {
@@ -355,8 +355,12 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             poly = [(0, h), (w, h)] + list(reversed(pts))
             pygame.draw.polygon(surf, base, poly)
         if len(pts) >= 2:
-            pygame.draw.lines(surf, edge, False, pts, 3)
-            pygame.draw.lines(surf, glow, False, pts, 1)
+            if theme == "fever_cave":
+                pygame.draw.lines(surf, (*edge, 132), False, pts, 2)
+                pygame.draw.lines(surf, (*glow, 46), False, pts, 1)
+            else:
+                pygame.draw.lines(surf, edge, False, pts, 3)
+                pygame.draw.lines(surf, glow, False, pts, 1)
 
         # Fever cave は血管っぽい筋を強めに入れる。
         vein_count = max(2, (w * h) // 3600)
@@ -402,10 +406,11 @@ class TerrainStripSegment(pygame.sprite.Sprite):
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(2, 4))
 
         # 内側エッジに薄い発光を足して、通路の輪郭を読みやすくする。
-        glow_h = min(16, max(5, h // 4))
+        glow_h = min(10 if theme == "fever_cave" else 16, max(4, h // 4))
+        glow_alpha = 18 if theme == "fever_cave" else 55
         glow_surf = pygame.Surface((w, glow_h), pygame.SRCALPHA)
         for gy in range(glow_h):
-            alpha = int(55 * (1.0 - gy / glow_h))
+            alpha = int(glow_alpha * (1.0 - gy / glow_h))
             glow_surf.fill((*glow, alpha), rect=(0, gy, w, 1))
         if side == "top":
             surf.blit(glow_surf, (0, max(0, edge_y - glow_h + 1)))

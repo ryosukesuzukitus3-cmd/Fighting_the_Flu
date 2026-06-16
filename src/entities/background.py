@@ -143,9 +143,9 @@ class ScrollingBackground:
                 drift = math.sin(y * 0.018 + t * 0.45 + ph) * amp
                 pts_l.append((int(x + drift), y))
                 pts_r.append((int(x + w + drift * 0.55), y))
-            pygame.draw.polygon(rib, (58, 10, 16, 60), pts_l + list(reversed(pts_r)))
-            pygame.draw.lines(rib, (115, 22, 28, 45), False, pts_l, 2)
-            pygame.draw.lines(rib, (115, 22, 28, 35), False, pts_r, 2)
+            pygame.draw.polygon(rib, (70, 18, 24, 42), pts_l + list(reversed(pts_r)))
+            pygame.draw.lines(rib, (132, 38, 42, 24), False, pts_l, 1)
+            pygame.draw.lines(rib, (108, 28, 34, 20), False, pts_r, 1)
         screen.blit(rib, (0, 0))
 
         # 熱の霞。
@@ -155,14 +155,19 @@ class ScrollingBackground:
         screen.blit(haze, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
         # うねる血管ライン（2本）
-        for k, (base_y, col) in enumerate(((SCREEN_HEIGHT * 0.32, (82, 24, 28)),
-                                           (SCREEN_HEIGHT * 0.7,  (68, 18, 22)))):
+        vessel_lines = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for k, (base_y, col, hi_col) in enumerate((
+            (SCREEN_HEIGHT * 0.32, (120, 34, 40, 42), (210, 72, 64, 18)),
+            (SCREEN_HEIGHT * 0.7,  (104, 28, 34, 36), (190, 62, 58, 14)),
+        )):
             pts = []
             for x in range(0, SCREEN_WIDTH + 20, 40):
                 y = base_y + math.sin(x * 0.012 + t * 0.8 + k) * 26
                 pts.append((x, int(y)))
             if len(pts) >= 2:
-                pygame.draw.lines(screen, col, False, pts, 6)
+                pygame.draw.lines(vessel_lines, col, False, pts, 3)
+                pygame.draw.lines(vessel_lines, hi_col, False, pts, 1)
+        screen.blit(vessel_lines, (0, 0))
         # 脈打つ血球
         pulse = 0.5 + 0.5 * math.sin(t * 2.0)
         for cell in self._cells:
@@ -182,8 +187,8 @@ class ScrollingBackground:
                 pts_l.append((int(x + sway), y))
                 pts_r.append((int(x + width + sway * 0.38 + taper), y))
             pygame.draw.polygon(depth, (118, 28, 33, 30), pts_l + list(reversed(pts_r)))
-            pygame.draw.lines(depth, (205, 68, 62, 28), False, pts_l, 2)
-            pygame.draw.lines(depth, (82, 16, 24, 34), False, pts_r, 3)
+            pygame.draw.lines(depth, (205, 68, 62, 20), False, pts_l, 1)
+            pygame.draw.lines(depth, (112, 28, 34, 18), False, pts_r, 1)
 
         for y_base, speed, alpha in ((118, 0.035, 24), (292, 0.055, 22), (458, 0.08, 18)):
             pts = []
