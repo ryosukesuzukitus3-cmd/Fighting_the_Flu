@@ -109,7 +109,7 @@ def check_enemies() -> None:
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
         "turret_mount", "cave_section", "corridor",
     }
-    valid_types = set(ENEMY_NAMES) | {"Boss"} | terrain_types
+    valid_types = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for ev in data.get("events", []) + data.get("world_events", []):

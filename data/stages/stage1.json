@@ -65,6 +65,7 @@
     {"type": "EnemyTakeshi", "x": 3060, "count": 2, "formation": "v_shape"},
     {"type": "Terrain", "x": 3180, "y": 112, "w": 128, "h": 60, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.35},
     {"type": "EnemyVirus", "x": 3500, "count": 3, "formation": "random"},
+    {"type": "BossGate", "trigger_x": 3650, "lock_camera_x": 2850, "player_limit_x": 3650},
     {"type": "Terrain", "x": 3680, "y": 86, "w": 118, "h": 62, "kind": "clot"},
     {"type": "Terrain", "x": 3720, "y": 440, "w": 130, "h": 58, "kind": "clot"},
     {"type": "Terrain", "x": 4070, "y": 94, "w": 112, "h": 64, "kind": "clot"},

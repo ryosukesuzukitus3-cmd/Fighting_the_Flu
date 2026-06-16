@@ -75,6 +75,7 @@ class GameScene(
         PierceBullet._base_image = None
 
         self.camera  = Camera()
+        self._stage_scroll_speed = self.camera.scroll_speed
         self.bg      = ScrollingBackground(self._stage_id)
         self.player  = Player(self.game)
         self.hud     = HUD(self.game)
@@ -389,20 +390,19 @@ class GameScene(
             self.spawner.update(dt, self.camera)
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
+        if self.spawner.boss_gate_pending and self._boss_intro_state == "":
+            if self._boss_gate_blocked():
+                self._hold_before_boss_room()
+                self._show_boss_gate_notice(dt)
+            else:
+                self.spawner.clear_boss_gate()
+                self.camera.scroll_speed = getattr(self, "_stage_scroll_speed", 80.0)
+
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
             if self._boss_gate_blocked():
-                self.camera.scroll_speed = 0.0
-                self._boss_wait_notice_timer -= dt
-                if self._boss_wait_notice_timer <= 0.0:
-                    self._boss_wait_notice_timer = 1.4
-                    self._spawn_popup(
-                        "DEFEAT MID-BOSS FIRST",
-                        SCREEN_WIDTH // 2,
-                        78,
-                        color=(255, 190, 90),
-                        life=1.2,
-                    )
+                self._hold_before_boss_room()
+                self._show_boss_gate_notice(dt)
             else:
                 self._start_boss_alert()
 
@@ -555,6 +555,34 @@ class GameScene(
 
     def _boss_gate_blocked(self) -> bool:
         return any(type(enemy).__name__ in _BOSS_GATE_ENEMIES for enemy in self.enemies)
+
+    def _hold_before_boss_room(self) -> None:
+        gate = self.spawner.boss_gate_event or {}
+        lock_camera_x = gate.get("lock_camera_x")
+        if lock_camera_x is not None:
+            self.camera.x = min(self.camera.x, float(lock_camera_x))
+        self.camera.scroll_speed = 0.0
+
+        player_limit_x = gate.get("player_limit_x")
+        if player_limit_x is None:
+            return
+        max_sx = float(player_limit_x) - self.camera.x - self.player.rect.width
+        max_sx = max(0.0, min(float(SCREEN_WIDTH - self.player.rect.width), max_sx))
+        if self.player.sx > max_sx:
+            self.player.sx = max_sx
+            self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))
+
+    def _show_boss_gate_notice(self, dt: float) -> None:
+        self._boss_wait_notice_timer -= dt
+        if self._boss_wait_notice_timer <= 0.0:
+            self._boss_wait_notice_timer = 1.4
+            self._spawn_popup(
+                "DEFEAT MID-BOSS FIRST",
+                SCREEN_WIDTH // 2,
+                78,
+                color=(255, 190, 90),
+                life=1.2,
+            )
 
     def _start_boss_alert(self) -> None:
         self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
