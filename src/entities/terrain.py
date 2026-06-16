@@ -108,9 +108,10 @@ class Terrain(pygame.sprite.Sprite):
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
 
         if w >= h * 1.35:
-            pygame.draw.ellipse(surf, (78, 12, 20, 210), (2, int(h * 0.16), w - 4, int(h * 0.72)))
-            pygame.draw.ellipse(surf, (160, 34, 42, 185), (5, int(h * 0.10), w - 10, int(h * 0.78)))
-            count = max(4, min(9, w // 40))
+            pygame.draw.ellipse(surf, (40, 6, 12, 130), (4, int(h * 0.28), w - 8, int(h * 0.66)))
+            pygame.draw.ellipse(surf, (90, 14, 22, 190), (2, int(h * 0.12), w - 4, int(h * 0.76)))
+            pygame.draw.ellipse(surf, (172, 42, 46, 116), (8, int(h * 0.06), w - 16, int(h * 0.76)))
+            count = max(5, min(11, w // 34))
             for i in range(count):
                 cx = int((i + 0.5) * w / count + rng.randint(-8, 8))
                 cy = int(h * (0.50 + rng.uniform(-0.12, 0.10)))
@@ -118,9 +119,10 @@ class Terrain(pygame.sprite.Sprite):
                 ch = max(20, min(int(h * rng.uniform(0.48, 0.78)), h - 6))
                 Terrain._draw_blood_cell(surf, (cx, cy), (cw, ch), rng)
         else:
-            pygame.draw.ellipse(surf, (78, 12, 20, 210), (int(w * 0.10), 2, int(w * 0.80), h - 4))
-            pygame.draw.ellipse(surf, (160, 34, 42, 185), (int(w * 0.06), 5, int(w * 0.86), h - 10))
-            count = max(4, min(8, h // 34))
+            pygame.draw.ellipse(surf, (40, 6, 12, 130), (int(w * 0.18), 4, int(w * 0.66), h - 8))
+            pygame.draw.ellipse(surf, (90, 14, 22, 190), (int(w * 0.08), 2, int(w * 0.84), h - 4))
+            pygame.draw.ellipse(surf, (172, 42, 46, 116), (int(w * 0.04), 8, int(w * 0.88), h - 16))
+            count = max(5, min(9, h // 30))
             for i in range(count):
                 cx = int(w * (0.50 + rng.uniform(-0.12, 0.12)))
                 cy = int((i + 0.5) * h / count + rng.randint(-8, 8))
@@ -128,6 +130,7 @@ class Terrain(pygame.sprite.Sprite):
                 ch = max(24, min(int(w * rng.uniform(0.52, 0.82)), max(28, h // 3)))
                 Terrain._draw_blood_cell(surf, (cx, cy), (cw, ch), rng)
 
+        Terrain._draw_clot_strands(surf, rng, w, h)
         pygame.draw.ellipse(surf, (250, 105, 92, 110), surf.get_rect().inflate(-5, -5), 2)
         pygame.draw.ellipse(surf, (255, 180, 132, 45), surf.get_rect().inflate(-16, -18), 1)
 
@@ -152,6 +155,28 @@ class Terrain(pygame.sprite.Sprite):
         return surf
 
     @staticmethod
+    def _draw_clot_strands(surf: pygame.Surface, rng: random.Random, w: int, h: int) -> None:
+        strand_col = (255, 126, 104, 72)
+        dark_col = (68, 8, 16, 70)
+        for _ in range(max(3, (w * h) // 3200)):
+            x = rng.randint(4, max(4, w - 5))
+            y = rng.randint(4, max(4, h - 5))
+            pts = [(x, y)]
+            for _step in range(rng.randint(3, 6)):
+                x += rng.randint(-22, 22)
+                y += rng.randint(-15, 15)
+                pts.append((max(2, min(w - 3, x)), max(2, min(h - 3, y))))
+            if len(pts) > 1:
+                pygame.draw.lines(surf, dark_col, False, pts, 3)
+                pygame.draw.lines(surf, strand_col, False, pts, 1)
+
+        for _ in range(max(4, (w * h) // 2600)):
+            sx = rng.randint(8, max(8, w - 9))
+            sy = rng.randint(8, max(8, h - 9))
+            pygame.draw.circle(surf, (238, 92, 74, 128), (sx, sy), rng.randint(2, 4))
+            pygame.draw.circle(surf, (255, 176, 126, 100), (sx - 1, sy - 1), 1)
+
+    @staticmethod
     def _draw_blood_cell(
         surf: pygame.Surface,
         center: tuple[int, int],
@@ -160,21 +185,23 @@ class Terrain(pygame.sprite.Sprite):
     ) -> None:
         cx, cy = center
         w, h = size
-        rect = pygame.Rect(0, 0, w, h)
-        rect.center = (cx, cy)
-        rect.clamp_ip(surf.get_rect().inflate(-4, -4))
+        cell = pygame.Surface((w + 10, h + 10), pygame.SRCALPHA)
+        rect = pygame.Rect(5, 5, w, h)
         base = rng.choice(((174, 34, 44, 230), (192, 42, 48, 220), (150, 28, 38, 235)))
         edge = (248, 105, 94, 155)
         hollow = (86, 12, 22, 110)
         shine = (255, 152, 130, 70)
 
-        pygame.draw.ellipse(surf, (50, 8, 14, 100), rect.move(2, 3))
-        pygame.draw.ellipse(surf, base, rect)
-        pygame.draw.ellipse(surf, edge, rect, 2)
+        pygame.draw.ellipse(cell, (50, 8, 14, 100), rect.move(2, 3))
+        pygame.draw.ellipse(cell, base, rect)
+        pygame.draw.ellipse(cell, edge, rect, 2)
         inner = rect.inflate(-max(8, w // 3), -max(6, h // 3))
-        pygame.draw.ellipse(surf, hollow, inner)
+        pygame.draw.ellipse(cell, hollow, inner)
         glint = pygame.Rect(rect.left + w // 6, rect.top + h // 6, max(8, w // 3), max(4, h // 5))
-        pygame.draw.ellipse(surf, shine, glint, 1)
+        pygame.draw.ellipse(cell, shine, glint, 1)
+        rotated = pygame.transform.rotate(cell, rng.uniform(-18, 18))
+        target = rotated.get_rect(center=(cx, cy))
+        surf.blit(rotated, target)
 
     def take_damage(self, amount: int) -> bool:
         """破壊されたら True。破壊不能地形は常に False。"""
@@ -206,8 +233,8 @@ _STRIP_THEMES: dict[str, dict] = {
     "fever_cave": {
         "base": (86, 24, 30),
         "dark": (58, 16, 22),
-        "edge": (198, 76, 70),
-        "glow": (238, 106, 84),
+        "edge": (168, 62, 60),
+        "glow": (198, 78, 68),
         "spot": (118, 38, 44),
     },
     "debris": {
@@ -328,8 +355,12 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             poly = [(0, h), (w, h)] + list(reversed(pts))
             pygame.draw.polygon(surf, base, poly)
         if len(pts) >= 2:
-            pygame.draw.lines(surf, edge, False, pts, 3)
-            pygame.draw.lines(surf, glow, False, pts, 1)
+            if theme == "fever_cave":
+                pygame.draw.lines(surf, (*edge, 132), False, pts, 2)
+                pygame.draw.lines(surf, (*glow, 46), False, pts, 1)
+            else:
+                pygame.draw.lines(surf, edge, False, pts, 3)
+                pygame.draw.lines(surf, glow, False, pts, 1)
 
         # Fever cave は血管っぽい筋を強めに入れる。
         vein_count = max(2, (w * h) // 3600)
@@ -375,10 +406,11 @@ class TerrainStripSegment(pygame.sprite.Sprite):
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(2, 4))
 
         # 内側エッジに薄い発光を足して、通路の輪郭を読みやすくする。
-        glow_h = min(16, max(5, h // 4))
+        glow_h = min(10 if theme == "fever_cave" else 16, max(4, h // 4))
+        glow_alpha = 18 if theme == "fever_cave" else 55
         glow_surf = pygame.Surface((w, glow_h), pygame.SRCALPHA)
         for gy in range(glow_h):
-            alpha = int(55 * (1.0 - gy / glow_h))
+            alpha = int(glow_alpha * (1.0 - gy / glow_h))
             glow_surf.fill((*glow, alpha), rect=(0, gy, w, 1))
         if side == "top":
             surf.blit(glow_surf, (0, max(0, edge_y - glow_h + 1)))
