@@ -1059,7 +1059,7 @@ class GameScene(
                 enemy.world_x + random.uniform(-40, 40),
                 enemy.world_y + random.uniform(-30, 30),
             ))
-            for _ in range(8):
+            for _ in range(4):
                 self.items.add(HealItem(
                     enemy.world_x + random.uniform(-60, 60),
                     enemy.world_y + random.uniform(-40, 40),

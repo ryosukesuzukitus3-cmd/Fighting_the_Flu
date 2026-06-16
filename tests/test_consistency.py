@@ -108,6 +108,16 @@ def test_item_pickup_sounds_are_split_by_item_type() -> None:
     assert "_play_item_pickup_sound(item)" in post_boss_src
 
 
+def test_billy_reward_matches_design_doc() -> None:
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
+
+    assert "WeaponItem×1 + HealItem×4" in design
+    assert "if etype == \"EnemyBilly\"" in game_src
+    assert "for _ in range(4):" in game_src
+    assert "for _ in range(8):" not in game_src
+
+
 # ── ステージ ─────────────────────────────────────────────────────────
 
 def test_stage_ids_match_stage_names_and_boss_config() -> None:
@@ -213,7 +223,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage.terrain_layout
     assert stage.terrain_layout[0]["type"] == "TerrainStrip"
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
-    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 2770 for ev in stage.world_events)
+    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
 
 
@@ -221,12 +231,31 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
     layout = data["terrain_layout"][0]
     world_events = data["world_events"]
+    fixed_drop_chances = [
+        float(ev.get("drop_chance", 0.0))
+        for ev in world_events
+        if ev.get("destructible") or ev.get("type") == "breakable_gate"
+    ]
+    first_enemy_x = min(ev["x"] for ev in world_events if ev["type"].startswith("Enemy"))
+    turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
+    mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
 
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "fever_cave"
-    assert layout["breakable_chance"] == 0.0
+    assert layout["center_wave"] >= 80
+    assert 0.0 < layout["breakable_chance"] <= 0.03
+    assert layout["breakable_drop_chance"] <= 0.05
+    assert first_enemy_x >= 900
+    assert len(turrets) >= 3
+    assert len(mounts) >= 3
+    assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
+    assert max(fixed_drop_chances) <= 0.12
     assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
     assert any(ev.get("type") == "breakable_gate" and ev.get("kind") == "clot" for ev in world_events)
+    assert any(ev.get("type") == "EnemyCrawler" for ev in world_events)
+    assert any(ev.get("type") == "EnemyPachemon" for ev in world_events)
+    assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
+    assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert data["events"] == []
 
