@@ -232,6 +232,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
 
 
 def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
+    from src.core.constants import SCREEN_WIDTH
     from src.stages.stage import Stage
 
     data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
@@ -249,8 +250,9 @@ def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
     assert data["terrain_layout"][0]["length"] >= boss_x + 800
     assert len(boss_gates) == 1
     assert boss_gates[0]["trigger_x"] < boss_x
-    assert boss_gates[0]["lock_camera_x"] + 800 <= first_boss_room_x
+    assert boss_gates[0]["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
     assert boss_gates[0]["player_limit_x"] <= first_boss_room_x
+    assert boss_x - SCREEN_WIDTH - boss_gates[0]["lock_camera_x"] <= 500
     assert boss_events[0].get("preload", 80) == 0
     assert len(boss_room_blocks) >= 4
 
@@ -268,7 +270,7 @@ def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
         events=[],
         world_events=[
             {"type": "BossGate", "trigger_x": 3650, "lock_camera_x": 2850, "player_limit_x": 3650},
-            {"type": "Boss", "x": 4450, "count": 1, "formation": "single", "preload": 0},
+            {"type": "Boss", "x": 4100, "count": 1, "formation": "single", "preload": 0},
         ],
         player=object(),
     )
@@ -281,7 +283,7 @@ def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
     assert spawner.boss_pending is False
 
     spawner.clear_boss_gate()
-    camera.x = 3650.0
+    camera.x = 3300.0
     spawner.update(1.0 / 60.0, camera)
 
     assert spawner.boss_gate_pending is False

@@ -70,7 +70,7 @@
     {"type": "Terrain", "x": 3720, "y": 440, "w": 130, "h": 58, "kind": "clot"},
     {"type": "Terrain", "x": 4070, "y": 94, "w": 112, "h": 64, "kind": "clot"},
     {"type": "Terrain", "x": 4180, "y": 430, "w": 148, "h": 58, "kind": "clot"},
-    {"type": "Boss", "x": 4450, "count": 1, "formation": "single", "preload": 0}
+    {"type": "Boss", "x": 4100, "count": 1, "formation": "single", "preload": 0}
   ],
   "events": []
 }
