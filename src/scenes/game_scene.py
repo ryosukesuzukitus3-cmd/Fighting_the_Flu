@@ -372,7 +372,8 @@ class GameScene(
         if not _panel_open:
             self.player.update(dt)
         if self._companion:
-            self._companion.update(dt, self.player, self.player_bullets, self.camera, self.enemies)
+            self._companion.update(dt, self.player, self.player_bullets, self.camera,
+                                   self.enemies, self.enemy_bullets)
 
         if self._stage_banner_timer <= 0 and self._boss_intro_state == "":
             self.spawner.update(dt, self.camera)
@@ -1570,6 +1571,14 @@ class GameScene(
     def _pickup_weapon_item(self) -> None:
         """Apply a weapon stock pickup."""
         self.player.weapon.weapon_stock += 1
+        # 取得ごとに先輩（カロナール）の薬効レベルも +1（別ツリー＝支援系）
+        if self._companion is not None:
+            self._companion.support_level += 1
+            self._spawn_popup(
+                f"先輩 薬効 Lv{self._companion.support_level}",
+                self._companion.rect.centerx, self._companion.rect.top - 6,
+                color=(150, 235, 170), life=1.6,
+            )
         wsel = self.game.settings.key_display("weapon_select")
         px, py = self.player.rect.centerx, self.player.rect.top - 10
         if not self._weapon_tip_shown:

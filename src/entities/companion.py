@@ -25,6 +25,12 @@ _SHOOT_COOLDOWN   = 0.5   # ショットクールダウン（秒）
 _FOLLOW_OFFSET_X  = 66.0  # 澤口の左にどれだけ離れて位置取りするか
 _FOLLOW_OFFSET_Y  = 46.0  # 澤口の下にどれだけ離れて位置取りするか
 _FOLLOW_LERP      = 7.5    # 追従の基本追従率（澤口の speed_multiplier で増減）
+
+# ── 支援ツリー「薬効」（主人公とは別毛色＝支援重視。取得ごとに +1）──────
+# 効果が Lv で伸び続けるので、ステージが進んでも腐らない（ゼロ漸近を防ぐ）。
+_HEAL_MIN_LV    = 2   # 自機HP回復の解禁Lv
+_BARRIER_MIN_LV = 3   # バリア付与の解禁Lv
+_PULSE_MIN_LV   = 4   # 解熱パルス（周囲の敵弾消し）の解禁Lv
 _SPRITE_R         = 16    # ダミースプライト半径（px）
 
 
@@ -93,6 +99,12 @@ class Karonaru(pygame.sprite.Sprite):
         # ショット
         self._shoot_cooldown: float = _SHOOT_COOLDOWN
 
+        # 支援ツリー「薬効」レベル（ウェポンアイテム取得ごとに +1）
+        self.support_level: int = 1
+        self._heal_timer:    float = self._heal_interval()
+        self._barrier_timer: float = self._barrier_interval()
+        self._pulse_timer:   float = self._pulse_interval()
+
     # ── 公開プロパティ ────────────────────────────────────────────
 
     @property
@@ -116,6 +128,7 @@ class Karonaru(pygame.sprite.Sprite):
         player_bullets: pygame.sprite.Group,
         camera: "Camera",
         enemies: pygame.sprite.Group,
+        enemy_bullets: pygame.sprite.Group | None = None,
     ) -> None:
         if self._state == "retired":
             self._return_timer -= dt
@@ -150,11 +163,77 @@ class Karonaru(pygame.sprite.Sprite):
         else:
             self._blink_visible = True
 
-        # ショット
+        # ショット（連射間隔は薬効Lvで短縮）
         self._shoot_cooldown = max(0.0, self._shoot_cooldown - dt)
         if getattr(player, "fire_held", False) and self._shoot_cooldown <= 0.0:
             self._fire(player_bullets, camera)
-            self._shoot_cooldown = _SHOOT_COOLDOWN
+            self._shoot_cooldown = self._shoot_interval()
+
+        # 支援ツリー「薬効」効果（回復・バリア・解熱パルス）
+        self._tick_support(dt, player, enemy_bullets)
+
+    # ── 支援ツリー「薬効」 ────────────────────────────────────────
+    def _shoot_interval(self) -> float:
+        return max(0.18, _SHOOT_COOLDOWN - 0.035 * self.support_level)
+
+    def _ways(self) -> int:
+        return 1 if self.support_level < 4 else (2 if self.support_level < 6 else 3)
+
+    def _heal_interval(self) -> float:
+        return max(5.0, 14.0 - 1.2 * self.support_level)
+
+    def _barrier_interval(self) -> float:
+        return max(8.0, 20.0 - 1.5 * self.support_level)
+
+    def _pulse_interval(self) -> float:
+        return max(2.5, 7.0 - 0.5 * self.support_level)
+
+    def _pulse_radius(self) -> float:
+        return 60.0 + 10.0 * self.support_level
+
+    def _tick_support(self, dt: float, player, enemy_bullets) -> None:
+        # 補給: 自機HPを少しずつ回復（Lv2+）
+        if self.support_level >= _HEAL_MIN_LV:
+            self._heal_timer -= dt
+            if self._heal_timer <= 0.0:
+                self._heal_timer = self._heal_interval()
+                if getattr(player, "hp", 0) < getattr(player, "max_hp", 0):
+                    amount = 5 + self.support_level   # 回復量も薬効Lvで増加
+                    player.hp = min(player.max_hp, player.hp + amount)
+                    self._popup(f"+{amount}HP", (120, 230, 150))
+        # 補給: バリア付与（Lv3+。未所持時のみ）
+        if self.support_level >= _BARRIER_MIN_LV:
+            self._barrier_timer -= dt
+            if self._barrier_timer <= 0.0:
+                self._barrier_timer = self._barrier_interval()
+                w = getattr(player, "weapon", None)
+                if w is not None and not getattr(w, "has_barrier", False):
+                    w.has_barrier = True
+                    self._popup("BARRIER", (150, 220, 255))
+        # 鎮痛: 解熱パルスで周囲の敵弾を消す（Lv4+）
+        if self.support_level >= _PULSE_MIN_LV and enemy_bullets is not None:
+            self._pulse_timer -= dt
+            if self._pulse_timer <= 0.0:
+                self._pulse_timer = self._pulse_interval()
+                self._heat_pulse(enemy_bullets)
+
+    def _heat_pulse(self, enemy_bullets: pygame.sprite.Group) -> None:
+        r = self._pulse_radius()
+        cx, cy = self.rect.center
+        r2 = r * r
+        for b in list(enemy_bullets):
+            if getattr(b, "warning_only", False):
+                continue
+            bx, by = b.rect.center
+            if (bx - cx) ** 2 + (by - cy) ** 2 <= r2:
+                b.kill()
+
+    def _popup(self, text: str, color: tuple[int, int, int]) -> None:
+        if self._popup_fn:
+            try:
+                self._popup_fn(text, self.rect.centerx, self.rect.top - 6)
+            except Exception:
+                pass
 
     def reseed_trail(self, player, *, snap: bool = True) -> None:
         """復帰/合流時に澤口の左下へ位置を合わせる（旧・軌跡シード互換のAPI名）。"""
@@ -169,8 +248,15 @@ class Karonaru(pygame.sprite.Sprite):
         world_y = float(self.rect.centery)
         if self.mode == "max":
             player_bullets.add(KaronaruMaxBullet(world_x, world_y))
-        else:
+            return
+        ways = self._ways()  # 薬効Lvで 1→2→3 way
+        if ways <= 1:
             player_bullets.add(KaronaruBullet(world_x, world_y))
+        else:
+            spread = 12.0
+            for i in range(ways):
+                off = (i - (ways - 1) / 2.0) * spread
+                player_bullets.add(KaronaruBullet(world_x, world_y + off))
 
     # ── 薬効最大形態 ─────────────────────────────────────────────
 
