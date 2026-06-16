@@ -8,7 +8,7 @@ from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.lines import Page
 from src.story.speakers import speaker_name, speaker_color, DEFAULT_TEXT_COLOR, NARRATION
 
-_SCROLL_SPEED = 27.0          # ゆっくり流して BGM を最後まで聴かせる
+_SCROLL_SPEED = 40.5          # BGM を聴かせつつ、間延びしない速さ
 _FAST_MULT = 3.6
 _SIDE_PAD = 72
 _FADEOUT_MS = 2400
