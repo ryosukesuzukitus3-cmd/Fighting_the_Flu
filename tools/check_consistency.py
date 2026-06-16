@@ -109,7 +109,7 @@ def check_enemies() -> None:
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
         "turret_mount", "cave_section", "corridor",
     }
-    valid_types = set(ENEMY_NAMES) | {"Boss"} | terrain_types
+    valid_types = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for ev in data.get("events", []) + data.get("world_events", []):
@@ -180,6 +180,7 @@ def check_stages() -> None:
 
     # stage JSON 必須フィールド検証
     valid_formations = {"line", "v_shape", "random", "single"}
+    valid_boss_terrain_modes = {"replace", "preplaced"}
     valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
@@ -221,6 +222,8 @@ def check_stages() -> None:
             _fail(f"{p.name}: 必須フィールド 'bgm' が欠如")
         if "events" not in data:
             _fail(f"{p.name}: 必須フィールド 'events' が欠如")
+        if data.get("boss_terrain_mode", "replace") not in valid_boss_terrain_modes:
+            _fail(f"{p.name}: unknown boss_terrain_mode '{data.get('boss_terrain_mode')}'")
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 if field not in ev:

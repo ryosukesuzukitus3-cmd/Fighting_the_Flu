@@ -56,7 +56,7 @@ def test_stage_json_enemy_types_in_registry() -> None:
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
         "turret_mount", "cave_section", "corridor",
     }
-    valid = set(ENEMY_NAMES) | {"Boss"} | terrain_types
+    valid = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         for ev in data.get("events", []) + data.get("world_events", []):
@@ -122,6 +122,7 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
+    valid_boss_terrain_modes = {"replace", "preplaced"}
     valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
@@ -156,6 +157,9 @@ def test_stage_json_required_fields() -> None:
         )
         assert "bgm" in data, f"{p.name}: 必須フィールド 'bgm' が欠如"
         assert "events" in data, f"{p.name}: 必須フィールド 'events' が欠如"
+        assert data.get("boss_terrain_mode", "replace") in valid_boss_terrain_modes, (
+            f"{p.name}: unknown boss_terrain_mode '{data.get('boss_terrain_mode')}'"
+        )
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 assert field in ev, f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如"
@@ -225,6 +229,65 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("type") == "breakable_gate" and ev.get("kind") == "clot" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert data["events"] == []
+
+
+def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
+    from src.core.constants import SCREEN_WIDTH
+    from src.stages.stage import Stage
+
+    data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
+    boss_events = [ev for ev in data["world_events"] if ev["type"] == "Boss"]
+    boss_gates = [ev for ev in data["world_events"] if ev["type"] == "BossGate"]
+    boss_x = boss_events[0]["x"]
+    boss_room_blocks = [
+        ev for ev in data["world_events"]
+        if ev.get("kind") == "clot" and ev.get("x", 0) >= 3600
+    ]
+    first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
+    stage = Stage(object(), 1)
+
+    assert stage.boss_terrain_mode == "preplaced"
+    assert data["terrain_layout"][0]["length"] >= boss_x + 800
+    assert len(boss_gates) == 1
+    assert boss_gates[0]["trigger_x"] < boss_x
+    assert boss_gates[0]["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
+    assert boss_gates[0]["player_limit_x"] <= first_boss_room_x
+    assert boss_x - SCREEN_WIDTH - boss_gates[0]["lock_camera_x"] <= 500
+    assert boss_events[0].get("preload", 80) == 0
+    assert len(boss_room_blocks) >= 4
+
+
+def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
+    from src.core.camera import Camera
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    camera.x = 2850.0
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=pygame.sprite.Group(),
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[
+            {"type": "BossGate", "trigger_x": 3650, "lock_camera_x": 2850, "player_limit_x": 3650},
+            {"type": "Boss", "x": 4100, "count": 1, "formation": "single", "preload": 0},
+        ],
+        player=object(),
+    )
+
+    spawner.update(1.0 / 60.0, camera)
+
+    assert spawner.boss_gate_pending is True
+    assert spawner.boss_gate_event is not None
+    assert spawner.boss_gate_event["lock_camera_x"] == 2850
+    assert spawner.boss_pending is False
+
+    spawner.clear_boss_gate()
+    camera.x = 3300.0
+    spawner.update(1.0 / 60.0, camera)
+
+    assert spawner.boss_gate_pending is False
+    assert spawner.boss_pending is True
 
 
 def test_world_event_turret_spawns_at_authored_x_on_surface() -> None:
@@ -308,8 +371,11 @@ def test_regular_stages_define_boss_terrain() -> None:
 def test_boss_terrain_replaces_stage_terrain() -> None:
     src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
     assert "def _replace_boss_terrain" in src
+    assert "def _prepare_boss_terrain" in src
     assert "self.terrain.empty()" in src
-    assert "self._replace_boss_terrain(self._active_boss_stage_id)" in src
+    assert "preplaced_here" in src
+    assert 'boss_stage.boss_terrain_mode == "preplaced"' in src
+    assert "self._prepare_boss_terrain(self._active_boss_stage_id)" in src
 
 
 def test_debug_boss_spawn_forwards_selected_stage() -> None:
@@ -948,14 +1014,51 @@ def test_boss_gimmick_draw_ignores_missing_boss() -> None:
 
 def test_boss_intro_waits_for_midboss_cleanup_and_keeps_bgm() -> None:
     src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    spawner_src = (ROOT / "src" / "stages" / "spawner.py").read_text(encoding="utf-8")
 
     assert "_BOSS_GATE_ENEMIES" in src
     assert "EnemyCoughSprayer" in src
     assert "EnemySporeSplitter" in src
     assert "def _boss_gate_blocked" in src
+    assert "def _hold_before_boss_room" in src
     assert "def _start_boss_alert" in src
+    assert "boss_gate_pending" in src
+    assert "player_limit_x" in src
+    assert "clear_boss_gate" in spawner_src
+    assert "self.camera.scroll_speed = 0.0" in src
     assert "play_bgm(BOSS_BGM.get" in src
     assert "play_bgm_if_new(BOSS_BGM.get" in src
+
+
+def test_boss_gate_clamps_camera_and_player_before_room() -> None:
+    from src.scenes.game_scene import GameScene
+
+    class CameraStub:
+        x = 2862.0
+        scroll_speed = 80.0
+
+    class PlayerStub:
+        sx = 790.0
+        sy = 120.0
+        rect = pygame.Rect(790, 120, 24, 32)
+
+    class SpawnerStub:
+        boss_gate_event = {
+            "lock_camera_x": 2850,
+            "player_limit_x": 3650,
+        }
+
+    scene = object.__new__(GameScene)
+    scene.camera = CameraStub()
+    scene.player = PlayerStub()
+    scene.spawner = SpawnerStub()
+
+    GameScene._hold_before_boss_room(scene)
+
+    assert scene.camera.x == 2850.0
+    assert scene.camera.scroll_speed == 0.0
+    assert scene.player.sx == 3650 - 2850 - scene.player.rect.width
+    assert scene.camera.x + scene.player.rect.right <= 3650
 
 
 def test_final_boss_post_defeat_does_not_require_extra_dialogue_wait() -> None:

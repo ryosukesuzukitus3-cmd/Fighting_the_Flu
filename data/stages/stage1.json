@@ -1,11 +1,12 @@
 {
   "stage_id": 1,
   "bgm": "The_world_of_spirit_short.mp3",
+  "boss_terrain_mode": "preplaced",
   "terrain_layout": [
     {
       "type": "TerrainStrip",
       "theme": "fever_cave",
-      "length": 4400,
+      "length": 5600,
       "segment_w": 32,
       "seed": 101,
       "gap_min": 390,
@@ -64,7 +65,12 @@
     {"type": "EnemyTakeshi", "x": 3060, "count": 2, "formation": "v_shape"},
     {"type": "Terrain", "x": 3180, "y": 112, "w": 128, "h": 60, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.35},
     {"type": "EnemyVirus", "x": 3500, "count": 3, "formation": "random"},
-    {"type": "Boss", "x": 3920, "count": 1, "formation": "single", "preload": 70}
+    {"type": "BossGate", "trigger_x": 3650, "lock_camera_x": 2850, "player_limit_x": 3650},
+    {"type": "Terrain", "x": 3680, "y": 86, "w": 118, "h": 62, "kind": "clot"},
+    {"type": "Terrain", "x": 3720, "y": 440, "w": 130, "h": 58, "kind": "clot"},
+    {"type": "Terrain", "x": 4070, "y": 94, "w": 112, "h": 64, "kind": "clot"},
+    {"type": "Terrain", "x": 4180, "y": 430, "w": 148, "h": 58, "kind": "clot"},
+    {"type": "Boss", "x": 4100, "count": 1, "formation": "single", "preload": 0}
   ],
   "events": []
 }
