@@ -122,6 +122,7 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
+    valid_boss_terrain_modes = {"replace", "preplaced"}
     valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
@@ -156,6 +157,9 @@ def test_stage_json_required_fields() -> None:
         )
         assert "bgm" in data, f"{p.name}: 必須フィールド 'bgm' が欠如"
         assert "events" in data, f"{p.name}: 必須フィールド 'events' が欠如"
+        assert data.get("boss_terrain_mode", "replace") in valid_boss_terrain_modes, (
+            f"{p.name}: unknown boss_terrain_mode '{data.get('boss_terrain_mode')}'"
+        )
         for i, ev in enumerate(data.get("events", [])):
             for field in ("time", "type"):
                 assert field in ev, f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如"
@@ -225,6 +229,24 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("type") == "breakable_gate" and ev.get("kind") == "clot" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert data["events"] == []
+
+
+def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
+    from src.stages.stage import Stage
+
+    data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
+    boss_events = [ev for ev in data["world_events"] if ev["type"] == "Boss"]
+    boss_x = boss_events[0]["x"]
+    boss_room_blocks = [
+        ev for ev in data["world_events"]
+        if ev.get("kind") == "clot" and ev.get("x", 0) >= 3600
+    ]
+    stage = Stage(object(), 1)
+
+    assert stage.boss_terrain_mode == "preplaced"
+    assert data["terrain_layout"][0]["length"] >= boss_x + 800
+    assert boss_events[0].get("preload", 80) == 0
+    assert len(boss_room_blocks) >= 4
 
 
 def test_world_event_turret_spawns_at_authored_x_on_surface() -> None:
@@ -308,8 +330,11 @@ def test_regular_stages_define_boss_terrain() -> None:
 def test_boss_terrain_replaces_stage_terrain() -> None:
     src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
     assert "def _replace_boss_terrain" in src
+    assert "def _prepare_boss_terrain" in src
     assert "self.terrain.empty()" in src
-    assert "self._replace_boss_terrain(self._active_boss_stage_id)" in src
+    assert "preplaced_here" in src
+    assert 'boss_stage.boss_terrain_mode == "preplaced"' in src
+    assert "self._prepare_boss_terrain(self._active_boss_stage_id)" in src
 
 
 def test_debug_boss_spawn_forwards_selected_stage() -> None:
@@ -954,6 +979,7 @@ def test_boss_intro_waits_for_midboss_cleanup_and_keeps_bgm() -> None:
     assert "EnemySporeSplitter" in src
     assert "def _boss_gate_blocked" in src
     assert "def _start_boss_alert" in src
+    assert "self.camera.scroll_speed = 0.0" in src
     assert "play_bgm(BOSS_BGM.get" in src
     assert "play_bgm_if_new(BOSS_BGM.get" in src
 

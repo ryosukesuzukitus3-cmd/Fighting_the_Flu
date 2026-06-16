@@ -268,6 +268,16 @@ class GameScene(
         self.terrain.empty()
         self.spawner.spawn_terrain_events(boss_stage.boss_terrain, self.camera)
 
+    def _prepare_boss_terrain(self, stage_id: int) -> None:
+        boss_stage = self._boss_stage_data(stage_id)
+        preplaced_here = (
+            stage_id == self._stage_id
+            and boss_stage.boss_terrain_mode == "preplaced"
+        )
+        if not preplaced_here:
+            self._replace_boss_terrain(stage_id)
+        self._boss_terrain_spawned = True
+
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
         # Hitstop slows movement updates for a short impact moment.
@@ -382,6 +392,7 @@ class GameScene(
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
             if self._boss_gate_blocked():
+                self.camera.scroll_speed = 0.0
                 self._boss_wait_notice_timer -= dt
                 if self._boss_wait_notice_timer <= 0.0:
                     self._boss_wait_notice_timer = 1.4
@@ -548,8 +559,7 @@ class GameScene(
     def _start_boss_alert(self) -> None:
         self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
         if not self._boss_terrain_spawned:
-            self._replace_boss_terrain(self._active_boss_stage_id)
-            self._boss_terrain_spawned = True
+            self._prepare_boss_terrain(self._active_boss_stage_id)
         self._boss_intro_state = "alert"
         self._boss_intro_timer = ALERT_DURATION
         self.camera.scroll_speed = 0.0
