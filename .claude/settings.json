@@ -77,8 +77,14 @@
       "PowerShell(git worktree remove:*)",
       "PowerShell(git worktree prune:*)",
       "PowerShell(git branch -d:*)",
+      "PowerShell(git push:*)",
       "PowerShell(.venv/Scripts/python tools/run.py:*)",
       "PowerShell(.venv/Scripts/python -m pytest:*)",
+      "PowerShell(py -3 -m venv:*)",
+      "PowerShell(python -m venv:*)",
+      "PowerShell(.venv/Scripts/python -m pip install:*)",
+      "PowerShell(gh pr create:*)",
+      "PowerShell(gh pr edit:*)",
       "Read",
       "Edit",
       "Write"
@@ -109,7 +115,11 @@
       "Bash(git -C * push --force*)",
       "Bash(git -C * push -f *)",
       "Bash(git -C * push --force-with-lease*)",
-      "Bash(git -C * merge *)"
+      "Bash(git -C * merge *)",
+      "PowerShell(git push --force:*)",
+      "PowerShell(git push -f:*)",
+      "PowerShell(git push --force-with-lease:*)",
+      "PowerShell(git merge:*)"
     ]
   },
   "hooks": {
