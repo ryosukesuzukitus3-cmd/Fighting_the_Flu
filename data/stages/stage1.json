@@ -64,7 +64,6 @@
     {"type": "EnemyBilly", "x": 2820, "count": 1, "y": 266},
     {"type": "turret_mount", "x": 2940, "y": 418, "w": 250, "h": 48, "kind": "clot"},
     {"type": "EnemyTurret", "x": 3040, "count": 1, "surface": "bottom", "surface_offset": 22, "enhanced": true},
-    {"type": "EnemyCoughSprayer", "x": 3140, "count": 1, "y": 300},
     {"type": "EnemyCrawler", "x": 3260, "count": 1, "surface": "bottom", "surface_offset": 20},
     {"type": "EnemyTakeshi", "x": 3320, "count": 2, "formation": "v_shape"},
     {"type": "Terrain", "x": 3440, "y": 102, "w": 132, "h": 58, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.08},

@@ -276,6 +276,10 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     gate_events = [ev for ev in world_events if ev.get("type") in {"breakable_gate", "weapon_gate"}]
     reward_gates = [ev for ev in world_events if ev.get("type") == "weapon_gate"]
     fixed_weapon_events = [ev for ev in world_events if ev.get("fixed_drop") == "WeaponItem"]
+    miniboss_events = [
+        ev for ev in world_events
+        if ev.get("type") in {"EnemyCoughSprayer", "EnemySporeSplitter"}
+    ]
 
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "fever_cave"
@@ -295,6 +299,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert reward_gates[0].get("fixed_drop") is None
     assert max(ev.get("hp", 0) for ev in gate_events) >= 20
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 1
+    assert all(ev.get("fixed_drop") == "WeaponItem" for ev in miniboss_events)
     assert any(ev.get("type") == "EnemyCrawler" for ev in world_events)
     assert any(ev.get("type") == "EnemyPachemon" for ev in world_events)
     assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
