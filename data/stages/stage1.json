@@ -2,6 +2,7 @@
   "stage_id": 1,
   "bgm": "The_world_of_spirit_short.mp3",
   "boss_terrain_mode": "preplaced",
+  "random_drop_scale": 0.55,
   "terrain_layout": [
     {
       "type": "TerrainStrip",
@@ -39,453 +40,65 @@
       "breakable_chance": 0.0,
       "start_offset": -150
     },
-    {
-      "type": "Terrain",
-      "screen_x": 700,
-      "y": 92,
-      "w": 92,
-      "h": 74,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 5,
-      "drop_chance": 0.12
-    },
-    {
-      "type": "Terrain",
-      "screen_x": 716,
-      "y": 430,
-      "w": 108,
-      "h": 70,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 5,
-      "drop_chance": 0.12
-    }
+    {"type": "Terrain", "screen_x": 700, "y": 92, "w": 92, "h": 74, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.12},
+    {"type": "Terrain", "screen_x": 716, "y": 430, "w": 108, "h": 70, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.12}
   ],
   "world_events": [
-    {
-      "type": "EnemyVirus",
-      "x": 940,
-      "count": 3,
-      "formation": "line",
-      "preload": 0
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 1180,
-      "count": 4,
-      "formation": "v_shape",
-      "preload": 0
-    },
-    {
-      "type": "Terrain",
-      "x": 1190,
-      "y": 104,
-      "w": 112,
-      "h": 64,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 4,
-      "drop_chance": 0.08
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 1360,
-      "count": 5,
-      "formation": "v_shape",
-      "preload": 0
-    },
-    {
-      "type": "Terrain",
-      "x": 1460,
-      "y": 426,
-      "w": 142,
-      "h": 58,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 4,
-      "drop_chance": 0.08
-    },
-    {
-      "type": "turret_mount",
-      "x": 1600,
-      "y": 414,
-      "w": 260,
-      "h": 48,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyTurret",
-      "x": 1710,
-      "count": 1,
-      "surface": "bottom",
-      "surface_offset": 22
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 1700,
-      "count": 4,
-      "formation": "random"
-    },
-    {
-      "type": "turret_mount",
-      "x": 1900,
-      "y": 121,
-      "w": 210,
-      "h": 44,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyTurret",
-      "x": 1990,
-      "count": 1,
-      "surface": "top",
-      "surface_offset": 22
-    },
-    {
-      "type": "EnemyTakeshi",
-      "x": 2180,
-      "count": 2,
-      "formation": "random"
-    },
-    {
-      "type": "Terrain",
-      "x": 2250,
-      "y": 64,
-      "w": 118,
-      "h": 116,
-      "kind": "clot"
-    },
-    {
-      "type": "Terrain",
-      "x": 2290,
-      "y": 420,
-      "w": 160,
-      "h": 66,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyPachemon",
-      "x": 2480,
-      "count": 1,
-      "y": 262
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 2680,
-      "count": 5,
-      "formation": "v_shape"
-    },
-    {
-      "type": "EnemyBilly",
-      "x": 2920,
-      "count": 1,
-      "y": 266
-    },
-    {
-      "type": "turret_mount",
-      "x": 3040,
-      "y": 418,
-      "w": 250,
-      "h": 48,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyTurret",
-      "x": 3140,
-      "count": 1,
-      "surface": "bottom",
-      "surface_offset": 22,
-      "enhanced": true
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 3360,
-      "count": 5,
-      "formation": "v_shape",
-      "preload": 0
-    },
-    {
-      "type": "Terrain",
-      "x": 3440,
-      "y": 102,
-      "w": 132,
-      "h": 58,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 5,
-      "drop_chance": 0.08
-    },
-    {
-      "type": "Terrain",
-      "x": 3500,
-      "y": 430,
-      "w": 146,
-      "h": 58,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 3520,
-      "count": 4,
-      "formation": "random"
-    },
-    {
-      "type": "breakable_gate",
-      "x": 3720,
-      "y": 360,
-      "w": 112,
-      "h": 132,
-      "kind": "clot",
-      "hp": 16,
-      "drop_chance": 0.04
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 3760,
-      "count": 5,
-      "formation": "random"
-    },
-    {
-      "type": "Terrain",
-      "x": 3860,
-      "y": 74,
-      "w": 168,
-      "h": 92,
-      "kind": "clot"
-    },
-    {
-      "type": "turret_mount",
-      "x": 3920,
-      "y": 402,
-      "w": 260,
-      "h": 48,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyTurret",
-      "x": 4040,
-      "count": 1,
-      "surface": "bottom",
-      "surface_offset": 22
-    },
-    {
-      "type": "EnemyTakeshi",
-      "x": 4200,
-      "count": 2,
-      "formation": "line"
-    },
-    {
-      "type": "Terrain",
-      "x": 4320,
-      "y": 420,
-      "w": 160,
-      "h": 68,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 6,
-      "drop_chance": 0.06
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 4450,
-      "count": 5,
-      "formation": "random"
-    },
-    {
-      "type": "weapon_gate",
-      "x": 4700,
-      "y": 72,
-      "w": 118,
-      "h": 208,
-      "kind": "clot",
-      "hp": 18
-    },
-    {
-      "type": "Terrain",
-      "x": 4760,
-      "y": 386,
-      "w": 170,
-      "h": 104,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 5020,
-      "count": 6,
-      "formation": "random"
-    },
-    {
-      "type": "turret_mount",
-      "x": 5140,
-      "y": 120,
-      "w": 240,
-      "h": 44,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyTurret",
-      "x": 5240,
-      "count": 1,
-      "surface": "top",
-      "surface_offset": 22,
-      "enhanced": true
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 5350,
-      "count": 4,
-      "formation": "v_shape"
-    },
-    {
-      "type": "EnemyCrawler",
-      "x": 5480,
-      "count": 1,
-      "surface": "top",
-      "surface_offset": 20
-    },
-    {
-      "type": "Terrain",
-      "x": 5580,
-      "y": 102,
-      "w": 156,
-      "h": 62,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 6,
-      "drop_chance": 0.04
-    },
-    {
-      "type": "breakable_gate",
-      "x": 5860,
-      "y": 332,
-      "w": 126,
-      "h": 164,
-      "kind": "clot",
-      "hp": 20,
-      "drop_chance": 0.03
-    },
-    {
-      "type": "EnemyCoughSprayer",
-      "x": 6060,
-      "count": 1,
-      "y": 296,
-      "fixed_drop": "WeaponItem"
-    },
-    {
-      "type": "EnemyTakeshi",
-      "x": 6220,
-      "count": 3,
-      "formation": "random"
-    },
-    {
-      "type": "turret_mount",
-      "x": 6380,
-      "y": 418,
-      "w": 280,
-      "h": 48,
-      "kind": "clot"
-    },
-    {
-      "type": "EnemyTurret",
-      "x": 6500,
-      "count": 1,
-      "surface": "bottom",
-      "surface_offset": 22,
-      "enhanced": true
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 6600,
-      "count": 6,
-      "formation": "line"
-    },
-    {
-      "type": "Terrain",
-      "x": 6780,
-      "y": 62,
-      "w": 150,
-      "h": 118,
-      "kind": "clot"
-    },
-    {
-      "type": "Terrain",
-      "x": 6840,
-      "y": 426,
-      "w": 190,
-      "h": 66,
-      "kind": "clot",
-      "destructible": true,
-      "hp": 6,
-      "drop_chance": 0.04
-    },
-    {
-      "type": "breakable_gate",
-      "x": 7050,
-      "y": 96,
-      "w": 120,
-      "h": 188,
-      "kind": "clot",
-      "hp": 18,
-      "drop_chance": 0.03
-    },
-    {
-      "type": "EnemyPachemon",
-      "x": 7280,
-      "count": 1,
-      "y": 252
-    },
-    {
-      "type": "EnemyVirus",
-      "x": 7420,
-      "count": 5,
-      "formation": "random"
-    },
-    {
-      "type": "BossGate",
-      "trigger_x": 7650,
-      "lock_camera_x": 6850,
-      "player_limit_x": 7650
-    },
-    {
-      "type": "Terrain",
-      "x": 7680,
-      "y": 86,
-      "w": 118,
-      "h": 62,
-      "kind": "clot"
-    },
-    {
-      "type": "Terrain",
-      "x": 7720,
-      "y": 440,
-      "w": 130,
-      "h": 58,
-      "kind": "clot"
-    },
-    {
-      "type": "Terrain",
-      "x": 8070,
-      "y": 94,
-      "w": 112,
-      "h": 64,
-      "kind": "clot"
-    },
-    {
-      "type": "Terrain",
-      "x": 8180,
-      "y": 430,
-      "w": 148,
-      "h": 58,
-      "kind": "clot"
-    },
-    {
-      "type": "Boss",
-      "x": 8100,
-      "count": 1,
-      "formation": "single",
-      "preload": 0
-    }
+    {"type": "EnemyVirus", "x": 940, "count": 3, "formation": "line", "preload": 0},
+    {"type": "EnemyVirus", "x": 1180, "count": 4, "formation": "v_shape", "preload": 0},
+    {"type": "Terrain", "x": 1190, "y": 104, "w": 112, "h": 64, "kind": "clot", "destructible": true, "hp": 4, "drop_chance": 0.08},
+    {"type": "EnemyVirus", "x": 1360, "count": 5, "formation": "v_shape", "preload": 0},
+    {"type": "Terrain", "x": 1460, "y": 426, "w": 142, "h": 58, "kind": "clot", "destructible": true, "hp": 4, "drop_chance": 0.08},
+    {"type": "turret_mount", "x": 1600, "y": 414, "w": 260, "h": 48, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 1710, "count": 1, "surface": "bottom", "surface_offset": 22},
+    {"type": "EnemyVirus", "x": 1700, "count": 4, "formation": "random"},
+    {"type": "turret_mount", "x": 1900, "y": 121, "w": 210, "h": 44, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 1990, "count": 1, "surface": "top", "surface_offset": 22},
+    {"type": "EnemyTakeshi", "x": 2180, "count": 2, "formation": "random"},
+    {"type": "Terrain", "x": 2250, "y": 64, "w": 118, "h": 116, "kind": "clot"},
+    {"type": "Terrain", "x": 2290, "y": 420, "w": 160, "h": 66, "kind": "clot"},
+    {"type": "EnemyPachemon", "x": 2480, "count": 1, "y": 262},
+    {"type": "EnemyVirus", "x": 2680, "count": 5, "formation": "v_shape"},
+    {"type": "EnemyBilly", "x": 2920, "count": 1, "y": 266},
+    {"type": "turret_mount", "x": 3040, "y": 418, "w": 250, "h": 48, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 3140, "count": 1, "surface": "bottom", "surface_offset": 22, "enhanced": true},
+    {"type": "EnemyVirus", "x": 3360, "count": 5, "formation": "v_shape", "preload": 0},
+    {"type": "Terrain", "x": 3440, "y": 102, "w": 132, "h": 58, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.08},
+    {"type": "Terrain", "x": 3500, "y": 430, "w": 146, "h": 58, "kind": "clot"},
+    {"type": "EnemyVirus", "x": 3520, "count": 4, "formation": "random"},
+    {"type": "breakable_gate", "x": 3720, "y": 360, "w": 112, "h": 132, "kind": "clot", "hp": 16, "drop_chance": 0.04},
+    {"type": "EnemyVirus", "x": 3760, "count": 5, "formation": "random"},
+    {"type": "Terrain", "x": 3860, "y": 74, "w": 168, "h": 92, "kind": "clot"},
+    {"type": "turret_mount", "x": 3920, "y": 402, "w": 260, "h": 48, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 4040, "count": 1, "surface": "bottom", "surface_offset": 22},
+    {"type": "EnemyTakeshi", "x": 4200, "count": 2, "formation": "line"},
+    {"type": "Terrain", "x": 4320, "y": 420, "w": 160, "h": 68, "kind": "clot", "destructible": true, "hp": 6, "drop_chance": 0.06},
+    {"type": "EnemyVirus", "x": 4450, "count": 5, "formation": "random"},
+    {"type": "weapon_gate", "x": 4700, "y": 72, "w": 118, "h": 208, "kind": "clot", "hp": 18},
+    {"type": "Terrain", "x": 4760, "y": 386, "w": 170, "h": 104, "kind": "clot"},
+    {"type": "EnemyVirus", "x": 5020, "count": 6, "formation": "random"},
+    {"type": "turret_mount", "x": 5140, "y": 120, "w": 240, "h": 44, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 5240, "count": 1, "surface": "top", "surface_offset": 22, "enhanced": true},
+    {"type": "EnemyVirus", "x": 5350, "count": 4, "formation": "v_shape"},
+    {"type": "EnemyCrawler", "x": 5480, "count": 1, "surface": "top", "surface_offset": 20},
+    {"type": "Terrain", "x": 5580, "y": 102, "w": 156, "h": 62, "kind": "clot", "destructible": true, "hp": 6, "drop_chance": 0.04},
+    {"type": "breakable_gate", "x": 5860, "y": 332, "w": 126, "h": 164, "kind": "clot", "hp": 20, "drop_chance": 0.03},
+    {"type": "EnemyCoughSprayer", "x": 6060, "count": 1, "y": 296, "fixed_drop": "WeaponItem"},
+    {"type": "EnemyTakeshi", "x": 6220, "count": 3, "formation": "random"},
+    {"type": "turret_mount", "x": 6380, "y": 418, "w": 280, "h": 48, "kind": "clot"},
+    {"type": "EnemyTurret", "x": 6500, "count": 1, "surface": "bottom", "surface_offset": 22, "enhanced": true},
+    {"type": "EnemyVirus", "x": 6600, "count": 6, "formation": "line"},
+    {"type": "Terrain", "x": 6780, "y": 62, "w": 150, "h": 118, "kind": "clot"},
+    {"type": "Terrain", "x": 6840, "y": 426, "w": 190, "h": 66, "kind": "clot", "destructible": true, "hp": 6, "drop_chance": 0.04},
+    {"type": "breakable_gate", "x": 7050, "y": 96, "w": 120, "h": 188, "kind": "clot", "hp": 18, "drop_chance": 0.03},
+    {"type": "EnemyPachemon", "x": 7280, "count": 1, "y": 252},
+    {"type": "EnemyVirus", "x": 7420, "count": 5, "formation": "random"},
+    {"type": "BossGate", "trigger_x": 7650, "lock_camera_x": 6850, "player_limit_x": 7650},
+    {"type": "Terrain", "x": 7680, "y": 86, "w": 118, "h": 62, "kind": "clot"},
+    {"type": "Terrain", "x": 7720, "y": 440, "w": 130, "h": 58, "kind": "clot"},
+    {"type": "Terrain", "x": 8070, "y": 94, "w": 112, "h": 64, "kind": "clot"},
+    {"type": "Terrain", "x": 8180, "y": 430, "w": 148, "h": 58, "kind": "clot"},
+    {"type": "Boss", "x": 8100, "count": 1, "formation": "single", "preload": 0}
   ],
   "events": []
 }
