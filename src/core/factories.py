@@ -99,7 +99,10 @@ def _enemy_cough_sprayer(game: "Game", wx: float, wy: float, ctx: dict):
 
 def _enemy_spore_splitter(game: "Game", wx: float, wy: float, ctx: dict):
     from src.entities.enemies.spore_splitter import EnemySporeSplitter
-    return EnemySporeSplitter(game, wx, wy, enhanced=ctx["enhanced"])
+    return EnemySporeSplitter(
+        game, wx, wy, ctx.get("enemy_bullets"), ctx.get("player"),
+        enhanced=ctx["enhanced"],
+    )
 
 
 def _enemy_spore_pod(game: "Game", wx: float, wy: float, ctx: dict):
