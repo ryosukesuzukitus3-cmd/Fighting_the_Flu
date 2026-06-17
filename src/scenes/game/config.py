@@ -74,16 +74,23 @@ def combo_multiplier(count: int) -> int:
     if count >= 5:  return 2
     return 1
 
-# ── グラディウス式ウェポン選択スロット ─────────────────────────
+# ── グラディウス式ウェポン選択スロット（上段＝自機）─────────────
+# magnet/barrier は撤去（magnet は先輩のマグネット系統へ移管）
 UPGRADE_SLOTS: list[tuple[str, str]] = [
     ("weapon_main", "MAIN UP"),
     ("homing",      "HOMING"),
     ("laser",       "LASER"),
     ("speed",       "SPEED"),
-    ("barrier",     "BARRIER"),
-    ("magnet",      "MAGNET"),
 ]
 MAIN_NEXT_NAMES = ["RAPID1", "RAPID2", "WIDE", "WIDE+", "MEDIC", "(MAX)"]
+
+# ── カロナール先輩 強化スロット（下段＝先輩・支援重視4系統）────────
+COMPANION_SLOTS: list[tuple[str, str]] = [
+    ("kt_hp",     "HP UP"),
+    ("kt_shot",   "解熱弾"),
+    ("kt_supply", "補給"),
+    ("kt_magnet", "マグネット"),
+]
 
 # ── コンティニュー時ウェポン初期状態 ────────────────────────────
 # main_level: 0=single,1=rapid1,2=rapid2,3=wide1,4=wide2,5=medic
