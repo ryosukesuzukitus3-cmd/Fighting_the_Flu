@@ -18,6 +18,7 @@ class Stage:
 
         data      = self._load(stage_id)
         self.bgm: str        = data.get("bgm", "MEGALOVANIA.mp3")
+        self.random_drop_scale: float = max(0.0, float(data.get("random_drop_scale", 1.0)))
         self.initial_terrain: list = list(data.get("initial_terrain", []))
         self.terrain_layout: list  = list(data.get("terrain_layout", self.initial_terrain))
         self.boss_terrain: list    = list(data.get("boss_terrain", []))

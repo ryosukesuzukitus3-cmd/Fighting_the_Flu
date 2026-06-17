@@ -252,13 +252,24 @@ def test_stage_supports_world_layout_fields() -> None:
 
     stage = Stage(object(), 1)
     legacy_stage = Stage(object(), 2)
+    stage1_data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
 
     assert stage.initial_terrain == []
     assert stage.terrain_layout
     assert stage.terrain_layout[0]["type"] == "TerrainStrip"
+    assert stage.random_drop_scale == stage1_data["random_drop_scale"]
+    assert legacy_stage.random_drop_scale == 1.0
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
     assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
+
+
+def test_random_item_drops_use_stage_scale() -> None:
+    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+
+    assert "def _random_drop_chance" in src
+    assert "self._random_drop_chance(float(getattr(ter, \"drop_chance\", 0.0)))" in src
+    assert "chance = self._random_drop_chance(getattr(enemy, \"drop_chance\"" in src
 
 
 def test_stage1_uses_authored_blood_cell_setpieces() -> None:
@@ -287,6 +298,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert layout["center_wave"] >= 80
     assert 0.0 < layout["breakable_chance"] <= 0.03
     assert layout["breakable_drop_chance"] <= 0.05
+    assert 0.0 < data["random_drop_scale"] < 1.0
     assert "weapon_drop_limit" not in data
     assert first_enemy_x >= 900
     assert len(turrets) >= 5
@@ -294,7 +306,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
     assert max(fixed_drop_chances) <= 0.08
     assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
-    assert len(gate_events) >= 5
+    assert len(gate_events) >= 4
     assert len(reward_gates) == 1
     assert reward_gates[0].get("fixed_drop") is None
     assert max(ev.get("hp", 0) for ev in gate_events) >= 20

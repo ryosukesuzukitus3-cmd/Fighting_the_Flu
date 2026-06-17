@@ -847,7 +847,7 @@ class GameScene(
 
         world_x = self.camera.to_world_x(sx)
         world_y = max(24.0, min(float(sy), SCREEN_HEIGHT - 24.0))
-        drop_chance = float(getattr(ter, "drop_chance", 0.0))
+        drop_chance = self._random_drop_chance(float(getattr(ter, "drop_chance", 0.0)))
         ter.kill()
         self.particles.spawn_explosion(sx, sy, color=(255, 130, 70), count=18)
         self.particles.spawn_spark(sx, sy, color=(255, 180, 90), count=18, speed=420.0)
@@ -1071,7 +1071,7 @@ class GameScene(
             if self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y):
                 return
             if getattr(enemy, "drops_enabled", True):
-                chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
+                chance = self._random_drop_chance(getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20)))
                 if random.random() < chance:
                     self._add_random_item_drop(enemy.world_x, enemy.world_y)
 
@@ -1100,6 +1100,10 @@ class GameScene(
 
     def _add_random_item_drop(self, world_x: float, world_y: float, *, spread: float = 0.0) -> None:
         self.items.add(random_item(world_x, world_y, spread=spread))
+
+    def _random_drop_chance(self, chance: float) -> float:
+        scale = max(0.0, float(getattr(self.stage, "random_drop_scale", 1.0)))
+        return max(0.0, min(1.0, float(chance) * scale))
 
     def _play_item_pickup_sound(self, item) -> None:
         item_type = type(item).__name__

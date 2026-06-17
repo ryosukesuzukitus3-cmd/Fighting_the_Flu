@@ -561,6 +561,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 {
   "stage_id": 1,
   "bgm": "The_world_of_spirit_short.mp3",
+  "random_drop_scale": 1.0,
   "terrain_layout": [
     {
       "type": "TerrainStrip",
@@ -601,6 +602,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 
 地形や固定配置は `terrain_layout` / `world_events` に `world_x` 基準で書く。これにより、山・砦・ゲート・砲台足場・中ボス戦闘エリアを、時間経過ではなくステージ座標に固定して設計できる。
 既存互換として、スクロールに依存しない通常ウェーブやボス登場は `events` の `time` スケジュールを使える。
+`random_drop_scale` は敵・破壊可能地形のランダムアイテムドロップ率に掛けるステージ倍率。`fixed_drop` やビリー撃破時の確定報酬には影響しない。
 
 #### 時間イベント（`events`）
 
