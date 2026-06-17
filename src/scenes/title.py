@@ -85,9 +85,29 @@ class TitleScene(Scene):
             elif self._idle_timer >= _IDLE_DELAY + _IDLE_ROTATE:
                 self._idle_timer = _IDLE_DELAY
                 self._idle_index = (self._idle_index + 1) % len(TITLE_IDLE)
-        if inp.is_just_pressed(pygame.K_d):
-            from src.scenes.game_scene import GameScene
-            self.game.change_scene(GameScene(self.game, stage_id=99))
+        # デバッグジャンプ（python -O で除去）
+        if __debug__:
+            if inp.is_just_pressed(pygame.K_d):
+                from src.scenes.game_scene import GameScene
+                self.game.change_scene(GameScene(self.game, stage_id=99))
+            elif inp.is_just_pressed(pygame.K_c):
+                self._debug_jump_credits()
+            elif inp.is_just_pressed(pygame.K_v):
+                self._debug_jump_gameclear()
+
+    def _debug_jump_credits(self) -> None:
+        """スタッフロール（エンドロール）へ直行。確認用。"""
+        from src.scenes.credits_roll import CreditsRollScene
+        from src.story.script import CREDITS, POSTCREDIT
+        self.game.change_scene(CreditsRollScene(
+            self.game, CREDITS + POSTCREDIT,
+            lambda: self.game.change_scene(TitleScene(self.game)),
+        ))
+
+    def _debug_jump_gameclear(self) -> None:
+        """ラスボス撃破後のクリア画面へ直行（ENTER でスタッフロールへ続く）。"""
+        from src.scenes.gameclear import GameClearScene
+        self.game.change_scene(GameClearScene(self.game, record_result=False))
 
     def _select(self) -> None:
         self.game.sound.play_se("music/se/メニュー操作SE：決定.mp3", volume=0.6)
@@ -163,6 +183,9 @@ class TitleScene(Scene):
         hint = self._small_font.render("↑↓  SPACE / ENTER", True, (110, 106, 112))
         hint.set_alpha(150)
         screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 40))
-        dbg = self._idle_font.render("D : デバッグ", True, (74, 70, 80))
-        dbg.set_alpha(120)
-        screen.blit(dbg, (SCREEN_WIDTH - dbg.get_width() - 14, SCREEN_HEIGHT - 28))
+        if __debug__:
+            dbg = self._idle_font.render(
+                "D:デバッグ  C:スタッフロール  V:クリア画面", True, (74, 70, 80)
+            )
+            dbg.set_alpha(120)
+            screen.blit(dbg, (SCREEN_WIDTH - dbg.get_width() - 14, SCREEN_HEIGHT - 28))

@@ -6,13 +6,20 @@ import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.lines import Page
-from src.story.speakers import speaker_name, speaker_color, DEFAULT_TEXT_COLOR
+from src.story.speakers import speaker_name, speaker_color, DEFAULT_TEXT_COLOR, NARRATION
 
-_SCROLL_SPEED = 34.0
-_FAST_MULT = 3.2
+_SCROLL_SPEED = 40.5          # BGM を聴かせつつ、間延びしない速さ
+_FAST_MULT = 3.6
 _SIDE_PAD = 72
 _FADEOUT_MS = 2400
 _FADEOUT_SEC = _FADEOUT_MS / 1000.0
+
+# エンドロール記法（script.py CREDITS / POSTCREDIT のテキスト先頭マーカー）
+_TITLE_MARK = "■"             # セクション見出し（大・金・下線）
+_ROLE_MARK = "/"              # 役職ラベル（小・控えめ色）
+
+_TITLE_COLOR = (255, 220, 120)
+_ROLE_COLOR = (170, 164, 148)
 
 
 class CreditsRollScene(Scene):
@@ -24,6 +31,8 @@ class CreditsRollScene(Scene):
     def on_enter(self) -> None:
         self._font_title = self.game.resources.pixelfont(44)
         self._font_speaker = self.game.resources.pixelfont(22)
+        self._font_name = self.game.resources.pixelfont(28)
+        self._font_role = self.game.resources.pixelfont(19)
         self._font_body = self.game.resources.pixelfont(24)
         self._font_small = self.game.resources.pixelfont(18)
         self._hint_font = self.game.resources.pixelfont(16)
@@ -92,27 +101,30 @@ class CreditsRollScene(Scene):
         self.game.sound.stop_bgm(fadeout_ms=_FADEOUT_MS)
 
     def _build_entries(self) -> None:
-        self._entries.append(("STAFF ROLL", "title", (255, 220, 120)))
+        # 先頭に少し間を取り、最初の見出しが落ち着いて入ってくるようにする
         self._entries.append(("", "space", DEFAULT_TEXT_COLOR))
         for page in self._pages:
+            narration = page.speaker == NARRATION
             name = speaker_name(page.speaker)
             if name:
                 self._append_line(name, "speaker", speaker_color(page.speaker))
             for line in page.lines:
-                if line:
-                    kind = "title" if line.upper() == "STAFF" else "body"
-                    color = (255, 220, 120) if kind == "title" else DEFAULT_TEXT_COLOR
-                    self._append_line(line, kind, color)
-                else:
+                if not line:
                     self._entries.append(("", "space", DEFAULT_TEXT_COLOR))
+                elif line.startswith(_TITLE_MARK):
+                    self._append_line(line[len(_TITLE_MARK):].strip(), "title", _TITLE_COLOR)
+                elif line.startswith(_ROLE_MARK):
+                    self._append_line(line[len(_ROLE_MARK):].strip(), "role", _ROLE_COLOR)
+                elif narration:
+                    self._append_line(line, "body", DEFAULT_TEXT_COLOR)
+                else:
+                    self._append_line(line, "name", DEFAULT_TEXT_COLOR)
             self._entries.append(("", "space", DEFAULT_TEXT_COLOR))
-        self._entries.append(("", "space", DEFAULT_TEXT_COLOR))
-        self._entries.append(("THE END", "title", (255, 230, 150)))
 
     def _append_line(self, text: str, kind: str, color: tuple[int, int, int]) -> None:
         font = self._font_for(kind, text)
         max_w = SCREEN_WIDTH - _SIDE_PAD * 2
-        if kind != "body" or font.size(text)[0] <= max_w:
+        if kind in ("title", "speaker") or font.size(text)[0] <= max_w:
             self._entries.append((text, kind, color))
             return
 
@@ -131,6 +143,10 @@ class CreditsRollScene(Scene):
             return self._font_title
         if kind == "speaker":
             return self._font_speaker
+        if kind == "name":
+            return self._font_name
+        if kind == "role":
+            return self._font_role
         if kind == "small":
             return self._font_small
         return self._font_body
@@ -138,7 +154,11 @@ class CreditsRollScene(Scene):
     def _entry_height(self, kind: str, text: str) -> int:
         if not text:
             return 24
-        return self._font_for(kind, text).get_linesize() + (16 if kind == "title" else 8)
+        if kind == "title":
+            return self._font_for(kind, text).get_linesize() + 28
+        if kind == "role":
+            return self._font_for(kind, text).get_linesize() + 2
+        return self._font_for(kind, text).get_linesize() + 8
 
     def _make_background(self) -> pygame.Surface:
         surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))

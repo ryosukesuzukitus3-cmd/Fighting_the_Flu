@@ -5,6 +5,11 @@ from src.story.script import GAME_CLEAR
 
 
 class GameClearScene(Scene):
+    def __init__(self, game, *, record_result: bool = True) -> None:
+        # record_result=False はデバッグジャンプ用。ハイスコア/プレイログを汚さない。
+        super().__init__(game)
+        self._record_result = record_result
+
     def on_enter(self) -> None:
         self._title_font = self.game.resources.pixelfont(100)
         self._info_font  = self.game.resources.pixelfont(28)
@@ -12,13 +17,15 @@ class GameClearScene(Scene):
         self._next_font  = self.game.resources.pixelfont(18)
         self._score = self.game.shared.score
         stage       = self.game.shared.stage
-        self.game.highscore.add("---", self._score, stage)
-        self.game.playlog.end_run(
-            cleared=True,
-            score=self._score,
-            kill_count=self.game.shared.kill_count,
-        )
-        self._is_high = bool(self.game.highscore.get_scores()) and \
+        if self._record_result:
+            self.game.highscore.add("---", self._score, stage)
+            self.game.playlog.end_run(
+                cleared=True,
+                score=self._score,
+                kill_count=self.game.shared.kill_count,
+            )
+        self._is_high = self._record_result and \
+                        bool(self.game.highscore.get_scores()) and \
                         self.game.highscore.get_scores()[0]["score"] == self._score
         self._timer = 0.0
         self.game.sound.play_bgm("music/bgm/FFVI_勝利のファンファーレ.mp3", loops=0)
