@@ -262,7 +262,8 @@ def test_stage_supports_world_layout_fields() -> None:
 
     stage = Stage(object(), 1)
     stage2 = Stage(object(), 2)
-    legacy_stage = Stage(object(), 3)
+    stage3 = Stage(object(), 3)
+    legacy_stage = Stage(object(), 4)
     stage1_data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
 
     assert stage.initial_terrain == []
@@ -272,6 +273,9 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage2.initial_terrain == []
     assert stage2.terrain_layout
     assert stage2.random_drop_scale < 1.0
+    assert stage3.initial_terrain == []
+    assert stage3.terrain_layout
+    assert stage3.random_drop_scale < 1.0
     assert legacy_stage.random_drop_scale == 1.0
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
     assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
@@ -404,6 +408,57 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 2
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 1
     assert any(ev["type"] == "EnemyBilly" for ev in world_events)
+    assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
+    assert boss_gate["player_limit_x"] <= first_boss_room_x
+    assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
+    assert stage.boss_terrain_mode == "preplaced"
+
+
+def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
+    from src.core.constants import SCREEN_WIDTH
+    from src.stages.stage import Stage
+
+    data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    layout = data["terrain_layout"][0]
+    world_events = data["world_events"]
+    turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
+    mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
+    gates = [ev for ev in world_events if ev["type"] in {"breakable_gate", "weapon_gate"}]
+    reward_gates = [ev for ev in world_events if ev["type"] == "weapon_gate"]
+    minibosses = [
+        ev for ev in world_events
+        if ev["type"] in {"EnemyCoughSprayer", "EnemySporeSplitter"}
+    ]
+    fixed_weapon_events = [ev for ev in world_events if ev.get("fixed_drop") == "WeaponItem"]
+    boss_x = next(ev["x"] for ev in world_events if ev["type"] == "Boss")
+    boss_gate = next(ev for ev in world_events if ev["type"] == "BossGate")
+    boss_room_blocks = [
+        ev for ev in world_events
+        if ev.get("kind") in {"wall", "rock"} and ev.get("x", 0) >= boss_gate["trigger_x"]
+    ]
+    first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
+    stage = Stage(object(), 3)
+
+    assert data.get("initial_terrain", []) == []
+    assert data["events"] == []
+    assert data["boss_terrain_mode"] == "preplaced"
+    assert 0.0 < data["random_drop_scale"] < 1.0
+    assert layout["type"] == "TerrainStrip"
+    assert layout["theme"] == "fortress"
+    assert layout["profile"] == "mountain"
+    assert layout["length"] >= boss_x + 800
+    assert layout["breakable_drop_chance"] <= 0.05
+    assert len(world_events) >= 40
+    assert sum(int(ev.get("count", 1)) for ev in turrets) >= 10
+    assert len(mounts) >= 3
+    assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
+    assert len(gates) >= 3
+    assert len(reward_gates) == 1
+    assert all(ev.get("fixed_drop") == "WeaponItem" for ev in minibosses)
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 2
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 2
+    assert any(ev["type"] == "EnemyBilly" for ev in world_events)
+    assert max(ev.get("hp", 0) for ev in gates) >= 24
     assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
     assert boss_gate["player_limit_x"] <= first_boss_room_x
     assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
