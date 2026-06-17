@@ -247,17 +247,31 @@ def test_stage_json_required_fields() -> None:
 
 # ── ボス ─────────────────────────────────────────────────────────────
 
+def test_stage_json_bgm_files_exist() -> None:
+    bgm_dir = ROOT / "assets" / "music" / "bgm"
+    for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
+        data = json.loads(p.read_text(encoding="utf-8"))
+        bgm = data.get("bgm", "")
+        if not bgm:
+            continue
+        assert (bgm_dir / bgm).exists(), f"{p.name}: missing BGM file '{bgm}'"
+
+
 def test_stage_supports_world_layout_fields() -> None:
     from src.stages.stage import Stage
 
     stage = Stage(object(), 1)
-    legacy_stage = Stage(object(), 2)
+    stage2 = Stage(object(), 2)
+    legacy_stage = Stage(object(), 3)
     stage1_data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
 
     assert stage.initial_terrain == []
     assert stage.terrain_layout
     assert stage.terrain_layout[0]["type"] == "TerrainStrip"
     assert stage.random_drop_scale == stage1_data["random_drop_scale"]
+    assert stage2.initial_terrain == []
+    assert stage2.terrain_layout
+    assert stage2.random_drop_scale < 1.0
     assert legacy_stage.random_drop_scale == 1.0
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
     assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
@@ -301,7 +315,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert "weapon_drop_limit" not in data
     assert first_enemy_x >= 900
-    assert len(turrets) >= 5
+    assert sum(int(ev.get("count", 1)) for ev in turrets) >= 5
     assert len(mounts) >= 5
     assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
     assert max(fixed_drop_chances) <= 0.08
@@ -345,6 +359,55 @@ def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
     assert boss_x - SCREEN_WIDTH - boss_gates[0]["lock_camera_x"] <= 500
     assert boss_events[0].get("preload", 80) == 0
     assert len(boss_room_blocks) >= 4
+
+
+def test_stage2_uses_authored_cyber_setpieces() -> None:
+    from src.core.constants import SCREEN_WIDTH
+    from src.stages.stage import Stage
+
+    data = json.loads((ROOT / "data" / "stages" / "stage2.json").read_text(encoding="utf-8"))
+    layout = data["terrain_layout"][0]
+    world_events = data["world_events"]
+    turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
+    mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
+    gates = [ev for ev in world_events if ev["type"] in {"breakable_gate", "weapon_gate"}]
+    reward_gates = [ev for ev in world_events if ev["type"] == "weapon_gate"]
+    minibosses = [
+        ev for ev in world_events
+        if ev["type"] in {"EnemyCoughSprayer", "EnemySporeSplitter"}
+    ]
+    fixed_weapon_events = [ev for ev in world_events if ev.get("fixed_drop") == "WeaponItem"]
+    boss_x = next(ev["x"] for ev in world_events if ev["type"] == "Boss")
+    boss_gate = next(ev for ev in world_events if ev["type"] == "BossGate")
+    boss_room_blocks = [
+        ev for ev in world_events
+        if ev.get("kind") == "debris" and ev.get("x", 0) >= boss_gate["trigger_x"]
+    ]
+    first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
+    stage = Stage(object(), 2)
+
+    assert data.get("initial_terrain", []) == []
+    assert data["events"] == []
+    assert data["boss_terrain_mode"] == "preplaced"
+    assert 0.0 < data["random_drop_scale"] < 1.0
+    assert layout["type"] == "TerrainStrip"
+    assert layout["theme"] == "meme_static"
+    assert layout["length"] >= boss_x + 800
+    assert layout["breakable_drop_chance"] <= 0.05
+    assert len(world_events) >= 40
+    assert sum(int(ev.get("count", 1)) for ev in turrets) >= 5
+    assert len(mounts) >= 4
+    assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
+    assert len(gates) >= 3
+    assert len(reward_gates) == 1
+    assert all(ev.get("fixed_drop") == "WeaponItem" for ev in minibosses)
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 2
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 1
+    assert any(ev["type"] == "EnemyBilly" for ev in world_events)
+    assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
+    assert boss_gate["player_limit_x"] <= first_boss_room_x
+    assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
+    assert stage.boss_terrain_mode == "preplaced"
 
 
 def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
