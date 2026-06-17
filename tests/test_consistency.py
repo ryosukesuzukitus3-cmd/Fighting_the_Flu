@@ -54,7 +54,7 @@ def test_stage_json_enemy_types_in_registry() -> None:
     from src.core.registries import ENEMY_NAMES
     terrain_types = {
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
-        "turret_mount", "cave_section", "corridor",
+        "weapon_gate", "turret_mount", "cave_section", "corridor",
     }
     valid = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
@@ -81,7 +81,11 @@ def test_debug_panel_handles_all_item_names() -> None:
 def test_random_item_pool_matches_item_drop_weights() -> None:
     from src.core.registries import ITEM_DEFS
     from src.core.factories import random_item_names
+    weights = {d.name: d.drop_weight for d in ITEM_DEFS}
+
     assert random_item_names() == {d.name for d in ITEM_DEFS if d.drop_weight > 0}
+    assert weights["WeaponItem"] == 0
+    assert random_item_names() == {"HealItem"}
 
 
 def test_extra_life_item_is_retired() -> None:
@@ -108,7 +112,34 @@ def test_item_pickup_sounds_are_split_by_item_type() -> None:
     assert "_play_item_pickup_sound(item)" in post_boss_src
 
 
+def test_billy_reward_matches_design_doc() -> None:
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    design = (ROOT / "docs" / "design.md").read_text(encoding="utf-8")
+
+    assert "WeaponItem×1 + HealItem×4" in design
+    assert "if etype == \"EnemyBilly\"" in game_src
+    assert "self._add_weapon_drop(" in game_src
+    assert "for _ in range(4):" in game_src
+    assert "for _ in range(8):" not in game_src
+
+
 # ── ステージ ─────────────────────────────────────────────────────────
+
+def test_weapon_items_are_fixed_rewards_not_random_drops() -> None:
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    spawner_src = (ROOT / "src" / "stages" / "spawner.py").read_text(encoding="utf-8")
+    terrain_src = (ROOT / "src" / "entities" / "terrain.py").read_text(encoding="utf-8")
+
+    assert "def _add_weapon_drop" in game_src
+    assert "def _add_fixed_item_drop" in game_src
+    assert "def _add_random_item_drop" in game_src
+    assert "self._weapon_drops_spawned" not in game_src
+    assert "weapon_drop_limit" not in game_src
+    assert "setattr(enemy, \"fixed_drop\"" in spawner_src
+    assert "fixed_drop: str | None = None" in terrain_src
+    assert "\"weapon_gate\"" in spawner_src
+    assert "def _draw_reward_core" in terrain_src
+
 
 def test_stage_ids_match_stage_names_and_boss_config() -> None:
     from src.core.registries import stage_ids
@@ -124,8 +155,9 @@ def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_boss_terrain_modes = {"replace", "preplaced"}
     valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
-    rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
+    rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
+    from src.core.registries import ITEM_NAMES
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
 
@@ -133,6 +165,10 @@ def test_stage_json_required_fields() -> None:
         assert ev.get("type") in rect_terrain_types | strip_terrain_types, (
             f"{section}[{i}]: terrain section only allows Terrain/TerrainStrip"
         )
+        if "fixed_drop" in ev:
+            assert ev["fixed_drop"] in ITEM_NAMES, (
+                f"{section}[{i}]: unknown fixed_drop '{ev['fixed_drop']}'"
+            )
         if ev.get("type") in rect_terrain_types:
             for field in ("y", "w", "h"):
                 assert field in ev, f"{section}[{i}](Terrain): missing '{field}'"
@@ -161,6 +197,10 @@ def test_stage_json_required_fields() -> None:
             f"{p.name}: unknown boss_terrain_mode '{data.get('boss_terrain_mode')}'"
         )
         for i, ev in enumerate(data.get("events", [])):
+            if "fixed_drop" in ev:
+                assert ev["fixed_drop"] in ITEM_NAMES, (
+                    f"{p.name} events[{i}]: unknown fixed_drop '{ev['fixed_drop']}'"
+                )
             for field in ("time", "type"):
                 assert field in ev, f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如"
             if "surface" in ev:
@@ -188,6 +228,10 @@ def test_stage_json_required_fields() -> None:
                         f"{p.name} events[{i}]: 未知の formation '{ev['formation']}'"
                     )
         for i, ev in enumerate(data.get("world_events", [])):
+            if "fixed_drop" in ev:
+                assert ev["fixed_drop"] in ITEM_NAMES, (
+                    f"{p.name} world_events[{i}]: unknown fixed_drop '{ev['fixed_drop']}'"
+                )
             assert "type" in ev, f"{p.name} world_events[{i}]: missing 'type'"
             assert ("x" in ev or "world_x" in ev or "trigger_x" in ev), (
                 f"{p.name} world_events[{i}]: missing 'x' / 'world_x' / 'trigger_x'"
@@ -213,7 +257,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage.terrain_layout
     assert stage.terrain_layout[0]["type"] == "TerrainStrip"
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
-    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 2770 for ev in stage.world_events)
+    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
 
 
@@ -221,12 +265,45 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
     layout = data["terrain_layout"][0]
     world_events = data["world_events"]
+    fixed_drop_chances = [
+        float(ev.get("drop_chance", 0.0))
+        for ev in world_events
+        if ev.get("destructible") or ev.get("type") == "breakable_gate"
+    ]
+    first_enemy_x = min(ev["x"] for ev in world_events if ev["type"].startswith("Enemy"))
+    turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
+    mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
+    gate_events = [ev for ev in world_events if ev.get("type") in {"breakable_gate", "weapon_gate"}]
+    reward_gates = [ev for ev in world_events if ev.get("type") == "weapon_gate"]
+    fixed_weapon_events = [ev for ev in world_events if ev.get("fixed_drop") == "WeaponItem"]
+    miniboss_events = [
+        ev for ev in world_events
+        if ev.get("type") in {"EnemyCoughSprayer", "EnemySporeSplitter"}
+    ]
 
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "fever_cave"
-    assert layout["breakable_chance"] == 0.0
+    assert layout["length"] >= 11000
+    assert layout["center_wave"] >= 80
+    assert 0.0 < layout["breakable_chance"] <= 0.03
+    assert layout["breakable_drop_chance"] <= 0.05
+    assert "weapon_drop_limit" not in data
+    assert first_enemy_x >= 900
+    assert len(turrets) >= 5
+    assert len(mounts) >= 5
+    assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
+    assert max(fixed_drop_chances) <= 0.08
     assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
-    assert any(ev.get("type") == "breakable_gate" and ev.get("kind") == "clot" for ev in world_events)
+    assert len(gate_events) >= 5
+    assert len(reward_gates) == 1
+    assert reward_gates[0].get("fixed_drop") is None
+    assert max(ev.get("hp", 0) for ev in gate_events) >= 20
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 1
+    assert all(ev.get("fixed_drop") == "WeaponItem" for ev in miniboss_events)
+    assert any(ev.get("type") == "EnemyCrawler" for ev in world_events)
+    assert any(ev.get("type") == "EnemyPachemon" for ev in world_events)
+    assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
+    assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert data["events"] == []
 
@@ -239,9 +316,10 @@ def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
     boss_events = [ev for ev in data["world_events"] if ev["type"] == "Boss"]
     boss_gates = [ev for ev in data["world_events"] if ev["type"] == "BossGate"]
     boss_x = boss_events[0]["x"]
+    gate_x = boss_gates[0]["trigger_x"]
     boss_room_blocks = [
         ev for ev in data["world_events"]
-        if ev.get("kind") == "clot" and ev.get("x", 0) >= 3600
+        if ev.get("kind") == "clot" and ev.get("x", 0) >= gate_x
     ]
     first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
     stage = Stage(object(), 1)
@@ -262,15 +340,15 @@ def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
     from src.stages.spawner import EnemySpawner
 
     camera = Camera()
-    camera.x = 2850.0
+    camera.x = 6850.0
     spawner = EnemySpawner(
         game=object(),
         enemies=pygame.sprite.Group(),
         enemy_bullets=pygame.sprite.Group(),
         events=[],
         world_events=[
-            {"type": "BossGate", "trigger_x": 3650, "lock_camera_x": 2850, "player_limit_x": 3650},
-            {"type": "Boss", "x": 4100, "count": 1, "formation": "single", "preload": 0},
+            {"type": "BossGate", "trigger_x": 7650, "lock_camera_x": 6850, "player_limit_x": 7650},
+            {"type": "Boss", "x": 8100, "count": 1, "formation": "single", "preload": 0},
         ],
         player=object(),
     )
@@ -279,11 +357,11 @@ def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
 
     assert spawner.boss_gate_pending is True
     assert spawner.boss_gate_event is not None
-    assert spawner.boss_gate_event["lock_camera_x"] == 2850
+    assert spawner.boss_gate_event["lock_camera_x"] == 6850
     assert spawner.boss_pending is False
 
     spawner.clear_boss_gate()
-    camera.x = 3300.0
+    camera.x = 7300.0
     spawner.update(1.0 / 60.0, camera)
 
     assert spawner.boss_gate_pending is False
@@ -358,6 +436,48 @@ def test_world_event_surface_can_use_authored_terrain_block() -> None:
     assert spawner._surface_y_at(1000, "bottom") == 420
     assert turret.world_x == 1000
     assert turret.world_y == 396
+
+
+def test_world_event_fixed_drop_metadata_reaches_spawned_objects() -> None:
+    from src.core.camera import Camera
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    camera.x = 130.0
+    enemies = pygame.sprite.Group()
+    terrain = pygame.sprite.Group()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=enemies,
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[
+            {
+                "type": "EnemyTurret",
+                "x": 1000,
+                "count": 1,
+                "surface": "bottom",
+                "fixed_drop": "WeaponItem",
+            },
+            {
+                "type": "weapon_gate",
+                "x": 1010,
+                "y": 92,
+                "w": 80,
+                "h": 120,
+                "kind": "clot",
+            },
+        ],
+        player=object(),
+        terrain=terrain,
+    )
+
+    spawner.update(1.0 / 60.0, camera)
+    enemy = next(iter(enemies))
+    gate = next(iter(terrain))
+
+    assert getattr(enemy, "fixed_drop", None) == "WeaponItem"
+    assert gate.fixed_drop == "WeaponItem"
 
 
 def test_regular_stages_define_boss_terrain() -> None:

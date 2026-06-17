@@ -857,8 +857,10 @@ class GameScene(
         self._combo_timer = COMBO_WINDOW
         self._combo_pulse = 0.8
         self._spawn_popup(f"BREAK +{terrain_score}", sx, sy - 18, color=(255, 200, 110), life=1.1)
+        if self._add_fixed_item_drop(getattr(ter, "fixed_drop", None), world_x, world_y, spread=16.0):
+            return
         if drop_chance > 0.0 and random.random() < drop_chance:
-            self.items.add(random_item(world_x, world_y, spread=16.0))
+            self._add_random_item_drop(world_x, world_y, spread=16.0)
 
     def _ricochet_bullet(self, bullet, ter, *, screen_space: bool) -> None:
         b = bullet.rect
@@ -1053,22 +1055,49 @@ class GameScene(
         self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
 
         if etype == "EnemyBilly":
-            from src.entities.items.weapon_item import WeaponItem
             from src.entities.items.heal import HealItem
-            self.items.add(WeaponItem(
+            self._add_weapon_drop(
                 enemy.world_x + random.uniform(-40, 40),
                 enemy.world_y + random.uniform(-30, 30),
-            ))
-            for _ in range(8):
+            )
+            for _ in range(4):
                 self.items.add(HealItem(
                     enemy.world_x + random.uniform(-60, 60),
                     enemy.world_y + random.uniform(-40, 40),
                 ))
         else:
+            if self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y):
+                return
             if getattr(enemy, "drops_enabled", True):
                 chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
                 if random.random() < chance:
-                    self.items.add(random_item(enemy.world_x, enemy.world_y))
+                    self._add_random_item_drop(enemy.world_x, enemy.world_y)
+
+    def _add_weapon_drop(self, world_x: float, world_y: float) -> None:
+        from src.entities.items.weapon_item import WeaponItem
+        self.items.add(WeaponItem(world_x, world_y))
+
+    def _add_fixed_item_drop(
+        self,
+        item_name: str | None,
+        world_x: float,
+        world_y: float,
+        *,
+        spread: float = 0.0,
+    ) -> bool:
+        if not item_name:
+            return False
+        from src.core.factories import make_item
+        ox = world_x + random.uniform(-spread, spread)
+        oy = world_y + random.uniform(-spread, spread)
+        item = make_item(str(item_name), ox, oy)
+        if item is None:
+            return False
+        self.items.add(item)
+        return True
+
+    def _add_random_item_drop(self, world_x: float, world_y: float, *, spread: float = 0.0) -> None:
+        self.items.add(random_item(world_x, world_y, spread=spread))
 
     def _play_item_pickup_sound(self, item) -> None:
         item_type = type(item).__name__
