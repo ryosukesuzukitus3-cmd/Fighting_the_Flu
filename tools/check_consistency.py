@@ -107,7 +107,7 @@ def check_enemies() -> None:
     # stage JSON の type が敵・ボス・地形エイリアスに含まれるか
     terrain_types = {
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
-        "turret_mount", "cave_section", "corridor",
+        "weapon_gate", "turret_mount", "cave_section", "corridor",
     }
     valid_types = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
@@ -182,7 +182,7 @@ def check_stages() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_boss_terrain_modes = {"replace", "preplaced"}
     valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
-    rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
+    rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)

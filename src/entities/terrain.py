@@ -49,7 +49,7 @@ class Terrain(pygame.sprite.Sprite):
         self.fixed_drop = fixed_drop
         self._w = w
         self._h = h
-        self.image   = self._make_surface(w, h, kind, destructible=destructible)
+        self.image   = self._make_surface(w, h, kind, destructible=destructible, fixed_drop=fixed_drop)
         self.rect    = self.image.get_rect(topleft=(int(world_x), int(y)))
 
     @staticmethod
@@ -60,12 +60,14 @@ class Terrain(pygame.sprite.Sprite):
         *,
         destructible: bool = False,
         damage_ratio: float = 0.0,
+        fixed_drop: str | None = None,
     ) -> pygame.Surface:
         if kind == "clot":
             return Terrain._make_clot_surface(
                 w, h,
                 destructible=destructible,
                 damage_ratio=damage_ratio,
+                fixed_drop=fixed_drop,
             )
 
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
@@ -96,6 +98,7 @@ class Terrain(pygame.sprite.Sprite):
                 sx = rng.randint(8, max(8, w - 9))
                 sy = rng.randint(12, max(12, h - 13))
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
+        Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
         return surf
 
     @staticmethod
@@ -105,6 +108,7 @@ class Terrain(pygame.sprite.Sprite):
         *,
         destructible: bool = False,
         damage_ratio: float = 0.0,
+        fixed_drop: str | None = None,
     ) -> pygame.Surface:
         rng = random.Random((w * 92837111) ^ (h * 689287499) ^ 0xC107)
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -154,7 +158,61 @@ class Terrain(pygame.sprite.Sprite):
                 sy = rng.randint(10, max(10, h - 11))
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
 
+        Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
         return surf
+
+    @staticmethod
+    def _draw_reward_core(
+        surf: pygame.Surface,
+        w: int,
+        h: int,
+        fixed_drop: str | None,
+        *,
+        damage_ratio: float = 0.0,
+    ) -> None:
+        if fixed_drop != "WeaponItem":
+            return
+
+        cx, cy = w // 2, h // 2
+        core = max(24, min(w, h) // 3)
+        glow = pygame.Surface((w, h), pygame.SRCALPHA)
+        pulse = int(32 * max(0.0, min(1.0, damage_ratio)))
+        pygame.draw.ellipse(
+            glow,
+            (70, 230, 255, 68 + pulse),
+            pygame.Rect(cx - core, cy - core, core * 2, core * 2),
+        )
+        pygame.draw.ellipse(
+            glow,
+            (255, 235, 130, 42),
+            pygame.Rect(cx - core // 2, cy - core, core, core * 2),
+            2,
+        )
+        surf.blit(glow, (0, 0))
+
+        capsule_w = max(26, min(w - 12, int(core * 1.25)))
+        capsule_h = max(14, min(h - 12, int(core * 0.55)))
+        capsule = pygame.Rect(0, 0, capsule_w, capsule_h)
+        capsule.center = (cx, cy)
+        pygame.draw.ellipse(surf, (18, 54, 70, 230), capsule.inflate(8, 8))
+        pygame.draw.ellipse(surf, (96, 230, 255, 240), capsule)
+        pygame.draw.ellipse(surf, (255, 248, 180, 230), capsule, 2)
+        pygame.draw.line(
+            surf,
+            (255, 255, 245, 245),
+            (capsule.left + 7, cy),
+            (capsule.right - 7, cy),
+            3,
+        )
+        pygame.draw.line(
+            surf,
+            (255, 255, 245, 230),
+            (cx, capsule.top + 4),
+            (cx, capsule.bottom - 4),
+            3,
+        )
+        for ox, oy in ((-core, 0), (core, 0), (0, -core), (0, core)):
+            pygame.draw.circle(surf, (255, 226, 104, 210), (cx + ox // 2, cy + oy // 2), 3)
 
     @staticmethod
     def _draw_clot_strands(surf: pygame.Surface, rng: random.Random, w: int, h: int) -> None:
@@ -218,6 +276,7 @@ class Terrain(pygame.sprite.Sprite):
             self._w, self._h, self.kind,
             destructible=True,
             damage_ratio=damage_ratio,
+            fixed_drop=self.fixed_drop,
         )
         self.rect = self.image.get_rect(center=center)
         return False

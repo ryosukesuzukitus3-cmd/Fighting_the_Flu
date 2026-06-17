@@ -275,11 +275,14 @@ class EnemySpawner:
 
     def _spawn_terrain_event(self, event: dict, camera: Camera) -> bool:
         enemy_type = event.get("type")
-        if enemy_type in {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}:
+        if enemy_type in {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}:
             if self._terrain is not None:
                 from src.entities.terrain import Terrain
                 world_x = self._terrain_world_x(event, camera)
-                destructible = bool(event.get("destructible", enemy_type in {"gate", "breakable_gate"}))
+                destructible = bool(event.get("destructible", enemy_type in {"gate", "breakable_gate", "weapon_gate"}))
+                fixed_drop = event.get("fixed_drop")
+                if enemy_type == "weapon_gate" and fixed_drop is None:
+                    fixed_drop = "WeaponItem"
                 self._terrain.add(Terrain(
                     world_x,
                     float(event.get("y", 0)),
@@ -289,7 +292,7 @@ class EnemySpawner:
                     destructible=destructible,
                     hp=int(event.get("hp", 5)),
                     drop_chance=float(event.get("drop_chance", 0.0)),
-                    fixed_drop=event.get("fixed_drop"),
+                    fixed_drop=fixed_drop,
                 ))
             return True
 

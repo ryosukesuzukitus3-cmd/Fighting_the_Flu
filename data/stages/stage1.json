@@ -77,7 +77,7 @@
     {"type": "EnemyTakeshi", "x": 4200, "count": 2, "formation": "line"},
     {"type": "Terrain", "x": 4320, "y": 420, "w": 160, "h": 68, "kind": "clot", "destructible": true, "hp": 6, "drop_chance": 0.06},
     {"type": "EnemyVirus", "x": 4450, "count": 5, "formation": "random"},
-    {"type": "breakable_gate", "x": 4700, "y": 72, "w": 118, "h": 178, "kind": "clot", "hp": 18, "fixed_drop": "WeaponItem"},
+    {"type": "weapon_gate", "x": 4700, "y": 72, "w": 118, "h": 178, "kind": "clot", "hp": 18},
     {"type": "Terrain", "x": 4760, "y": 386, "w": 170, "h": 104, "kind": "clot"},
     {"type": "EnemyPachemon", "x": 4920, "count": 1, "y": 244},
     {"type": "turret_mount", "x": 5140, "y": 82, "w": 240, "h": 44, "kind": "clot"},
