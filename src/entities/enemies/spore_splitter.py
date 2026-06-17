@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 _SPLITTER_STATS = enemy_stats("EnemySporeSplitter")
 _POD_STATS = enemy_stats("EnemySporePod")
 _ANCHOR_SX = SCREEN_WIDTH - 162.0
+_SCALE = 2.0   # 中ボスは約2倍に大型化
+_MOVE_MODES = ("drift", "wide", "quiver")   # 縦移動のバリエーション（横はアンカー保持）
 
 
 def _pod_sprite(seed: int, enhanced: bool) -> pygame.Surface:
@@ -74,26 +76,66 @@ class EnemySporePod(Enemy):
 
 
 class EnemySporeSplitter(Enemy):
-    """右前方に居座り、倒すと複数の胞子ポッドに割れる中ボス敵。"""
+    """右前方に居座り、倒すと複数の胞子ポッドに割れる中ボス敵。
 
-    def __init__(self, game: "Game", world_x: float, world_y: float, *, enhanced: bool = False) -> None:
+    大型（約2倍）。縦移動（drift/wide/quiver）を巡回しつつ、
+    一定間隔で胞子弾をプレイヤーへ吐く。
+    """
+
+    def __init__(
+        self,
+        game: "Game",
+        world_x: float,
+        world_y: float,
+        enemy_bullets: "pygame.sprite.Group | None" = None,
+        player=None,
+        *,
+        enhanced: bool = False,
+    ) -> None:
         hp = _SPLITTER_STATS.enhanced_hp if enhanced else _SPLITTER_STATS.base_hp
         speed = _SPLITTER_STATS.enhanced_speed if enhanced else _SPLITTER_STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=speed, enhanced=enhanced)
+        self._game = game
+        self._enemy_bullets = enemy_bullets
+        self._player = player
         raw = game.resources.image("graphic/enemy_spore_splitter.png")
-        self.image = pygame.transform.scale(raw, raw.get_size())
+        w, h = raw.get_size()
+        self.image = pygame.transform.scale(raw, (int(w * _SCALE), int(h * _SCALE)))
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._base_y = world_y
         self._time = random.uniform(0.0, math.tau)
         self._seed = int(world_x * 11 + world_y * 17)
+        # 縦移動モード巡回
+        self._move_idx = random.randrange(len(_MOVE_MODES))
+        self._move_timer = random.uniform(4.0, 5.0)
+        # 胞子弾の発射
+        self._spit_interval = 2.4 if enhanced else 3.0
+        self._spit_timer = self._spit_interval * random.uniform(0.5, 0.9)
         self._init_glow()
+
+    @property
+    def _move_mode(self) -> str:
+        return _MOVE_MODES[self._move_idx]
+
+    def _vertical_wave(self) -> float:
+        t = self._time
+        mode = self._move_mode
+        if mode == "wide":
+            return math.sin(t * 0.8) * 120.0
+        if mode == "quiver":
+            return math.sin(t * 5.0) * 26.0 + math.sin(t * 1.3) * 14.0
+        return math.sin(t * 1.7) * 22.0   # drift
 
     def _move_vertical(self, dt: float) -> None:
         self._time += dt
-        self.world_y = max(
-            42.0,
-            min(float(SCREEN_HEIGHT - 42), self._base_y + math.sin(self._time * 1.7) * 22.0),
-        )
+        self._move_timer -= dt
+        if self._move_timer <= 0.0:
+            self._move_idx = (self._move_idx
+                              + random.randint(1, len(_MOVE_MODES) - 1)) % len(_MOVE_MODES)
+            self._move_timer = random.uniform(4.0, 5.0)
+        target_y = max(42.0, min(float(SCREEN_HEIGHT - 42),
+                                 self._base_y + self._vertical_wave()))
+        self.world_y += (target_y - self.world_y) * min(1.0, dt * 3.5)
 
     def update(self, dt: float, camera: "Camera") -> None:
         self._move_vertical(dt)
@@ -105,6 +147,28 @@ class EnemySporeSplitter(Enemy):
             sx += (target_sx - sx) * min(1.0, dt * 4.5)
         self.world_x = camera.to_world_x(sx)
         self._place_on_screen(sx, dt)
+
+        if self._enemy_bullets is None or self._player is None:
+            return
+        self._spit_timer -= dt
+        if self._spit_timer <= 0.0:
+            self._spit_timer = self._spit_interval
+            self._spit_spores()
+
+    def _spit_spores(self) -> None:
+        from src.entities.bullets.enemy_bullet import EnemyBullet
+        sx, sy = self.rect.center
+        base = math.atan2(self._player.sy - sy, self._player.sx - sx)
+        count = 4 if self.enhanced else 3
+        for i in range(count):
+            off = (i - (count - 1) / 2.0) * 0.30
+            a = base + off
+            speed = random.uniform(140.0, 178.0)
+            self._enemy_bullets.add(
+                EnemyBullet(sx, sy, math.cos(a) * speed, math.sin(a) * speed,
+                            radius=5, color=(236, 126, 48))
+            )
+        self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.4)
 
     def split(self, game: "Game") -> list[EnemySporePod]:
         pods: list[EnemySporePod] = []
