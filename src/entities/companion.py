@@ -16,21 +16,24 @@ if TYPE_CHECKING:
     from src.core.camera import Camera
 
 # ── 調整パラメータ ─────────────────────────────────────────────────
-_MAX_HP           = 1     # 先輩 HP は 1（被弾即撤退 / 薬効最大は落ちない）
 _INVINCIBLE_TIME  = 0.8   # 被弾後無敵時間（秒）
 _REVIVE_INVINCIBLE = 1.6  # 復帰直後の無敵時間（秒）
 _BLINK_INTERVAL   = 0.1
 _RETURN_TIME      = 24.0  # 撤退後復帰までの時間（秒・従来の3倍）
 _SHOOT_COOLDOWN   = 0.5   # ショットクールダウン（秒）
-_FOLLOW_OFFSET_X  = 66.0  # 澤口の左にどれだけ離れて位置取りするか
-_FOLLOW_OFFSET_Y  = 46.0  # 澤口の下にどれだけ離れて位置取りするか
+_FOLLOW_OFFSET_X  = 44.0  # 澤口の左にどれだけ離れて位置取りするか
+_FOLLOW_OFFSET_Y  = 30.0  # 澤口の下にどれだけ離れて位置取りするか
 _FOLLOW_LERP      = 7.5    # 追従の基本追従率（澤口の speed_multiplier で増減）
 
-# ── 支援ツリー「薬効」（主人公とは別毛色＝支援重視。取得ごとに +1）──────
+# ── 支援ツリー（主人公とは別毛色＝支援重視。各系統を個別に振り分け強化）──
 # 効果が Lv で伸び続けるので、ステージが進んでも腐らない（ゼロ漸近を防ぐ）。
-_HEAL_MIN_LV    = 2   # 自機HP回復の解禁Lv
-_BARRIER_MIN_LV = 3   # バリア付与の解禁Lv
-_PULSE_MIN_LV   = 4   # 解熱パルス（周囲の敵弾消し）の解禁Lv
+# 4系統: HP上昇 / 解熱弾（連射） / 補給（回復アイテム射出） / マグネット（引き寄せ）
+_KT_MAX_LEVEL = 3                     # 各系統の最大レベル
+_HP_BY_LEVEL  = [1, 10, 30, 50]       # lv_hp 0..3 → 最大HP
+# 補給: lv 0=無効, 1〜3 で回復アイテム射出間隔（秒）が短縮
+_SUPPLY_INTERVAL = [0.0, 9.0, 6.5, 4.0]
+# マグネット: lv 0=無効, 1〜3 で (引き寄せ半径px, 速度px/s)
+_MAGNET_BY_LEVEL = [(0.0, 0.0), (150.0, 90.0), (280.0, 150.0), (9999.0, 240.0)]
 _SPRITE_R         = 16    # ダミースプライト半径（px）
 
 
@@ -67,10 +70,12 @@ class Karonaru(pygame.sprite.Sprite):
         self,
         game: "Game",
         popup_fn: Callable[[str, int, int], None] | None = None,
+        spawn_heal_fn: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.game      = game
         self._popup_fn = popup_fn
+        self._spawn_heal_fn = spawn_heal_fn
 
         self.mode: str = "normal"   # "normal" | "max"（薬効最大）
         self.image = _make_dummy_sprite()
@@ -85,9 +90,9 @@ class Karonaru(pygame.sprite.Sprite):
         self._target_sx: float = self.sx
         self._target_sy: float = self.sy
 
-        # HP / 無敵
-        self.hp:     int  = _MAX_HP
-        self.max_hp: int  = _MAX_HP
+        # HP / 無敵（最大HPは HP上昇系統 lv_hp で増える）
+        self.hp:     int  = _HP_BY_LEVEL[0]
+        self.max_hp: int  = _HP_BY_LEVEL[0]
         self._invincible_timer: float = 0.0
         self._blink_timer:      float = 0.0
         self._blink_visible:    bool  = True
@@ -99,11 +104,13 @@ class Karonaru(pygame.sprite.Sprite):
         # ショット
         self._shoot_cooldown: float = _SHOOT_COOLDOWN
 
-        # 支援ツリー「薬効」レベル（ウェポンアイテム取得ごとに +1）
-        self.support_level: int = 1
-        self._heal_timer:    float = self._heal_interval()
-        self._barrier_timer: float = self._barrier_interval()
-        self._pulse_timer:   float = self._pulse_interval()
+        # 支援ツリー（4系統を個別レベルで振り分け強化）
+        self.lv_hp:     int = 0   # HP上昇
+        self.lv_shot:   int = 0   # 解熱弾（連射）
+        self.lv_supply: int = 0   # 補給（回復アイテム射出）
+        self.lv_magnet: int = 0   # マグネット（アイテム引き寄せ）
+        self.stock:     int = 0   # 先輩用 強化ストック（ウェポンアイテム取得ごとに +1）
+        self._supply_timer: float = 0.0
 
     # ── 公開プロパティ ────────────────────────────────────────────
 
@@ -129,6 +136,7 @@ class Karonaru(pygame.sprite.Sprite):
         camera: "Camera",
         enemies: pygame.sprite.Group,
         enemy_bullets: pygame.sprite.Group | None = None,
+        terrain: pygame.sprite.Group | None = None,
     ) -> None:
         if self._state == "retired":
             self._return_timer -= dt
@@ -142,16 +150,17 @@ class Karonaru(pygame.sprite.Sprite):
         target_x = float(player.rect.centerx) - _FOLLOW_OFFSET_X
         target_y = float(player.rect.centery) + _FOLLOW_OFFSET_Y
         k = min(1.0, _FOLLOW_LERP * mult * dt)
-        self.sx += (target_x - self.sx) * k
-        self.sy += (target_y - self.sy) * k
+        new_x = self.sx + (target_x - self.sx) * k
+        new_y = self.sy + (target_y - self.sy) * k
 
-        # 壁クランプ
+        # 画面端クランプ
         hw = self.rect.width  // 2
         hh = self.rect.height // 2
-        self.sx = max(float(hw), min(float(SCREEN_WIDTH  - hw), self.sx))
-        self.sy = max(float(hh), min(float(SCREEN_HEIGHT - hh), self.sy))
+        new_x = max(float(hw), min(float(SCREEN_WIDTH  - hw), new_x))
+        new_y = max(float(hh), min(float(SCREEN_HEIGHT - hh), new_y))
 
-        self.rect.center = (int(self.sx), int(self.sy))
+        # 地形（壁）を抜けないよう軸ごとにブロック（壁沿いの滑りは許可）
+        self._move_with_terrain(new_x, new_y, terrain)
 
         # 無敵・点滅
         if self._invincible_timer > 0.0:
@@ -163,70 +172,95 @@ class Karonaru(pygame.sprite.Sprite):
         else:
             self._blink_visible = True
 
-        # ショット（連射間隔は薬効Lvで短縮）
+        # ショット（連射間隔は解熱弾Lvで短縮）
         self._shoot_cooldown = max(0.0, self._shoot_cooldown - dt)
         if getattr(player, "fire_held", False) and self._shoot_cooldown <= 0.0:
             self._fire(player_bullets, camera)
             self._shoot_cooldown = self._shoot_interval()
 
-        # 支援ツリー「薬効」効果（回復・バリア・解熱パルス）
-        self._tick_support(dt, player, enemy_bullets)
+        # 補給（回復アイテムを前方へ射出。Lvで頻度上昇）
+        self._tick_supply(dt)
 
-    # ── 支援ツリー「薬効」 ────────────────────────────────────────
+    def _move_with_terrain(
+        self, new_x: float, new_y: float, terrain: pygame.sprite.Group | None
+    ) -> None:
+        """目標位置へ移動。地形がある場合は軸ごとに衝突をブロック（壁抜け防止）。"""
+        if not terrain or len(terrain) == 0:
+            self.sx, self.sy = new_x, new_y
+            self.rect.center = (int(self.sx), int(self.sy))
+            return
+        # X 軸: 横移動だけ試し、壁にめり込むなら据え置き
+        self.rect.center = (int(new_x), int(self.sy))
+        if pygame.sprite.spritecollideany(self, terrain):
+            new_x = self.sx
+        # Y 軸: 縦移動だけ試し、壁にめり込むなら据え置き
+        self.rect.center = (int(new_x), int(new_y))
+        if pygame.sprite.spritecollideany(self, terrain):
+            new_y = self.sy
+        self.sx, self.sy = new_x, new_y
+        self.rect.center = (int(self.sx), int(self.sy))
+
+    # ── 支援ツリー（4系統）──────────────────────────────────────────
     def _shoot_interval(self) -> float:
-        return max(0.18, _SHOOT_COOLDOWN - 0.035 * self.support_level)
+        # 解熱弾Lvで連射が速くなる
+        return max(0.16, _SHOOT_COOLDOWN - 0.10 * self.lv_shot)
 
     def _ways(self) -> int:
-        return 1 if self.support_level < 4 else (2 if self.support_level < 6 else 3)
+        # 最大Lvで2way（基本は連射特化）
+        return 2 if self.lv_shot >= _KT_MAX_LEVEL else 1
 
-    def _heal_interval(self) -> float:
-        return max(5.0, 14.0 - 1.2 * self.support_level)
+    def _supply_interval(self) -> float:
+        lv = max(0, min(self.lv_supply, _KT_MAX_LEVEL))
+        return _SUPPLY_INTERVAL[lv]
 
-    def _barrier_interval(self) -> float:
-        return max(8.0, 20.0 - 1.5 * self.support_level)
+    def magnet_params(self) -> tuple[float, float]:
+        """アイテム引き寄せ (半径px, 速度px/s)。lv_magnet=0 なら (0,0)。"""
+        lv = max(0, min(self.lv_magnet, _KT_MAX_LEVEL))
+        return _MAGNET_BY_LEVEL[lv]
 
-    def _pulse_interval(self) -> float:
-        return max(2.5, 7.0 - 0.5 * self.support_level)
+    def apply_upgrade(self, key: str) -> None:
+        """強化UIから先輩の系統を1段上げる。"""
+        if key == "kt_hp":
+            self.lv_hp = min(self.lv_hp + 1, _KT_MAX_LEVEL)
+            self.max_hp = _HP_BY_LEVEL[self.lv_hp]
+            self.hp = self.max_hp   # HP上昇時は全回復
+        elif key == "kt_shot":
+            self.lv_shot = min(self.lv_shot + 1, _KT_MAX_LEVEL)
+        elif key == "kt_supply":
+            was_zero = self.lv_supply == 0
+            self.lv_supply = min(self.lv_supply + 1, _KT_MAX_LEVEL)
+            if was_zero:
+                self._supply_timer = self._supply_interval()
+        elif key == "kt_magnet":
+            self.lv_magnet = min(self.lv_magnet + 1, _KT_MAX_LEVEL)
 
-    def _pulse_radius(self) -> float:
-        return 60.0 + 10.0 * self.support_level
+    def is_upgrade_available(self, key: str) -> bool:
+        return {
+            "kt_hp":     self.lv_hp,
+            "kt_shot":   self.lv_shot,
+            "kt_supply": self.lv_supply,
+            "kt_magnet": self.lv_magnet,
+        }.get(key, _KT_MAX_LEVEL) < _KT_MAX_LEVEL
 
-    def _tick_support(self, dt: float, player, enemy_bullets) -> None:
-        # 補給: 自機HPを少しずつ回復（Lv2+）
-        if self.support_level >= _HEAL_MIN_LV:
-            self._heal_timer -= dt
-            if self._heal_timer <= 0.0:
-                self._heal_timer = self._heal_interval()
-                if getattr(player, "hp", 0) < getattr(player, "max_hp", 0):
-                    amount = 5 + self.support_level   # 回復量も薬効Lvで増加
-                    player.hp = min(player.max_hp, player.hp + amount)
-                    self._popup(f"+{amount}HP", (120, 230, 150))
-        # 補給: バリア付与（Lv3+。未所持時のみ）
-        if self.support_level >= _BARRIER_MIN_LV:
-            self._barrier_timer -= dt
-            if self._barrier_timer <= 0.0:
-                self._barrier_timer = self._barrier_interval()
-                w = getattr(player, "weapon", None)
-                if w is not None and not getattr(w, "has_barrier", False):
-                    w.has_barrier = True
-                    self._popup("BARRIER", (150, 220, 255))
-        # 鎮痛: 解熱パルスで周囲の敵弾を消す（Lv4+）
-        if self.support_level >= _PULSE_MIN_LV and enemy_bullets is not None:
-            self._pulse_timer -= dt
-            if self._pulse_timer <= 0.0:
-                self._pulse_timer = self._pulse_interval()
-                self._heat_pulse(enemy_bullets)
+    def upgrade_level(self, key: str) -> int:
+        return {
+            "kt_hp":     self.lv_hp,
+            "kt_shot":   self.lv_shot,
+            "kt_supply": self.lv_supply,
+            "kt_magnet": self.lv_magnet,
+        }.get(key, 0)
 
-    def _heat_pulse(self, enemy_bullets: pygame.sprite.Group) -> None:
-        r = self._pulse_radius()
-        cx, cy = self.rect.center
-        r2 = r * r
-        for b in list(enemy_bullets):
-            if getattr(b, "warning_only", False):
-                continue
-            bx, by = b.rect.center
-            if (bx - cx) ** 2 + (by - cy) ** 2 <= r2:
-                b.kill()
+    def _tick_supply(self, dt: float) -> None:
+        # 補給: 回復アイテムを前方へ射出（Lv1+。頻度はLvで上昇）
+        if self.lv_supply <= 0 or self._spawn_heal_fn is None:
+            return
+        self._supply_timer -= dt
+        if self._supply_timer <= 0.0:
+            self._supply_timer = self._supply_interval()
+            try:
+                self._spawn_heal_fn()
+            except Exception:
+                pass
 
     def _popup(self, text: str, color: tuple[int, int, int]) -> None:
         if self._popup_fn:
@@ -305,7 +339,22 @@ class Karonaru(pygame.sprite.Sprite):
     # ── 描画 ─────────────────────────────────────────────────────
 
     def draw(self, surf: pygame.Surface) -> None:
-        if self._state != "active" or not self._blink_visible:
+        if self._state != "active":
             return
-        surf.blit(self.image, self.rect)
-        # HP 表示（緑ピップ）は廃止（先輩のHPは出さない）。
+        # スプライトは無敵中に点滅するが、HPゲージは常時表示する
+        if self._blink_visible:
+            surf.blit(self.image, self.rect)
+        self._draw_hp_gauge(surf)
+
+    def _draw_hp_gauge(self, surf: pygame.Surface) -> None:
+        """先輩HPゲージ（スプライト上部に小バー）。"""
+        if self.max_hp <= 0:
+            return
+        bar_w, bar_h = 34, 5
+        bx = self.rect.centerx - bar_w // 2
+        by = self.rect.top - 10
+        ratio = max(0.0, self.hp / self.max_hp)
+        pygame.draw.rect(surf, (20, 40, 25), (bx, by, bar_w, bar_h), border_radius=2)
+        col = (90, 220, 120) if ratio > 0.35 else (235, 200, 70)
+        pygame.draw.rect(surf, col, (bx, by, int(bar_w * ratio), bar_h), border_radius=2)
+        pygame.draw.rect(surf, (180, 230, 190), (bx, by, bar_w, bar_h), 1, border_radius=2)

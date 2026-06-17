@@ -172,7 +172,8 @@ class GameScene(
         self._companion = None
         if self.game.story.karonaru_available:
             from src.entities.companion import Karonaru
-            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
+            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
+                                       spawn_heal_fn=self._companion_spawn_heal)
 
         # 最終決戦（Form3 投了王サワグチ）
         self._final_phase: int = 0     # 0=非Form3 / 1=Act1 / 2=Act2
@@ -317,16 +318,12 @@ class GameScene(
             self._pause_cursor = 0
             return
 
-        # Open weapon upgrade when stock is available.
+        # Open weapon upgrade when stock is available (自機 or 先輩).
+        comp_stock = self._companion.stock if self._companion is not None else 0
         if (not self._upgrading and not self._paused
                 and inp.is_action_just_pressed("weapon_select")
-                and self.player.weapon.weapon_stock > 0):
-            available = [i for i, (k, _) in enumerate(UPGRADE_SLOTS)
-                         if self._is_upgrade_available(k)]
-            if available:
-                self._upgrading      = True
-                self._upgrade_cursor = available[0]
-                self.game.sound.play_se("music/se/メニュー操作SE：決定.mp3", volume=0.5)
+                and (self.player.weapon.weapon_stock > 0 or comp_stock > 0)):
+            self._open_upgrade_ui()
 
         if self._paused:
             self._update_pause()
@@ -373,7 +370,7 @@ class GameScene(
             self.player.update(dt)
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera,
-                                   self.enemies, self.enemy_bullets)
+                                   self.enemies, self.enemy_bullets, self.terrain)
 
         if self._stage_banner_timer <= 0 and self._boss_intro_state == "":
             self.spawner.update(dt, self.camera)
@@ -478,11 +475,16 @@ class GameScene(
             if enemy.is_off_left(self.camera):
                 enemy.kill()
 
-        mag_lv = self.player.weapon.magnet_level
-        mag_range, mag_speed = MAGNET_CONFIG.get(mag_lv, (0, 0))
+        # アイテム引き寄せはカロナール先輩のマグネット系統が担う
+        # （自機ツリーからは撤去。旧セーブ互換で自機magnetも残し、強い方を使う）
+        mag_range, mag_speed = 0.0, 0.0
+        if self._companion is not None and self._companion.is_active:
+            mag_range, mag_speed = self._companion.magnet_params()
+        if mag_range <= 0:
+            mag_range, mag_speed = MAGNET_CONFIG.get(self.player.weapon.magnet_level, (0, 0))
         for item in list(self.items):
             item.update(dt, self.camera)
-            if mag_lv > 0:
+            if mag_range > 0:
                 sx = self.camera.to_screen_x(item.world_x)
                 dx = self.player.rect.centerx - sx
                 dy = self.player.rect.centery - item.world_y
@@ -1146,7 +1148,8 @@ class GameScene(
     def _spawn_returning_karonaru(self) -> None:
         if self._companion is None:
             from src.entities.companion import Karonaru
-            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
+            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
+                                       spawn_heal_fn=self._companion_spawn_heal)
         arrival_y = float(self.player.rect.centery) + 18.0
         end_x = max(62.0, float(self.player.rect.centerx) - 76.0)
         start = (-48.0, arrival_y)
@@ -1246,7 +1249,8 @@ class GameScene(
     def _do_karonaru_max(self) -> None:
         if self._companion is None:
             from src.entities.companion import Karonaru
-            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup)
+            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
+                                       spawn_heal_fn=self._companion_spawn_heal)
             self._companion.sx = float(self.player.rect.centerx) - 50.0
             self._companion.sy = float(self.player.rect.centery) + 16.0
         self._companion.set_max()
@@ -1571,11 +1575,11 @@ class GameScene(
     def _pickup_weapon_item(self) -> None:
         """Apply a weapon stock pickup."""
         self.player.weapon.weapon_stock += 1
-        # 取得ごとに先輩（カロナール）の薬効レベルも +1（別ツリー＝支援系）
+        # 取得ごとに先輩（カロナール）の強化ストックも +1（別ツリー＝支援系）
         if self._companion is not None:
-            self._companion.support_level += 1
+            self._companion.stock += 1
             self._spawn_popup(
-                f"先輩 薬効 Lv{self._companion.support_level}",
+                "先輩 強化ストック +1",
                 self._companion.rect.centerx, self._companion.rect.top - 6,
                 color=(150, 235, 170), life=1.6,
             )
@@ -1583,10 +1587,26 @@ class GameScene(
         px, py = self.player.rect.centerx, self.player.rect.top - 10
         if not self._weapon_tip_shown:
             self._weapon_tip_shown = True
-            self._spawn_popup(f"WEAPON STOCK +1   {wsel}キーで強化を選抁E",
+            self._spawn_popup(f"WEAPON STOCK +1   {wsel}キーで強化を選択",
                               px, py, color=(120, 230, 255), life=3.0)
         else:
             self._spawn_popup(f"WEAPON +1  [{wsel}]", px, py)
+
+    def _companion_spawn_heal(self) -> None:
+        """補給: 先輩が前方へ回復アイテムを射出する（Lvで頻度上昇）。"""
+        if self._companion is None:
+            return
+        from src.entities.items.heal import HealItem
+        # 先輩の少し前方（右）に射出 → 自然に左ドリフトして自機の進路に乗る
+        world_x = self.camera.x + float(self._companion.rect.centerx) + 26.0
+        world_y = float(self._companion.rect.centery)
+        self.items.add(HealItem(world_x, world_y))
+        # 射出演出（先輩位置からのきらめき）
+        self.particles.spawn_spark(
+            self._companion.rect.centerx, self._companion.rect.centery,
+            color=(120, 240, 150), count=10, speed=210.0,
+        )
+        self.game.sound.play_se_alias("SE_ITEM_HEAL", volume=0.5)
 
     def _spawn_popup(self, text: str, sx: int, sy: int,
                      color: tuple = (255, 230, 60), life: float = 1.4) -> None:
