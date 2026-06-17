@@ -75,6 +75,7 @@ class GameScene(
         PierceBullet._base_image = None
 
         self.camera  = Camera()
+        self._stage_scroll_speed = self.camera.scroll_speed
         self.bg      = ScrollingBackground(self._stage_id)
         self.player  = Player(self.game)
         self.hud     = HUD(self.game)
@@ -268,6 +269,16 @@ class GameScene(
         self.terrain.empty()
         self.spawner.spawn_terrain_events(boss_stage.boss_terrain, self.camera)
 
+    def _prepare_boss_terrain(self, stage_id: int) -> None:
+        boss_stage = self._boss_stage_data(stage_id)
+        preplaced_here = (
+            stage_id == self._stage_id
+            and boss_stage.boss_terrain_mode == "preplaced"
+        )
+        if not preplaced_here:
+            self._replace_boss_terrain(stage_id)
+        self._boss_terrain_spawned = True
+
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
         # Hitstop slows movement updates for a short impact moment.
@@ -372,25 +383,26 @@ class GameScene(
         if not _panel_open:
             self.player.update(dt)
         if self._companion:
-            self._companion.update(dt, self.player, self.player_bullets, self.camera, self.enemies)
+            self._companion.update(dt, self.player, self.player_bullets, self.camera,
+                                   self.enemies, self.enemy_bullets)
 
         if self._stage_banner_timer <= 0 and self._boss_intro_state == "":
             self.spawner.update(dt, self.camera)
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
+        if self.spawner.boss_gate_pending and self._boss_intro_state == "":
+            if self._boss_gate_blocked():
+                self._hold_before_boss_room()
+                self._show_boss_gate_notice(dt)
+            else:
+                self.spawner.clear_boss_gate()
+                self.camera.scroll_speed = getattr(self, "_stage_scroll_speed", 80.0)
+
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
             if self._boss_gate_blocked():
-                self._boss_wait_notice_timer -= dt
-                if self._boss_wait_notice_timer <= 0.0:
-                    self._boss_wait_notice_timer = 1.4
-                    self._spawn_popup(
-                        "DEFEAT MID-BOSS FIRST",
-                        SCREEN_WIDTH // 2,
-                        78,
-                        color=(255, 190, 90),
-                        life=1.2,
-                    )
+                self._hold_before_boss_room()
+                self._show_boss_gate_notice(dt)
             else:
                 self._start_boss_alert()
 
@@ -544,11 +556,38 @@ class GameScene(
     def _boss_gate_blocked(self) -> bool:
         return any(type(enemy).__name__ in _BOSS_GATE_ENEMIES for enemy in self.enemies)
 
+    def _hold_before_boss_room(self) -> None:
+        gate = self.spawner.boss_gate_event or {}
+        lock_camera_x = gate.get("lock_camera_x")
+        if lock_camera_x is not None:
+            self.camera.x = min(self.camera.x, float(lock_camera_x))
+        self.camera.scroll_speed = 0.0
+
+        player_limit_x = gate.get("player_limit_x")
+        if player_limit_x is None:
+            return
+        max_sx = float(player_limit_x) - self.camera.x - self.player.rect.width
+        max_sx = max(0.0, min(float(SCREEN_WIDTH - self.player.rect.width), max_sx))
+        if self.player.sx > max_sx:
+            self.player.sx = max_sx
+            self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))
+
+    def _show_boss_gate_notice(self, dt: float) -> None:
+        self._boss_wait_notice_timer -= dt
+        if self._boss_wait_notice_timer <= 0.0:
+            self._boss_wait_notice_timer = 1.4
+            self._spawn_popup(
+                "DEFEAT MID-BOSS FIRST",
+                SCREEN_WIDTH // 2,
+                78,
+                color=(255, 190, 90),
+                life=1.2,
+            )
+
     def _start_boss_alert(self) -> None:
         self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
         if not self._boss_terrain_spawned:
-            self._replace_boss_terrain(self._active_boss_stage_id)
-            self._boss_terrain_spawned = True
+            self._prepare_boss_terrain(self._active_boss_stage_id)
         self._boss_intro_state = "alert"
         self._boss_intro_timer = ALERT_DURATION
         self.camera.scroll_speed = 0.0
@@ -1570,6 +1609,14 @@ class GameScene(
     def _pickup_weapon_item(self) -> None:
         """Apply a weapon stock pickup."""
         self.player.weapon.weapon_stock += 1
+        # 取得ごとに先輩（カロナール）の薬効レベルも +1（別ツリー＝支援系）
+        if self._companion is not None:
+            self._companion.support_level += 1
+            self._spawn_popup(
+                f"先輩 薬効 Lv{self._companion.support_level}",
+                self._companion.rect.centerx, self._companion.rect.top - 6,
+                color=(150, 235, 170), life=1.6,
+            )
         wsel = self.game.settings.key_display("weapon_select")
         px, py = self.player.rect.centerx, self.player.rect.top - 10
         if not self._weapon_tip_shown:
