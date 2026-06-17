@@ -36,6 +36,7 @@ class Terrain(pygame.sprite.Sprite):
         destructible: bool = False,
         hp: int = 5,
         drop_chance: float = 0.0,
+        fixed_drop: str | None = None,
     ) -> None:
         super().__init__()
         self.world_x = float(world_x)
@@ -45,6 +46,7 @@ class Terrain(pygame.sprite.Sprite):
         self.max_hp = max(1, hp)
         self.hp = self.max_hp
         self.drop_chance = drop_chance
+        self.fixed_drop = fixed_drop
         self._w = w
         self._h = h
         self.image   = self._make_surface(w, h, kind, destructible=destructible)

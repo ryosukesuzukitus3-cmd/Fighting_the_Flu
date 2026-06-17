@@ -81,7 +81,11 @@ def test_debug_panel_handles_all_item_names() -> None:
 def test_random_item_pool_matches_item_drop_weights() -> None:
     from src.core.registries import ITEM_DEFS
     from src.core.factories import random_item_names
+    weights = {d.name: d.drop_weight for d in ITEM_DEFS}
+
     assert random_item_names() == {d.name for d in ITEM_DEFS if d.drop_weight > 0}
+    assert weights["WeaponItem"] == 0
+    assert random_item_names() == {"HealItem"}
 
 
 def test_extra_life_item_is_retired() -> None:
@@ -121,14 +125,18 @@ def test_billy_reward_matches_design_doc() -> None:
 
 # ── ステージ ─────────────────────────────────────────────────────────
 
-def test_stage_weapon_drop_limit_caps_regular_weapon_items() -> None:
+def test_weapon_items_are_fixed_rewards_not_random_drops() -> None:
     game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    spawner_src = (ROOT / "src" / "stages" / "spawner.py").read_text(encoding="utf-8")
+    terrain_src = (ROOT / "src" / "entities" / "terrain.py").read_text(encoding="utf-8")
 
-    assert "self._weapon_drops_spawned: int = 0" in game_src
-    assert "def _weapon_drop_limit_reached" in game_src
     assert "def _add_weapon_drop" in game_src
+    assert "def _add_fixed_item_drop" in game_src
     assert "def _add_random_item_drop" in game_src
-    assert "HealItem(item.world_x, item.world_y)" in game_src
+    assert "self._weapon_drops_spawned" not in game_src
+    assert "weapon_drop_limit" not in game_src
+    assert "setattr(enemy, \"fixed_drop\"" in spawner_src
+    assert "fixed_drop: str | None = None" in terrain_src
 
 
 def test_stage_ids_match_stage_names_and_boss_config() -> None:
@@ -147,6 +155,7 @@ def test_stage_json_required_fields() -> None:
     valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
+    from src.core.registries import ITEM_NAMES
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
 
@@ -154,6 +163,10 @@ def test_stage_json_required_fields() -> None:
         assert ev.get("type") in rect_terrain_types | strip_terrain_types, (
             f"{section}[{i}]: terrain section only allows Terrain/TerrainStrip"
         )
+        if "fixed_drop" in ev:
+            assert ev["fixed_drop"] in ITEM_NAMES, (
+                f"{section}[{i}]: unknown fixed_drop '{ev['fixed_drop']}'"
+            )
         if ev.get("type") in rect_terrain_types:
             for field in ("y", "w", "h"):
                 assert field in ev, f"{section}[{i}](Terrain): missing '{field}'"
@@ -182,6 +195,10 @@ def test_stage_json_required_fields() -> None:
             f"{p.name}: unknown boss_terrain_mode '{data.get('boss_terrain_mode')}'"
         )
         for i, ev in enumerate(data.get("events", [])):
+            if "fixed_drop" in ev:
+                assert ev["fixed_drop"] in ITEM_NAMES, (
+                    f"{p.name} events[{i}]: unknown fixed_drop '{ev['fixed_drop']}'"
+                )
             for field in ("time", "type"):
                 assert field in ev, f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如"
             if "surface" in ev:
@@ -209,6 +226,10 @@ def test_stage_json_required_fields() -> None:
                         f"{p.name} events[{i}]: 未知の formation '{ev['formation']}'"
                     )
         for i, ev in enumerate(data.get("world_events", [])):
+            if "fixed_drop" in ev:
+                assert ev["fixed_drop"] in ITEM_NAMES, (
+                    f"{p.name} world_events[{i}]: unknown fixed_drop '{ev['fixed_drop']}'"
+                )
             assert "type" in ev, f"{p.name} world_events[{i}]: missing 'type'"
             assert ("x" in ev or "world_x" in ev or "trigger_x" in ev), (
                 f"{p.name} world_events[{i}]: missing 'x' / 'world_x' / 'trigger_x'"
@@ -233,9 +254,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage.initial_terrain == []
     assert stage.terrain_layout
     assert stage.terrain_layout[0]["type"] == "TerrainStrip"
-    assert stage.weapon_drop_limit == 2
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
-    assert legacy_stage.weapon_drop_limit == 0
     assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
 
@@ -253,6 +272,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
     mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
     breakable_gates = [ev for ev in world_events if ev.get("type") == "breakable_gate"]
+    fixed_weapon_events = [ev for ev in world_events if ev.get("fixed_drop") == "WeaponItem"]
 
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "fever_cave"
@@ -260,7 +280,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert layout["center_wave"] >= 80
     assert 0.0 < layout["breakable_chance"] <= 0.03
     assert layout["breakable_drop_chance"] <= 0.05
-    assert data["weapon_drop_limit"] == 2
+    assert "weapon_drop_limit" not in data
     assert first_enemy_x >= 900
     assert len(turrets) >= 5
     assert len(mounts) >= 5
@@ -269,6 +289,8 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
     assert len(breakable_gates) >= 5
     assert max(ev.get("hp", 0) for ev in breakable_gates) >= 20
+    assert [ev["type"] for ev in fixed_weapon_events].count("breakable_gate") == 1
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 1
     assert any(ev.get("type") == "EnemyCrawler" for ev in world_events)
     assert any(ev.get("type") == "EnemyPachemon" for ev in world_events)
     assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
@@ -405,6 +427,49 @@ def test_world_event_surface_can_use_authored_terrain_block() -> None:
     assert spawner._surface_y_at(1000, "bottom") == 420
     assert turret.world_x == 1000
     assert turret.world_y == 396
+
+
+def test_world_event_fixed_drop_metadata_reaches_spawned_objects() -> None:
+    from src.core.camera import Camera
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    camera.x = 130.0
+    enemies = pygame.sprite.Group()
+    terrain = pygame.sprite.Group()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=enemies,
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[
+            {
+                "type": "EnemyTurret",
+                "x": 1000,
+                "count": 1,
+                "surface": "bottom",
+                "fixed_drop": "WeaponItem",
+            },
+            {
+                "type": "breakable_gate",
+                "x": 1010,
+                "y": 92,
+                "w": 80,
+                "h": 120,
+                "kind": "clot",
+                "fixed_drop": "WeaponItem",
+            },
+        ],
+        player=object(),
+        terrain=terrain,
+    )
+
+    spawner.update(1.0 / 60.0, camera)
+    enemy = next(iter(enemies))
+    gate = next(iter(terrain))
+
+    assert getattr(enemy, "fixed_drop", None) == "WeaponItem"
+    assert gate.fixed_drop == "WeaponItem"
 
 
 def test_regular_stages_define_boss_terrain() -> None:

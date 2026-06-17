@@ -82,7 +82,6 @@ class GameScene(
         self.stage   = Stage(self.game, stage_id=self._stage_id)
         self.laser   = LaserBeam()
         self.game.shared.stage = self._stage_id
-        self._weapon_drops_spawned: int = 0
 
         self.player_bullets: pygame.sprite.Group = pygame.sprite.Group()
         self.enemy_bullets:  pygame.sprite.Group = pygame.sprite.Group()
@@ -858,6 +857,8 @@ class GameScene(
         self._combo_timer = COMBO_WINDOW
         self._combo_pulse = 0.8
         self._spawn_popup(f"BREAK +{terrain_score}", sx, sy - 18, color=(255, 200, 110), life=1.1)
+        if self._add_fixed_item_drop(getattr(ter, "fixed_drop", None), world_x, world_y, spread=16.0):
+            return
         if drop_chance > 0.0 and random.random() < drop_chance:
             self._add_random_item_drop(world_x, world_y, spread=16.0)
 
@@ -1065,32 +1066,38 @@ class GameScene(
                     enemy.world_y + random.uniform(-40, 40),
                 ))
         else:
+            if self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y):
+                return
             if getattr(enemy, "drops_enabled", True):
                 chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
                 if random.random() < chance:
                     self._add_random_item_drop(enemy.world_x, enemy.world_y)
 
-    def _weapon_drop_limit_reached(self) -> bool:
-        limit = int(getattr(self.stage, "weapon_drop_limit", 0))
-        return limit > 0 and self._weapon_drops_spawned >= limit
-
-    def _add_weapon_drop(self, world_x: float, world_y: float) -> bool:
-        if self._weapon_drop_limit_reached():
-            return False
+    def _add_weapon_drop(self, world_x: float, world_y: float) -> None:
         from src.entities.items.weapon_item import WeaponItem
         self.items.add(WeaponItem(world_x, world_y))
-        self._weapon_drops_spawned += 1
+
+    def _add_fixed_item_drop(
+        self,
+        item_name: str | None,
+        world_x: float,
+        world_y: float,
+        *,
+        spread: float = 0.0,
+    ) -> bool:
+        if not item_name:
+            return False
+        from src.core.factories import make_item
+        ox = world_x + random.uniform(-spread, spread)
+        oy = world_y + random.uniform(-spread, spread)
+        item = make_item(str(item_name), ox, oy)
+        if item is None:
+            return False
+        self.items.add(item)
         return True
 
     def _add_random_item_drop(self, world_x: float, world_y: float, *, spread: float = 0.0) -> None:
-        item = random_item(world_x, world_y, spread=spread)
-        if type(item).__name__ == "WeaponItem":
-            if self._weapon_drop_limit_reached():
-                from src.entities.items.heal import HealItem
-                item = HealItem(item.world_x, item.world_y)
-            else:
-                self._weapon_drops_spawned += 1
-        self.items.add(item)
+        self.items.add(random_item(world_x, world_y, spread=spread))
 
     def _play_item_pickup_sound(self, item) -> None:
         item_type = type(item).__name__

@@ -614,6 +614,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `surface` | — | 地形表面に吸着して出現（`top` / `bottom`）。砲台などの足場配置に使う |
 | `surface_offset` / `surface_step` | — | `surface` 指定時の表面からの中心オフセット・複数出現時の横間隔 |
 | `enhanced` | — | `true` で強化版パラメータを使用（省略時は通常版） |
+| `fixed_drop` | — | 撃破時に必ず出すアイテム名。中ボスなど、ご褒美配置の確定報酬に使う |
 
 #### world_xイベント（`world_events`）
 
@@ -629,6 +630,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `y` | — | 配置Y座標を固定 |
 | `surface` | — | `top` / `bottom`。TerrainStrip や固定地形ブロックの表面に吸着する |
 | `preload` / `spawn_margin` | — | 画面右端から何px手前で生成するか（既定80px） |
+| `fixed_drop` | — | 撃破時に必ず出すアイテム名。中ボスなど、ご褒美配置の確定報酬に使う |
 
 #### 地形レイアウト（`terrain_layout`）
 
@@ -653,6 +655,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `destructible` | — | `true` で破壊可能地形にする（城門・封鎖壁など）。`gate` / `breakable_gate` は既定で `true` |
 | `hp` | — | 破壊可能地形のHP |
 | `drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
+| `fixed_drop` | — | 破壊時に必ず出すアイテム名。血栓ゲートなど、ご褒美配置の確定報酬に使う |
 
 #### 連続地形イベント（`type: "TerrainStrip"`）
 

@@ -118,6 +118,8 @@ class EnemySpawner:
                 surface=str(event.get("surface", "bottom")),
             )
             if enemy:
+                if "fixed_drop" in event:
+                    setattr(enemy, "fixed_drop", event["fixed_drop"])
                 self._enemies.add(enemy)
 
     def _world_positions(
@@ -287,6 +289,7 @@ class EnemySpawner:
                     destructible=destructible,
                     hp=int(event.get("hp", 5)),
                     drop_chance=float(event.get("drop_chance", 0.0)),
+                    fixed_drop=event.get("fixed_drop"),
                 ))
             return True
 

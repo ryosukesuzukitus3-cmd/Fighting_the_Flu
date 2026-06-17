@@ -2,7 +2,6 @@
   "stage_id": 1,
   "bgm": "The_world_of_spirit_short.mp3",
   "boss_terrain_mode": "preplaced",
-  "weapon_drop_limit": 2,
   "terrain_layout": [
     {
       "type": "TerrainStrip",
@@ -78,7 +77,7 @@
     {"type": "EnemyTakeshi", "x": 4200, "count": 2, "formation": "line"},
     {"type": "Terrain", "x": 4320, "y": 420, "w": 160, "h": 68, "kind": "clot", "destructible": true, "hp": 6, "drop_chance": 0.06},
     {"type": "EnemyVirus", "x": 4450, "count": 5, "formation": "random"},
-    {"type": "breakable_gate", "x": 4700, "y": 72, "w": 118, "h": 178, "kind": "clot", "hp": 18, "drop_chance": 0.04},
+    {"type": "breakable_gate", "x": 4700, "y": 72, "w": 118, "h": 178, "kind": "clot", "hp": 18, "fixed_drop": "WeaponItem"},
     {"type": "Terrain", "x": 4760, "y": 386, "w": 170, "h": 104, "kind": "clot"},
     {"type": "EnemyPachemon", "x": 4920, "count": 1, "y": 244},
     {"type": "turret_mount", "x": 5140, "y": 82, "w": 240, "h": 44, "kind": "clot"},
@@ -87,7 +86,7 @@
     {"type": "EnemyCrawler", "x": 5480, "count": 1, "surface": "top", "surface_offset": 20},
     {"type": "Terrain", "x": 5580, "y": 102, "w": 156, "h": 62, "kind": "clot", "destructible": true, "hp": 6, "drop_chance": 0.04},
     {"type": "breakable_gate", "x": 5860, "y": 332, "w": 126, "h": 164, "kind": "clot", "hp": 20, "drop_chance": 0.03},
-    {"type": "EnemyCoughSprayer", "x": 6060, "count": 1, "y": 296},
+    {"type": "EnemyCoughSprayer", "x": 6060, "count": 1, "y": 296, "fixed_drop": "WeaponItem"},
     {"type": "EnemyTakeshi", "x": 6220, "count": 3, "formation": "random"},
     {"type": "turret_mount", "x": 6380, "y": 418, "w": 280, "h": 48, "kind": "clot"},
     {"type": "EnemyTurret", "x": 6500, "count": 1, "surface": "bottom", "surface_offset": 22, "enhanced": true},
