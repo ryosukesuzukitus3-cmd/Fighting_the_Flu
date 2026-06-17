@@ -114,11 +114,22 @@ def test_billy_reward_matches_design_doc() -> None:
 
     assert "WeaponItem×1 + HealItem×4" in design
     assert "if etype == \"EnemyBilly\"" in game_src
+    assert "self._add_weapon_drop(" in game_src
     assert "for _ in range(4):" in game_src
     assert "for _ in range(8):" not in game_src
 
 
 # ── ステージ ─────────────────────────────────────────────────────────
+
+def test_stage_weapon_drop_limit_caps_regular_weapon_items() -> None:
+    game_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+
+    assert "self._weapon_drops_spawned: int = 0" in game_src
+    assert "def _weapon_drop_limit_reached" in game_src
+    assert "def _add_weapon_drop" in game_src
+    assert "def _add_random_item_drop" in game_src
+    assert "HealItem(item.world_x, item.world_y)" in game_src
+
 
 def test_stage_ids_match_stage_names_and_boss_config() -> None:
     from src.core.registries import stage_ids
@@ -222,7 +233,9 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage.initial_terrain == []
     assert stage.terrain_layout
     assert stage.terrain_layout[0]["type"] == "TerrainStrip"
+    assert stage.weapon_drop_limit == 2
     assert legacy_stage.terrain_layout == legacy_stage.initial_terrain
+    assert legacy_stage.weapon_drop_limit == 0
     assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
 
@@ -239,19 +252,23 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     first_enemy_x = min(ev["x"] for ev in world_events if ev["type"].startswith("Enemy"))
     turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
     mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
+    breakable_gates = [ev for ev in world_events if ev.get("type") == "breakable_gate"]
 
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "fever_cave"
+    assert layout["length"] >= 11000
     assert layout["center_wave"] >= 80
     assert 0.0 < layout["breakable_chance"] <= 0.03
     assert layout["breakable_drop_chance"] <= 0.05
+    assert data["weapon_drop_limit"] == 2
     assert first_enemy_x >= 900
-    assert len(turrets) >= 3
-    assert len(mounts) >= 3
+    assert len(turrets) >= 5
+    assert len(mounts) >= 5
     assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
-    assert max(fixed_drop_chances) <= 0.12
+    assert max(fixed_drop_chances) <= 0.08
     assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
-    assert any(ev.get("type") == "breakable_gate" and ev.get("kind") == "clot" for ev in world_events)
+    assert len(breakable_gates) >= 5
+    assert max(ev.get("hp", 0) for ev in breakable_gates) >= 20
     assert any(ev.get("type") == "EnemyCrawler" for ev in world_events)
     assert any(ev.get("type") == "EnemyPachemon" for ev in world_events)
     assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
@@ -268,9 +285,10 @@ def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
     boss_events = [ev for ev in data["world_events"] if ev["type"] == "Boss"]
     boss_gates = [ev for ev in data["world_events"] if ev["type"] == "BossGate"]
     boss_x = boss_events[0]["x"]
+    gate_x = boss_gates[0]["trigger_x"]
     boss_room_blocks = [
         ev for ev in data["world_events"]
-        if ev.get("kind") == "clot" and ev.get("x", 0) >= 3600
+        if ev.get("kind") == "clot" and ev.get("x", 0) >= gate_x
     ]
     first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
     stage = Stage(object(), 1)
@@ -291,15 +309,15 @@ def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
     from src.stages.spawner import EnemySpawner
 
     camera = Camera()
-    camera.x = 2850.0
+    camera.x = 6850.0
     spawner = EnemySpawner(
         game=object(),
         enemies=pygame.sprite.Group(),
         enemy_bullets=pygame.sprite.Group(),
         events=[],
         world_events=[
-            {"type": "BossGate", "trigger_x": 3650, "lock_camera_x": 2850, "player_limit_x": 3650},
-            {"type": "Boss", "x": 4100, "count": 1, "formation": "single", "preload": 0},
+            {"type": "BossGate", "trigger_x": 7650, "lock_camera_x": 6850, "player_limit_x": 7650},
+            {"type": "Boss", "x": 8100, "count": 1, "formation": "single", "preload": 0},
         ],
         player=object(),
     )
@@ -308,11 +326,11 @@ def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
 
     assert spawner.boss_gate_pending is True
     assert spawner.boss_gate_event is not None
-    assert spawner.boss_gate_event["lock_camera_x"] == 2850
+    assert spawner.boss_gate_event["lock_camera_x"] == 6850
     assert spawner.boss_pending is False
 
     spawner.clear_boss_gate()
-    camera.x = 3300.0
+    camera.x = 7300.0
     spawner.update(1.0 / 60.0, camera)
 
     assert spawner.boss_gate_pending is False

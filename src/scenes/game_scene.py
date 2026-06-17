@@ -82,6 +82,7 @@ class GameScene(
         self.stage   = Stage(self.game, stage_id=self._stage_id)
         self.laser   = LaserBeam()
         self.game.shared.stage = self._stage_id
+        self._weapon_drops_spawned: int = 0
 
         self.player_bullets: pygame.sprite.Group = pygame.sprite.Group()
         self.enemy_bullets:  pygame.sprite.Group = pygame.sprite.Group()
@@ -858,7 +859,7 @@ class GameScene(
         self._combo_pulse = 0.8
         self._spawn_popup(f"BREAK +{terrain_score}", sx, sy - 18, color=(255, 200, 110), life=1.1)
         if drop_chance > 0.0 and random.random() < drop_chance:
-            self.items.add(random_item(world_x, world_y, spread=16.0))
+            self._add_random_item_drop(world_x, world_y, spread=16.0)
 
     def _ricochet_bullet(self, bullet, ter, *, screen_space: bool) -> None:
         b = bullet.rect
@@ -1053,12 +1054,11 @@ class GameScene(
         self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
 
         if etype == "EnemyBilly":
-            from src.entities.items.weapon_item import WeaponItem
             from src.entities.items.heal import HealItem
-            self.items.add(WeaponItem(
+            self._add_weapon_drop(
                 enemy.world_x + random.uniform(-40, 40),
                 enemy.world_y + random.uniform(-30, 30),
-            ))
+            )
             for _ in range(4):
                 self.items.add(HealItem(
                     enemy.world_x + random.uniform(-60, 60),
@@ -1068,7 +1068,29 @@ class GameScene(
             if getattr(enemy, "drops_enabled", True):
                 chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
                 if random.random() < chance:
-                    self.items.add(random_item(enemy.world_x, enemy.world_y))
+                    self._add_random_item_drop(enemy.world_x, enemy.world_y)
+
+    def _weapon_drop_limit_reached(self) -> bool:
+        limit = int(getattr(self.stage, "weapon_drop_limit", 0))
+        return limit > 0 and self._weapon_drops_spawned >= limit
+
+    def _add_weapon_drop(self, world_x: float, world_y: float) -> bool:
+        if self._weapon_drop_limit_reached():
+            return False
+        from src.entities.items.weapon_item import WeaponItem
+        self.items.add(WeaponItem(world_x, world_y))
+        self._weapon_drops_spawned += 1
+        return True
+
+    def _add_random_item_drop(self, world_x: float, world_y: float, *, spread: float = 0.0) -> None:
+        item = random_item(world_x, world_y, spread=spread)
+        if type(item).__name__ == "WeaponItem":
+            if self._weapon_drop_limit_reached():
+                from src.entities.items.heal import HealItem
+                item = HealItem(item.world_x, item.world_y)
+            else:
+                self._weapon_drops_spawned += 1
+        self.items.add(item)
 
     def _play_item_pickup_sound(self, item) -> None:
         item_type = type(item).__name__

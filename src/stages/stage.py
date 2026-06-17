@@ -22,6 +22,7 @@ class Stage:
         self.terrain_layout: list  = list(data.get("terrain_layout", self.initial_terrain))
         self.boss_terrain: list    = list(data.get("boss_terrain", []))
         self.boss_terrain_mode: str = str(data.get("boss_terrain_mode", "replace"))
+        self.weapon_drop_limit: int = max(0, int(data.get("weapon_drop_limit", 0)))
         self.events: list    = sorted(data.get("events", []), key=lambda e: e["time"])
         self.world_events: list = sorted(
             data.get("world_events", []),
