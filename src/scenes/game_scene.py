@@ -75,6 +75,7 @@ class GameScene(
         PierceBullet._base_image = None
 
         self.camera  = Camera()
+        self._stage_scroll_speed = self.camera.scroll_speed
         self.bg      = ScrollingBackground(self._stage_id)
         self.player  = Player(self.game)
         self.hud     = HUD(self.game)
@@ -269,6 +270,16 @@ class GameScene(
         self.terrain.empty()
         self.spawner.spawn_terrain_events(boss_stage.boss_terrain, self.camera)
 
+    def _prepare_boss_terrain(self, stage_id: int) -> None:
+        boss_stage = self._boss_stage_data(stage_id)
+        preplaced_here = (
+            stage_id == self._stage_id
+            and boss_stage.boss_terrain_mode == "preplaced"
+        )
+        if not preplaced_here:
+            self._replace_boss_terrain(stage_id)
+        self._boss_terrain_spawned = True
+
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
         # Hitstop slows movement updates for a short impact moment.
@@ -376,19 +387,19 @@ class GameScene(
             self.spawner.update(dt, self.camera)
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
+        if self.spawner.boss_gate_pending and self._boss_intro_state == "":
+            if self._boss_gate_blocked():
+                self._hold_before_boss_room()
+                self._show_boss_gate_notice(dt)
+            else:
+                self.spawner.clear_boss_gate()
+                self.camera.scroll_speed = getattr(self, "_stage_scroll_speed", 80.0)
+
         # ボス保留検知 -> ALERT 開始
         if self.spawner.boss_pending and self._boss_intro_state == "":
             if self._boss_gate_blocked():
-                self._boss_wait_notice_timer -= dt
-                if self._boss_wait_notice_timer <= 0.0:
-                    self._boss_wait_notice_timer = 1.4
-                    self._spawn_popup(
-                        "DEFEAT MID-BOSS FIRST",
-                        SCREEN_WIDTH // 2,
-                        78,
-                        color=(255, 190, 90),
-                        life=1.2,
-                    )
+                self._hold_before_boss_room()
+                self._show_boss_gate_notice(dt)
             else:
                 self._start_boss_alert()
 
@@ -547,11 +558,38 @@ class GameScene(
     def _boss_gate_blocked(self) -> bool:
         return any(type(enemy).__name__ in _BOSS_GATE_ENEMIES for enemy in self.enemies)
 
+    def _hold_before_boss_room(self) -> None:
+        gate = self.spawner.boss_gate_event or {}
+        lock_camera_x = gate.get("lock_camera_x")
+        if lock_camera_x is not None:
+            self.camera.x = min(self.camera.x, float(lock_camera_x))
+        self.camera.scroll_speed = 0.0
+
+        player_limit_x = gate.get("player_limit_x")
+        if player_limit_x is None:
+            return
+        max_sx = float(player_limit_x) - self.camera.x - self.player.rect.width
+        max_sx = max(0.0, min(float(SCREEN_WIDTH - self.player.rect.width), max_sx))
+        if self.player.sx > max_sx:
+            self.player.sx = max_sx
+            self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))
+
+    def _show_boss_gate_notice(self, dt: float) -> None:
+        self._boss_wait_notice_timer -= dt
+        if self._boss_wait_notice_timer <= 0.0:
+            self._boss_wait_notice_timer = 1.4
+            self._spawn_popup(
+                "DEFEAT MID-BOSS FIRST",
+                SCREEN_WIDTH // 2,
+                78,
+                color=(255, 190, 90),
+                life=1.2,
+            )
+
     def _start_boss_alert(self) -> None:
         self._active_boss_stage_id = self._pending_boss_stage_id or self._stage_id
         if not self._boss_terrain_spawned:
-            self._replace_boss_terrain(self._active_boss_stage_id)
-            self._boss_terrain_spawned = True
+            self._prepare_boss_terrain(self._active_boss_stage_id)
         self._boss_intro_state = "alert"
         self._boss_intro_timer = ALERT_DURATION
         self.camera.scroll_speed = 0.0
@@ -821,8 +859,10 @@ class GameScene(
         self._combo_timer = COMBO_WINDOW
         self._combo_pulse = 0.8
         self._spawn_popup(f"BREAK +{terrain_score}", sx, sy - 18, color=(255, 200, 110), life=1.1)
+        if self._add_fixed_item_drop(getattr(ter, "fixed_drop", None), world_x, world_y, spread=16.0):
+            return
         if drop_chance > 0.0 and random.random() < drop_chance:
-            self.items.add(random_item(world_x, world_y, spread=16.0))
+            self._add_random_item_drop(world_x, world_y, spread=16.0)
 
     def _ricochet_bullet(self, bullet, ter, *, screen_space: bool) -> None:
         b = bullet.rect
@@ -1017,22 +1057,49 @@ class GameScene(
         self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
 
         if etype == "EnemyBilly":
-            from src.entities.items.weapon_item import WeaponItem
             from src.entities.items.heal import HealItem
-            self.items.add(WeaponItem(
+            self._add_weapon_drop(
                 enemy.world_x + random.uniform(-40, 40),
                 enemy.world_y + random.uniform(-30, 30),
-            ))
-            for _ in range(8):
+            )
+            for _ in range(4):
                 self.items.add(HealItem(
                     enemy.world_x + random.uniform(-60, 60),
                     enemy.world_y + random.uniform(-40, 40),
                 ))
         else:
+            if self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y):
+                return
             if getattr(enemy, "drops_enabled", True):
                 chance = getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20))
                 if random.random() < chance:
-                    self.items.add(random_item(enemy.world_x, enemy.world_y))
+                    self._add_random_item_drop(enemy.world_x, enemy.world_y)
+
+    def _add_weapon_drop(self, world_x: float, world_y: float) -> None:
+        from src.entities.items.weapon_item import WeaponItem
+        self.items.add(WeaponItem(world_x, world_y))
+
+    def _add_fixed_item_drop(
+        self,
+        item_name: str | None,
+        world_x: float,
+        world_y: float,
+        *,
+        spread: float = 0.0,
+    ) -> bool:
+        if not item_name:
+            return False
+        from src.core.factories import make_item
+        ox = world_x + random.uniform(-spread, spread)
+        oy = world_y + random.uniform(-spread, spread)
+        item = make_item(str(item_name), ox, oy)
+        if item is None:
+            return False
+        self.items.add(item)
+        return True
+
+    def _add_random_item_drop(self, world_x: float, world_y: float, *, spread: float = 0.0) -> None:
+        self.items.add(random_item(world_x, world_y, spread=spread))
 
     def _play_item_pickup_sound(self, item) -> None:
         item_type = type(item).__name__

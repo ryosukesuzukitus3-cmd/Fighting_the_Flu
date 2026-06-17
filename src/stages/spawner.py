@@ -35,8 +35,11 @@ class EnemySpawner:
         self._index:   int   = 0
         self._world_index: int = 0
         self._elapsed: float = 0.0
-        self.boss         = None   # Boss生成時にセットされる
-        self.boss_pending = False  # Bossイベント発火済み・未生成
+        self.boss              = None   # Boss生成時にセットされる
+        self.boss_pending      = False  # Bossイベント発火済み・未生成
+        self.boss_pending_event: dict | None = None
+        self.boss_gate_pending = False
+        self.boss_gate_event: dict | None = None
 
     def update(self, dt: float, camera: Camera) -> None:
         self._elapsed += dt
@@ -70,6 +73,14 @@ class EnemySpawner:
     def _spawn_event(self, event: dict, camera: Camera, *, world_locked: bool = False) -> None:
         enemy_type = event["type"]
         if self._spawn_terrain_event(event, camera):
+            return
+        if enemy_type == "BossGate":
+            self.boss_gate_pending = True
+            self.boss_gate_event = dict(event)
+            return
+        if enemy_type == "Boss":
+            self.boss_pending = True
+            self.boss_pending_event = dict(event)
             return
 
         count      = event.get("count", 1)
@@ -107,6 +118,8 @@ class EnemySpawner:
                 surface=str(event.get("surface", "bottom")),
             )
             if enemy:
+                if "fixed_drop" in event:
+                    setattr(enemy, "fixed_drop", event["fixed_drop"])
                 self._enemies.add(enemy)
 
     def _world_positions(
@@ -262,11 +275,14 @@ class EnemySpawner:
 
     def _spawn_terrain_event(self, event: dict, camera: Camera) -> bool:
         enemy_type = event.get("type")
-        if enemy_type in {"Terrain", "solid", "platform", "gate", "breakable_gate", "turret_mount"}:
+        if enemy_type in {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}:
             if self._terrain is not None:
                 from src.entities.terrain import Terrain
                 world_x = self._terrain_world_x(event, camera)
-                destructible = bool(event.get("destructible", enemy_type in {"gate", "breakable_gate"}))
+                destructible = bool(event.get("destructible", enemy_type in {"gate", "breakable_gate", "weapon_gate"}))
+                fixed_drop = event.get("fixed_drop")
+                if enemy_type == "weapon_gate" and fixed_drop is None:
+                    fixed_drop = "WeaponItem"
                 self._terrain.add(Terrain(
                     world_x,
                     float(event.get("y", 0)),
@@ -276,6 +292,7 @@ class EnemySpawner:
                     destructible=destructible,
                     hp=int(event.get("hp", 5)),
                     drop_chance=float(event.get("drop_chance", 0.0)),
+                    fixed_drop=fixed_drop,
                 ))
             return True
 
@@ -329,6 +346,7 @@ class EnemySpawner:
     def skip_all_events(self) -> None:
         self._index = len(self._events)
         self._world_index = len(self._world_events)
+        self.clear_boss_gate()
 
     def confirm_spawn_boss(self, stage_id: int | None = None) -> None:
         """game_scene が ALERT 後に呼び出すことで実際にボスを生成する"""
@@ -336,3 +354,8 @@ class EnemySpawner:
         boss_stage_id = self._stage_id if stage_id is None else stage_id
         self.boss         = Boss(self._game, stage_id=boss_stage_id)
         self.boss_pending = False
+        self.boss_pending_event = None
+
+    def clear_boss_gate(self) -> None:
+        self.boss_gate_pending = False
+        self.boss_gate_event = None

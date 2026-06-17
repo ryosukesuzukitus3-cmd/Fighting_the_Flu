@@ -614,6 +614,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `surface` | — | 地形表面に吸着して出現（`top` / `bottom`）。砲台などの足場配置に使う |
 | `surface_offset` / `surface_step` | — | `surface` 指定時の表面からの中心オフセット・複数出現時の横間隔 |
 | `enhanced` | — | `true` で強化版パラメータを使用（省略時は通常版） |
+| `fixed_drop` | — | 撃破時に必ず出すアイテム名。中ボスなど、ご褒美配置の確定報酬に使う |
 
 #### world_xイベント（`world_events`）
 
@@ -629,11 +630,13 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `y` | — | 配置Y座標を固定 |
 | `surface` | — | `top` / `bottom`。TerrainStrip や固定地形ブロックの表面に吸着する |
 | `preload` / `spawn_margin` | — | 画面右端から何px手前で生成するか（既定80px） |
+| `fixed_drop` | — | 撃破時に必ず出すアイテム名。中ボスなど、ご褒美配置の確定報酬に使う |
 
 #### 地形レイアウト（`terrain_layout`）
 
 `terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
-固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `turret_mount` を使える。`gate` / `breakable_gate` は既定で破壊可能になる。
+固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `weapon_gate` / `turret_mount` を使える。`gate` / `breakable_gate` / `weapon_gate` は既定で破壊可能になる。
+`weapon_gate` は報酬用の血栓ゲートで、未指定でも `fixed_drop: "WeaponItem"` として扱われ、内部に青白い報酬コアを描く。
 連続地形は `TerrainStrip` のほか、`cave_section` / `corridor` を別名として使える。
 
 #### 地形イベント（`type: "Terrain"`）
@@ -644,15 +647,16 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | △ | `events` に書く場合の出現タイミング（秒）。`terrain_layout` では不要 |
-| `type` | ○ | `"Terrain"` / `"solid"` / `"platform"` / `"gate"` / `"breakable_gate"` / `"turret_mount"` |
+| `type` | ○ | `"Terrain"` / `"solid"` / `"platform"` / `"gate"` / `"breakable_gate"` / `"weapon_gate"` / `"turret_mount"` |
 | `x` / `world_x` | — | ワールドX座標。省略時は `screen_x` / `start_offset` / 画面右端基準 |
 | `screen_x` / `start_offset` | — | カメラ位置からの相対配置 |
 | `y` | ○ | 配置Y座標（左上基準） |
 | `w` / `h` | ○ | 幅・高さ（px） |
 | `kind` | ○ | 見た目種別（`wall` / `rock` / `debris`） |
-| `destructible` | — | `true` で破壊可能地形にする（城門・封鎖壁など）。`gate` / `breakable_gate` は既定で `true` |
+| `destructible` | — | `true` で破壊可能地形にする（城門・封鎖壁など）。`gate` / `breakable_gate` / `weapon_gate` は既定で `true` |
 | `hp` | — | 破壊可能地形のHP |
 | `drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
+| `fixed_drop` | — | 破壊時に必ず出すアイテム名。血栓ゲートなど、ご褒美配置の確定報酬に使う |
 
 #### 連続地形イベント（`type: "TerrainStrip"`）
 
