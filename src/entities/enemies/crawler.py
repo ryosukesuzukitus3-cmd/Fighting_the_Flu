@@ -71,14 +71,15 @@ class EnemyCrawler(Enemy):
             right = left + ter.rect.width
             if not (left <= world_x <= right):
                 continue
+            # 走行レールは通路を成す連続地形（side を持つ TerrainStrip）だけ。
+            # side を持たない単体 Terrain（血栓ゲート/砲台土台などの障害物）は
+            # 通路の中ほどに置かれるため、これに吸着すると天井クローラーが
+            # 通路へ落下するなど動きが破綻する。レール候補から除外する。
             side = getattr(ter, "side", "")
             if self._surface == "bottom" and side == "bottom":
                 candidates.append(float(getattr(ter, "surface_y", ter.rect.top)))
             elif self._surface == "top" and side == "top":
                 candidates.append(float(getattr(ter, "surface_y", ter.rect.bottom)))
-            elif not side:
-                y = float(getattr(ter, "y", ter.rect.top))
-                candidates.append(y if self._surface == "bottom" else y + ter.rect.height)
         if not candidates:
             return None
         return min(candidates) if self._surface == "bottom" else max(candidates)
