@@ -154,7 +154,7 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_boss_terrain_modes = {"replace", "preplaced"}
-    valid_terrain_kinds = {"wall", "rock", "debris", "clot"}
+    valid_terrain_kinds = {"wall", "rock", "debris", "data_block", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     from src.core.registries import ITEM_NAMES
@@ -386,7 +386,7 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     boss_gate = next(ev for ev in world_events if ev["type"] == "BossGate")
     boss_room_blocks = [
         ev for ev in world_events
-        if ev.get("kind") == "debris" and ev.get("x", 0) >= boss_gate["trigger_x"]
+        if ev.get("kind") in {"debris", "data_block"} and ev.get("x", 0) >= boss_gate["trigger_x"]
     ]
     first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
     stage = Stage(object(), 2)

@@ -1,8 +1,11 @@
 from __future__ import annotations
 import math
 import random
+from pathlib import Path
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+
+_STAGE2_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage2_cyber_static_bg.png"
 
 
 class _StarLayer:
@@ -51,6 +54,8 @@ class ScrollingBackground:
         self._stage1_far_cells: list = []
         self._stage1_near_cells: list = []
         self._stage1_membranes: list = []
+        self._stage2_fragments: list = []
+        self._stage2_bg: pygame.Surface | None = None
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -94,6 +99,12 @@ class ScrollingBackground:
                 (rnd.uniform(0, SCREEN_HEIGHT), rnd.uniform(2, 6),
                  rnd.uniform(0.15, 0.4), rnd.uniform(0, 6.28))
                 for _ in range(10)
+            ]
+            self._stage2_fragments = [
+                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(48, SCREEN_HEIGHT - 52),
+                 rnd.uniform(12, 54), rnd.uniform(5, 18), rnd.uniform(0.10, 0.28),
+                 rnd.uniform(24, 62))
+                for _ in range(26)
             ]
         elif sid == 3:
             # 婚活UIカード矩形（x, y, w, h, 速度）
@@ -236,19 +247,63 @@ class ScrollingBackground:
     # ── Stage2 ミーム汚染（走査ノイズ）─────────────────────────
     def _draw_meme(self, screen: pygame.Surface, camera_x: float) -> None:
         t = self._time
+        self._draw_stage2_concept_backdrop(screen, camera_x)
         for (y, h, sp, ph) in self._cells:
             yy = (y + math.sin(t * sp + ph) * 40) % SCREEN_HEIGHT
-            alpha = int(30 + 25 * (0.5 + 0.5 * math.sin(t * 3 + ph)))
+            alpha = int(9 + 8 * (0.5 + 0.5 * math.sin(t * 3 + ph)))
             band = pygame.Surface((SCREEN_WIDTH, int(h)), pygame.SRCALPHA)
-            band.fill((90, 120, 90, alpha))
+            band.fill((150, 205, 188, alpha))
             screen.blit(band, (0, int(yy)))
         # ブロックノイズ点
-        for _ in range(8):
-            bx = random.randint(0, SCREEN_WIDTH - 6)
-            by = random.randint(0, SCREEN_HEIGHT - 4)
-            s = pygame.Surface((random.randint(3, 7), random.randint(2, 4)), pygame.SRCALPHA)
-            s.fill((120, 160, 120, 40))
-            screen.blit(s, (bx, by))
+        for idx, (cx, cy, w, h, sf, alpha) in enumerate(self._stage2_fragments):
+            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 120) - 60
+            y = cy + math.sin(t * 0.35 + idx * 0.61) * 3
+            frag = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            frag.fill((3, 8, 9, int(alpha)))
+            if idx % 4 == 0:
+                pygame.draw.rect(frag, (50, 140, 116, 24), frag.get_rect(), 1)
+            screen.blit(frag, (int(x), int(y)))
+
+        scan = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for y in range(0, SCREEN_HEIGHT, 4):
+            pygame.draw.line(scan, (180, 224, 202, 7), (0, y), (SCREEN_WIDTH, y), 1)
+        drift_y = int((t * 18) % SCREEN_HEIGHT)
+        pygame.draw.rect(scan, (120, 210, 172, 18), (0, drift_y, SCREEN_WIDTH, 2))
+        screen.blit(scan, (0, 0))
+
+    # Stage2 concept backdrop image.
+    def _draw_stage2_concept_backdrop(self, screen: pygame.Surface, camera_x: float) -> None:
+        bg = self._load_stage2_backdrop()
+        if bg is None:
+            return
+        width = bg.get_width()
+        offset = int(camera_x * 0.10) % width
+        for x in range(-offset, SCREEN_WIDTH, width):
+            screen.blit(bg, (x, 0))
+        veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        veil.fill((0, 11, 12, 34))
+        for y in range(SCREEN_HEIGHT):
+            edge = abs(y - SCREEN_HEIGHT // 2) / (SCREEN_HEIGHT // 2)
+            alpha = int(18 * edge)
+            if alpha:
+                pygame.draw.line(veil, (0, 0, 0, alpha), (0, y), (SCREEN_WIDTH, y), 1)
+        screen.blit(veil, (0, 0))
+
+    def _load_stage2_backdrop(self) -> pygame.Surface | None:
+        if self._stage2_bg is not None:
+            return self._stage2_bg
+        try:
+            raw = pygame.image.load(_STAGE2_BG_PATH)
+        except (FileNotFoundError, pygame.error):
+            return None
+        if raw.get_height() != SCREEN_HEIGHT:
+            scale = SCREEN_HEIGHT / raw.get_height()
+            raw = pygame.transform.smoothscale(
+                raw,
+                (max(SCREEN_WIDTH, int(raw.get_width() * scale)), SCREEN_HEIGHT),
+            )
+        self._stage2_bg = raw
+        return self._stage2_bg
 
     # ── Stage3 婚活・労働（UIカード）───────────────────────────
     def _draw_konkatsu(self, screen: pygame.Surface, camera_x: float) -> None:
