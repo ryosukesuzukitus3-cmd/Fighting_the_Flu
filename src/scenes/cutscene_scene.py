@@ -25,7 +25,8 @@ class CutsceneScene(Scene):
     def __init__(self, game, pages: list[Page], on_complete: Callable[[], None],
                  *, theme: str = "dark", bgm_alias: str | None = None,
                  stop_bgm: bool = False, title: str | None = None,
-                 decor: "Callable[[pygame.Surface, float], None] | None" = None) -> None:
+                 decor: "Callable[[pygame.Surface, float], None] | None" = None,
+                 fade_out_on_finish: bool = True) -> None:
         super().__init__(game)
         self._pages       = list(pages)
         self._on_complete = on_complete
@@ -34,6 +35,8 @@ class CutsceneScene(Scene):
         self._stop_bgm    = stop_bgm
         self._title       = title
         self._decor       = decor   # 呼び出し元が渡す追加描画フック(surf, progress 0.0-1.0)
+        # 同テーマの会話シーンへ地続きに繋ぐ場合は黒フェードを挟まず即遷移する
+        self._fade_out_on_finish = fade_out_on_finish
 
     # ── ライフサイクル ────────────────────────────────────────────
     def on_enter(self) -> None:
@@ -105,10 +108,16 @@ class CutsceneScene(Scene):
             self._type_se_cooldown = _TYPE_SE_INTERVAL
 
     def _begin_finish(self) -> None:
-        """黒フェードアウトを開始する（完了時に on_complete）。"""
-        if not self._fade_out_active and not self._finished:
-            self._fade_out_active = True
-            self._fade_out_t = 0.0
+        """黒フェードアウトを開始する（完了時に on_complete）。
+        fade_out_on_finish=False の場合はフェードを挟まず即 on_complete。"""
+        if self._fade_out_active or self._finished:
+            return
+        if not self._fade_out_on_finish:
+            self._finished = True
+            self._on_complete()
+            return
+        self._fade_out_active = True
+        self._fade_out_t = 0.0
 
     def update(self, dt: float) -> None:
         self._blink   += dt

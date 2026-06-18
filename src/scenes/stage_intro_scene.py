@@ -24,7 +24,6 @@ class StageIntroScene(Scene):
         self._font_name  = self.game.resources.pixelfont(20)
         self._font_body  = self.game.resources.pixelfont(26)
         self._font_hint  = self.game.resources.pixelfont(18)
-        self._font_title = self.game.resources.pixelfont(46)
         self._pages = STAGE_INTRO.get(self._stage_id, STAGE_INTRO[1])
         self._page  = 0
         self._chars = 0.0
@@ -85,15 +84,8 @@ class StageIntroScene(Scene):
         self.game.change_scene(GameScene(self.game, stage_id=self._stage_id))
 
     def draw(self, screen: pygame.Surface) -> None:
+        # プロローグ/幕間カットシーンと同じ暗背景に揃え、会話を地続きに見せる。
         screen.fill((8, 8, 20))
-
-        cx = SCREEN_WIDTH  // 2
-        cy = SCREEN_HEIGHT // 2
-
-        # タイトルロゴ（小さめ）
-        title = self._font_title.render("インフルとの死闘", True, (100, 40, 20))
-        screen.blit(title, (cx - title.get_width() // 2, 40))
-        pygame.draw.line(screen, (60, 60, 80), (80, 110), (SCREEN_WIDTH - 80, 110), 1)
 
         pg = self._pages[self._page]
         is_last = self._pages[self._page].last

@@ -20,9 +20,11 @@ class PrologueScene(Scene):
         def _go_stage1() -> None:
             self.game.change_scene(StageIntroScene(self.game, stage_id=1))
 
+        # ステージ1開始前の会話（StageIntroScene）も同じ暗背景なので、
+        # 黒フェードを挟まず地続きに繋ぐ。
         self.game.change_scene(CutsceneScene(
             self.game, PROLOGUE, _go_stage1,
-            theme="dark", stop_bgm=True,
+            theme="dark", stop_bgm=True, fade_out_on_finish=False,
         ))
 
     def handle_event(self, event: pygame.event.Event) -> None:
