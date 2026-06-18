@@ -2,6 +2,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 import pygame
+from src.core.constants import SCREEN_HEIGHT
 from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
 
@@ -15,6 +16,17 @@ _FOOT_OFFSET = 18.0
 _BULLET_SPEED = 230.0
 _BASE_INTERVAL = 1.75
 _ENH_INTERVAL = 1.15
+
+# 登坂チューニング
+_GROUND_TOL = 14.0        # 障害物が壁面に接地しているとみなす許容(px)
+_CLIMB_SPEED = 150.0      # 登坂中の縦移動上限(px/s)
+_CLIMB_X_FACTOR = 0.4     # 登坂中の水平前進係数(<1で斜めに駆け上がる)
+_LOOKAHEAD = 22.0         # 機体角度を決める進行方向の傾き探査距離(px)
+_DESCEND_EASE = 16.0      # 平坦・下りでの追従の速さ
+_STEP_TOL = 4.0           # 登り判定の閾値(px)
+_CLIMB_CAP_MARGIN = 8.0   # 通路中央からさらに残す余白(px)
+_ANGLE_STEP = 30          # 機体角度のスナップ刻み(度)
+_ANGLE_MAX = 90           # 機体角度の上限(度)
 
 
 class EnemyCrawler(Enemy):
@@ -43,6 +55,8 @@ class EnemyCrawler(Enemy):
         self._shoot_interval = _ENH_INTERVAL if enhanced else _BASE_INTERVAL
         self._shoot_timer = self._shoot_interval * 0.55
         self._lost_surface_timer = 0.0
+        self._angle_bucket = 0        # 30°刻みにスナップした登坂角(度)
+        self._angle_deg = 0.0         # 実際にスプライトへ適用する回転角(符号込み)
         self.image = self._make_sprite(self._surface)
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._init_glow()
@@ -62,47 +76,127 @@ class EnemyCrawler(Enemy):
             surf = pygame.transform.flip(surf, False, True)
         return surf
 
-    def _surface_y_at(self, world_x: float) -> float | None:
+    def _wall_surface_y(self, world_x: float, surface: str) -> float | None:
+        """走行レール（side を持つ TerrainStrip）の壁面 y。gap は None。
+
+        side を持たない単体 Terrain（血栓ゲート/砲台土台などの障害物）は
+        レール候補から除外する（PR #38 と同じ規約）。
+        """
         if self._terrain is None:
             return None
         candidates: list[float] = []
         for ter in self._terrain:
-            left = float(getattr(ter, "world_x", 0.0))
-            right = left + ter.rect.width
-            if not (left <= world_x <= right):
-                continue
-            # 走行レールは通路を成す連続地形（side を持つ TerrainStrip）だけ。
-            # side を持たない単体 Terrain（血栓ゲート/砲台土台などの障害物）は
-            # 通路の中ほどに置かれるため、これに吸着すると天井クローラーが
-            # 通路へ落下するなど動きが破綻する。レール候補から除外する。
             side = getattr(ter, "side", "")
-            if self._surface == "bottom" and side == "bottom":
+            if not side:
+                continue
+            left = float(getattr(ter, "world_x", 0.0))
+            if not (left <= world_x <= left + ter.rect.width):
+                continue
+            if surface == "bottom" and side == "bottom":
                 candidates.append(float(getattr(ter, "surface_y", ter.rect.top)))
-            elif self._surface == "top" and side == "top":
+            elif surface == "top" and side == "top":
                 candidates.append(float(getattr(ter, "surface_y", ter.rect.bottom)))
         if not candidates:
             return None
-        return min(candidates) if self._surface == "bottom" else max(candidates)
+        return min(candidates) if surface == "bottom" else max(candidates)
+
+    def _passage_mid(self, world_x: float) -> float:
+        """通路中央の y（登坂の頭打ち基準）。片側欠落時は画面中央にフォールバック。"""
+        top = self._wall_surface_y(world_x, "top")
+        bot = self._wall_surface_y(world_x, "bottom")
+        if top is None or bot is None:
+            return SCREEN_HEIGHT / 2.0
+        return (top + bot) / 2.0
+
+    def _walk_surface_y(self, world_x: float) -> float | None:
+        """クローラーが乗るべき y。レール面＋接地障害物を合成し通路中央で頭打ち。"""
+        wall = self._wall_surface_y(world_x, self._surface)
+        if wall is None:
+            return None
+        best = wall
+        for ter in self._terrain:
+            if getattr(ter, "side", ""):     # レール（strip）は除外
+                continue
+            left = float(getattr(ter, "world_x", 0.0))
+            if not (left <= world_x <= left + ter.rect.width):
+                continue
+            top = float(getattr(ter, "y", ter.rect.top))
+            bot = top + ter.rect.height
+            if self._surface == "bottom":
+                # 床に接地し、床面より上へ立ち上がる障害物だけ乗る（上面=top）
+                if bot >= wall - _GROUND_TOL and top < wall:
+                    best = min(best, top)
+            else:
+                # 天井に接地し、天井面より下へ垂れ下がる障害物だけ乗る（下面=bot）
+                if top <= wall + _GROUND_TOL and bot > wall:
+                    best = max(best, bot)
+        # 通路中央で頭打ち（反対側の壁に張り付かない）
+        cap = self._passage_mid(world_x)
+        if self._surface == "bottom":
+            best = max(best, cap + _CLIMB_CAP_MARGIN)
+        else:
+            best = min(best, cap - _CLIMB_CAP_MARGIN)
+        return best
 
     def _move(self, dt: float) -> None:
-        self.world_x -= self.speed * dt
-        sy = self._surface_y_at(self.world_x)
-        if sy is None:
+        desired_x = self.world_x - self.speed * dt
+        tgt = self._walk_surface_y(desired_x)
+        if tgt is None:
+            self.world_x = desired_x
             self._lost_surface_timer += dt
             drift = 45.0 if self._surface == "top" else -45.0
             self.world_y += drift * dt
+            self._angle_bucket = 0
+            self._angle_deg = 0.0
             return
         self._lost_surface_timer = 0.0
-        target_y = sy - _FOOT_OFFSET if self._surface == "bottom" else sy + _FOOT_OFFSET
-        self.world_y += (target_y - self.world_y) * min(1.0, dt * 16.0)
+        target_center = tgt - _FOOT_OFFSET if self._surface == "bottom" else tgt + _FOOT_OFFSET
+        dy = target_center - self.world_y
+        if abs(dy) > _STEP_TOL:
+            # 段差（障害物の面）。縦は登坂速度で頭打ち、水平を絞って斜めに上り下り。
+            # 上り・下りを同じ速度域に揃え、裏面で一気に落ちる不自然さを防ぐ。
+            step = max(-_CLIMB_SPEED * dt, min(_CLIMB_SPEED * dt, dy))
+            self.world_y += step
+            self.world_x -= self.speed * dt * _CLIMB_X_FACTOR
+        else:
+            # ほぼ平坦。通常前進しつつレール面へ滑らかに追従。
+            self.world_x = desired_x
+            self.world_y += dy * min(1.0, dt * _DESCEND_EASE)
+        self._update_angle()
+
+    def _update_angle(self) -> None:
+        """走行面の傾きから機体角度を 30°刻みで決める（ヒステリシス付き）。"""
+        here = self._walk_surface_y(self.world_x)
+        ahead = self._walk_surface_y(self.world_x - _LOOKAHEAD)
+        if here is None or ahead is None:
+            raw = 0.0
+        else:
+            raw = math.degrees(math.atan2(here - ahead, _LOOKAHEAD))
+        raw = max(-_ANGLE_MAX, min(_ANGLE_MAX, raw))
+        bucket = int(round(raw / _ANGLE_STEP)) * _ANGLE_STEP
+        # 現バケットから十分離れたときだけ切替（角でのカクつき防止）
+        if bucket != self._angle_bucket and abs(raw - self._angle_bucket) >= _ANGLE_STEP * 0.6:
+            self._angle_bucket = bucket
+        # 床は上り左で機体前方を上げ、天井は符号反転
+        sign = 1 if self._surface == "bottom" else -1
+        self._angle_deg = float(sign * self._angle_bucket)
 
     def update(self, dt: float, camera: "Camera") -> None:
         super().update(dt, camera)
+        self._apply_rotation()
         if self._enemy_bullets is not None and self._player is not None:
             self._shoot_timer -= dt
             if self._shoot_timer <= 0:
                 self._fire()
                 self._shoot_timer = self._shoot_interval
+
+    def _apply_rotation(self) -> None:
+        """super().update() が合成した素体（点滅/グロウ込み）を角度で回転する。"""
+        if not self._angle_deg:
+            return
+        center = self.rect.center
+        self.image = pygame.transform.rotate(self.image, self._angle_deg)
+        self.rect = self.image.get_rect(center=center)
 
     def _fire(self) -> None:
         from src.entities.bullets.enemy_bullet import EnemyBullet
