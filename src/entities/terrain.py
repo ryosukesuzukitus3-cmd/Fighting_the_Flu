@@ -82,6 +82,7 @@ class Terrain(pygame.sprite.Sprite):
             sy = rng.randint(2, max(2, h - 3))
             shade = tuple(max(0, c - 24) for c in base)
             pygame.draw.circle(surf, shade, (sx, sy), rng.randint(1, 3))
+        Terrain._draw_kind_details(surf, rng, w, h, kind, base, edge)
         if destructible:
             crack_col = (255, 190, 105)
             node_col = (255, 125, 70)
@@ -100,6 +101,56 @@ class Terrain(pygame.sprite.Sprite):
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
         Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
         return surf
+
+    @staticmethod
+    def _draw_kind_details(
+        surf: pygame.Surface,
+        rng: random.Random,
+        w: int,
+        h: int,
+        kind: str,
+        base: tuple[int, int, int],
+        edge: tuple[int, int, int],
+    ) -> None:
+        dark = tuple(max(0, c - 34) for c in base)
+        pale = tuple(min(255, c + 28) for c in edge)
+        if kind == "wall":
+            for x in range(18, w, 32):
+                pygame.draw.line(surf, (*dark, 95), (x, 4), (x, h - 5), 1)
+            for y in range(16, h, 28):
+                pygame.draw.line(surf, (*pale, 50), (5, y), (w - 6, y), 1)
+            for _ in range(max(2, (w * h) // 2400)):
+                sx = rng.randint(8, max(8, w - 9))
+                sy = rng.randint(8, max(8, h - 9))
+                pygame.draw.circle(surf, (*pale, 92), (sx, sy), 2)
+                pygame.draw.circle(surf, (*dark, 70), (sx + 1, sy + 1), 2)
+        elif kind == "debris":
+            for _ in range(max(3, (w * h) // 1800)):
+                sx = rng.randint(4, max(4, w - 18))
+                sy = rng.randint(4, max(4, h - 16))
+                plate = pygame.Rect(sx, sy, rng.randint(12, max(14, min(34, w // 2))), rng.randint(8, max(10, min(24, h // 2))))
+                pygame.draw.rect(surf, (*dark, 72), plate, border_radius=2)
+                pygame.draw.rect(surf, (*pale, 50), plate, 1, border_radius=2)
+            for _ in range(max(2, (w * h) // 2600)):
+                pts = []
+                x = rng.randint(4, max(4, w - 5))
+                y = rng.randint(4, max(4, h - 5))
+                for _step in range(4):
+                    pts.append((max(2, min(w - 3, x)), max(2, min(h - 3, y))))
+                    x += rng.randint(-10, 14)
+                    y += rng.randint(-8, 10)
+                pygame.draw.lines(surf, (92, 210, 230, 54), False, pts, 1)
+        elif kind == "rock":
+            for _ in range(max(3, (w * h) // 1400)):
+                x = rng.randint(6, max(6, w - 7))
+                y = rng.randint(6, max(6, h - 7))
+                pts = [
+                    (x, y),
+                    (max(2, min(w - 3, x + rng.randint(-18, 18))), max(2, min(h - 3, y + rng.randint(8, 22)))),
+                    (max(2, min(w - 3, x + rng.randint(10, 28))), max(2, min(h - 3, y + rng.randint(-8, 12)))),
+                ]
+                pygame.draw.polygon(surf, (*dark, 46), pts)
+                pygame.draw.lines(surf, (*pale, 38), True, pts, 1)
 
     @staticmethod
     def _make_clot_surface(
@@ -308,22 +359,22 @@ _STRIP_THEMES: dict[str, dict] = {
     "meme_static": {
         "base": (34, 62, 48),
         "dark": (10, 18, 18),
-        "edge": (104, 188, 122),
-        "glow": (130, 255, 150),
+        "edge": (82, 174, 130),
+        "glow": (92, 220, 180),
         "spot": (60, 120, 72),
     },
     "fortress": {
         "base": (64, 72, 86),
         "dark": (28, 34, 44),
-        "edge": (130, 148, 174),
-        "glow": (90, 180, 210),
+        "edge": (120, 145, 172),
+        "glow": (82, 165, 205),
         "spot": (88, 104, 124),
     },
     "shogi_void": {
         "base": (36, 30, 54),
         "dark": (14, 12, 24),
-        "edge": (102, 86, 150),
-        "glow": (190, 170, 255),
+        "edge": (116, 96, 148),
+        "glow": (168, 140, 220),
         "spot": (52, 44, 78),
     },
 }
@@ -447,6 +498,8 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             col = spot if rng.random() < 0.7 else dark
             pygame.draw.circle(surf, col, (sx, sy), r)
 
+        TerrainStripSegment._draw_theme_details(surf, rng, w, h, side, theme, colors, index)
+
         if destructible:
             # 破壊可能な薄膜は縁と亀裂を明るくし、撃てる壁だと読めるようにする。
             crack_col = (255, 180, 100)
@@ -479,6 +532,66 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             surf.blit(pygame.transform.flip(glow_surf, False, True), (0, 0))
 
         return surf
+
+    @staticmethod
+    def _draw_theme_details(
+        surf: pygame.Surface,
+        rng: random.Random,
+        w: int,
+        h: int,
+        side: str,
+        theme: str,
+        colors: dict,
+        index: int,
+    ) -> None:
+        base = colors["base"]
+        dark = colors["dark"]
+        edge = colors["edge"]
+        glow = colors["glow"]
+        if theme == "meme_static":
+            for x in range(8 + (index % 3) * 5, w, 22):
+                y0 = rng.randint(8, max(8, h - 10))
+                y1 = max(4, min(h - 5, y0 + rng.randint(-22, 22)))
+                pygame.draw.line(surf, (*glow, 58), (x, y0), (min(w - 5, x + 14), y0), 1)
+                pygame.draw.line(surf, (*edge, 44), (min(w - 5, x + 14), y0), (min(w - 5, x + 14), y1), 1)
+                pygame.draw.rect(surf, (*glow, 58), (min(w - 8, x + 12), y1 - 2, 4, 4))
+            for _ in range(max(1, (w * h) // 5200)):
+                yy = rng.randint(6, max(6, h - 7))
+                pygame.draw.rect(surf, (116, 240, 190, 38), (0, yy, w, 2))
+        elif theme == "fortress":
+            seam_col = tuple(max(0, c - 18) for c in dark)
+            hi_col = tuple(min(255, c + 18) for c in edge)
+            for x in range(0, w, 28):
+                pygame.draw.line(surf, (*seam_col, 96), (x, 3), (x, h - 4), 1)
+            for y in range(14 + (index % 2) * 8, h, 30):
+                pygame.draw.line(surf, (*hi_col, 46), (4, y), (w - 5, y), 1)
+            for _ in range(max(2, (w * h) // 2300)):
+                sx = rng.randint(8, max(8, w - 9))
+                sy = rng.randint(8, max(8, h - 9))
+                pygame.draw.circle(surf, (*hi_col, 88), (sx, sy), 2)
+                pygame.draw.circle(surf, (*seam_col, 72), (sx + 1, sy + 1), 2)
+            if h > 34 and index % 5 == 0:
+                stripe_y = 8 if side == "bottom" else max(6, h - 18)
+                for x in range(-10, w, 16):
+                    pygame.draw.line(surf, (220, 175, 70, 70), (x, stripe_y + 10), (x + 10, stripe_y), 2)
+        elif theme == "shogi_void":
+            board_col = (174, 136, 94, 24)
+            shadow_col = tuple(max(0, c - 4) for c in base)
+            for x in range((index * 7) % 46, w, 46):
+                pygame.draw.line(surf, (*shadow_col, 18), (x, 4), (x, h - 5), 1)
+                pygame.draw.line(surf, board_col, (x + 1, 4), (x + 1, h - 5), 1)
+            for y in range((index * 5) % 42, h, 42):
+                pygame.draw.line(surf, (*shadow_col, 16), (4, y), (w - 5, y), 1)
+                pygame.draw.line(surf, board_col, (4, y + 1), (w - 5, y + 1), 1)
+            for _ in range(max(1, (w * h) // 3600)):
+                sx = rng.randint(8, max(8, w - 9))
+                sy = rng.randint(8, max(8, h - 9))
+                pts = [(sx, sy)]
+                for _step in range(3):
+                    sx += rng.randint(-12, 12)
+                    sy += rng.randint(-10, 10)
+                    pts.append((max(3, min(w - 4, sx)), max(3, min(h - 4, sy))))
+                pygame.draw.lines(surf, (190, 154, 104, 62), False, pts, 1)
 
     @property
     def surface_y(self) -> float:
