@@ -163,13 +163,18 @@ def _draw_arrow(screen, rect, alpha, arrow_on, complete):
 
 # ── 戦闘パネル（顔アイコン・省スペース） ──────────────────────────────
 
+COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 128, SCREEN_WIDTH - 52, 92)
+
+
 def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                       total_pages=None, hint_text=None, style=COMBAT_RED_STYLE,
-                      alpha=255, center=False, arrow_on=None):
-    rect = pygame.Rect(26, SCREEN_HEIGHT - 128, SCREEN_WIDTH - 52, 92)
+                      alpha=255, center=False, arrow_on=None, chars=None,
+                      complete=None, text_transform=None, text_jitter=0,
+                      show_portrait=True):
+    rect = COMBAT_PANEL_RECT
     _draw_window(screen, rect, style, alpha)
     text_x, text_w = rect.x + 22, rect.w - 44
-    portrait = speaker_portrait(speaker)
+    portrait = speaker_portrait(speaker) if show_portrait else None
     if portrait:
         size = rect.h - 24
         img = pygame.transform.smoothscale(resources.image(portrait), (size, size)).convert_alpha()
@@ -182,10 +187,13 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
         text_x = px + size + 20
         text_w = rect.right - 22 - text_x
     _draw_name_tab(screen, resources, rect, speaker, style, alpha)
-    _draw_text(screen, resources, rect, lines, style, chars=None, center=center,
+    _draw_text(screen, resources, rect, lines, style, chars=chars, center=center,
                valign="center", body_size=26, min_body_size=20, text_x=text_x,
-               text_w=text_w, alpha=alpha, text_transform=None, text_color=None, text_jitter=0)
-    _draw_arrow(screen, rect, alpha, arrow_on, complete=hint_text is not None)
+               text_w=text_w, alpha=alpha, text_transform=text_transform,
+               text_color=None, text_jitter=text_jitter)
+    if complete is None:
+        complete = hint_text is not None
+    _draw_arrow(screen, rect, alpha, arrow_on, complete=complete)
 
 
 # ── ストーリーパネル（左右に立ち絵・上詰め） ──────────────────────────
