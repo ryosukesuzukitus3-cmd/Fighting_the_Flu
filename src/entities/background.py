@@ -1,8 +1,11 @@
 from __future__ import annotations
 import math
 import random
+from pathlib import Path
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+
+_STAGE2_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage2_cyber_static_bg.png"
 
 
 class _StarLayer:
@@ -51,12 +54,8 @@ class ScrollingBackground:
         self._stage1_far_cells: list = []
         self._stage1_near_cells: list = []
         self._stage1_membranes: list = []
-        self._stage2_panels: list = []
-        self._stage2_glyphs: list = []
-        self._stage3_gate_frames: list = []
-        self._stage3_badges: list = []
-        self._stage4_grid_layers: list = []
-        self._stage4_pieces: list = []
+        self._stage2_fragments: list = []
+        self._stage2_bg: pygame.Surface | None = None
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -101,17 +100,11 @@ class ScrollingBackground:
                  rnd.uniform(0.15, 0.4), rnd.uniform(0, 6.28))
                 for _ in range(10)
             ]
-            self._stage2_panels = [
-                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(26, SCREEN_HEIGHT - 92),
-                 rnd.uniform(58, 150), rnd.uniform(34, 92), rnd.uniform(0.045, 0.16),
-                 rnd.choice(((38, 92, 78), (46, 110, 118), (76, 86, 128))))
-                for _ in range(14)
-            ]
-            self._stage2_glyphs = [
-                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(18, SCREEN_HEIGHT - 38),
-                 rnd.uniform(0.08, 0.22), rnd.choice(("0101", "ERR", "404", "SYS", "NOISE", "MEME")),
-                 rnd.uniform(0, 6.28))
-                for _ in range(16)
+            self._stage2_fragments = [
+                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(48, SCREEN_HEIGHT - 52),
+                 rnd.uniform(12, 54), rnd.uniform(5, 18), rnd.uniform(0.10, 0.28),
+                 rnd.uniform(24, 62))
+                for _ in range(26)
             ]
         elif sid == 3:
             # 婚活UIカード矩形（x, y, w, h, 速度）
@@ -120,17 +113,6 @@ class ScrollingBackground:
                  rnd.uniform(70, 130), rnd.uniform(40, 64), rnd.uniform(0.12, 0.3))
                 for _ in range(8)
             ]
-            self._stage3_gate_frames = [
-                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(42, SCREEN_HEIGHT - 126),
-                 rnd.uniform(74, 132), rnd.uniform(118, 210), rnd.uniform(0.045, 0.12),
-                 rnd.uniform(0, 6.28))
-                for _ in range(7)
-            ]
-            self._stage3_badges = [
-                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(62, SCREEN_HEIGHT - 64),
-                 rnd.uniform(0.16, 0.34), rnd.uniform(0, 6.28))
-                for _ in range(10)
-            ]
         elif sid == 4:
             # 駒グリフ（x, y, 速度, 文字）
             glyphs = "歩香桂銀金角飛王"
@@ -138,17 +120,6 @@ class ScrollingBackground:
                 (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(30, SCREEN_HEIGHT - 40),
                  rnd.uniform(0.1, 0.3), rnd.choice(glyphs))
                 for _ in range(10)
-            ]
-            self._stage4_grid_layers = [
-                (rnd.randint(48, 96), rnd.uniform(0.06, 0.22), rnd.randint(18, 46),
-                 rnd.uniform(0, 6.28))
-                for _ in range(3)
-            ]
-            self._stage4_pieces = [
-                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(44, SCREEN_HEIGHT - 76),
-                 rnd.uniform(34, 64), rnd.uniform(0.055, 0.20), rnd.uniform(-0.35, 0.35),
-                 rnd.choice("歩香桂銀金角飛王玉"))
-                for _ in range(12)
             ]
             self._piece_font = None
 
@@ -276,151 +247,78 @@ class ScrollingBackground:
     # ── Stage2 ミーム汚染（走査ノイズ）─────────────────────────
     def _draw_meme(self, screen: pygame.Surface, camera_x: float) -> None:
         t = self._time
-        grid = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for step, sf, alpha in ((56, 0.08, 16), (34, 0.18, 12)):
-            off = int(camera_x * sf) % step
-            for x in range(-off, SCREEN_WIDTH + step, step):
-                pygame.draw.line(grid, (60, 190, 150, alpha), (x, 0), (x, SCREEN_HEIGHT), 1)
-            for y in range(0, SCREEN_HEIGHT + step, step):
-                pygame.draw.line(grid, (45, 125, 170, alpha // 2), (0, y), (SCREEN_WIDTH, y), 1)
-        screen.blit(grid, (0, 0))
-
-        for idx, (cx, cy, w, h, sf, color) in enumerate(self._stage2_panels):
-            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 220) - 110
-            pulse = 0.5 + 0.5 * math.sin(t * 1.4 + idx * 0.7)
-            self._draw_circuit_panel(screen, int(x), int(cy), int(w), int(h), color, pulse)
-
+        self._draw_stage2_concept_backdrop(screen, camera_x)
         for (y, h, sp, ph) in self._cells:
             yy = (y + math.sin(t * sp + ph) * 40) % SCREEN_HEIGHT
-            alpha = int(24 + 22 * (0.5 + 0.5 * math.sin(t * 3 + ph)))
+            alpha = int(9 + 8 * (0.5 + 0.5 * math.sin(t * 3 + ph)))
             band = pygame.Surface((SCREEN_WIDTH, int(h)), pygame.SRCALPHA)
-            band.fill((80, 155, 130, alpha))
+            band.fill((150, 205, 188, alpha))
             screen.blit(band, (0, int(yy)))
         # ブロックノイズ点
-        font = getattr(self, "_stage2_font", None)
-        if font is None:
-            font = pygame.font.SysFont("consolas, meiryo, sans-serif", 15)
-            self._stage2_font = font
-        for idx, (cx, cy, sf, text, ph) in enumerate(self._stage2_glyphs):
+        for idx, (cx, cy, w, h, sf, alpha) in enumerate(self._stage2_fragments):
             x = (cx - camera_x * sf) % (SCREEN_WIDTH + 120) - 60
-            alpha = int(28 + 26 * (0.5 + 0.5 * math.sin(t * 1.7 + ph)))
-            glyph = font.render(text, True, (86, 225, 178))
-            glyph.set_alpha(alpha)
-            if idx % 3 == 0:
-                pygame.draw.line(screen, (58, 210, 168, 28), (int(x) - 18, int(cy) + 8), (int(x) - 2, int(cy) + 8), 1)
-            screen.blit(glyph, (int(x), int(cy)))
+            y = cy + math.sin(t * 0.35 + idx * 0.61) * 3
+            frag = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            frag.fill((3, 8, 9, int(alpha)))
+            if idx % 4 == 0:
+                pygame.draw.rect(frag, (50, 140, 116, 24), frag.get_rect(), 1)
+            screen.blit(frag, (int(x), int(y)))
 
-        tick = int(t * 18)
-        for i in range(18):
-            bx = (i * 73 + tick * (i % 4 + 1) - int(camera_x * 0.42)) % (SCREEN_WIDTH + 40) - 20
-            by = (i * 47 + tick * (i % 3 + 2)) % SCREEN_HEIGHT
-            bw = 4 + (i * 5 + tick) % 18
-            bh = 2 + (i * 3) % 6
-            s = pygame.Surface((bw, bh), pygame.SRCALPHA)
-            s.fill((110, 235, 185, 18 + (i % 4) * 8))
-            screen.blit(s, (int(bx), int(by)))
+        scan = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for y in range(0, SCREEN_HEIGHT, 4):
+            pygame.draw.line(scan, (180, 224, 202, 7), (0, y), (SCREEN_WIDTH, y), 1)
+        drift_y = int((t * 18) % SCREEN_HEIGHT)
+        pygame.draw.rect(scan, (120, 210, 172, 18), (0, drift_y, SCREEN_WIDTH, 2))
+        screen.blit(scan, (0, 0))
+
+    # Stage2 concept backdrop image.
+    def _draw_stage2_concept_backdrop(self, screen: pygame.Surface, camera_x: float) -> None:
+        bg = self._load_stage2_backdrop()
+        if bg is None:
+            return
+        width = bg.get_width()
+        offset = int(camera_x * 0.10) % width
+        for x in range(-offset, SCREEN_WIDTH, width):
+            screen.blit(bg, (x, 0))
+        veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        veil.fill((0, 10, 10, 18))
+        screen.blit(veil, (0, 0))
+
+    def _load_stage2_backdrop(self) -> pygame.Surface | None:
+        if self._stage2_bg is not None:
+            return self._stage2_bg
+        try:
+            raw = pygame.image.load(_STAGE2_BG_PATH)
+        except (FileNotFoundError, pygame.error):
+            return None
+        if raw.get_height() != SCREEN_HEIGHT:
+            scale = SCREEN_HEIGHT / raw.get_height()
+            raw = pygame.transform.smoothscale(
+                raw,
+                (max(SCREEN_WIDTH, int(raw.get_width() * scale)), SCREEN_HEIGHT),
+            )
+        self._stage2_bg = raw
+        return self._stage2_bg
 
     # ── Stage3 婚活・労働（UIカード）───────────────────────────
-    def _draw_circuit_panel(
-        self,
-        screen: pygame.Surface,
-        x: int,
-        y: int,
-        w: int,
-        h: int,
-        color: tuple[int, int, int],
-        pulse: float,
-    ) -> None:
-        if w <= 0 or h <= 0:
-            return
-        panel = pygame.Surface((w, h), pygame.SRCALPHA)
-        base_alpha = int(28 + 18 * pulse)
-        panel.fill((*color, base_alpha))
-        pygame.draw.rect(panel, (90, 235, 190, 46), (0, 0, w, h), 1, border_radius=3)
-        pygame.draw.rect(panel, (36, 78, 92, 60), (5, 5, max(4, w - 10), max(4, h - 10)), 1, border_radius=2)
-        mid = h // 2
-        for i in range(3, w - 8, 18):
-            y1 = 10 + (i * 7) % max(12, h - 18)
-            pygame.draw.line(panel, (112, 250, 205, 42), (i, y1), (min(w - 7, i + 14), y1), 1)
-            pygame.draw.line(panel, (80, 160, 210, 28), (min(w - 7, i + 14), y1), (min(w - 7, i + 14), mid), 1)
-            pygame.draw.rect(panel, (122, 245, 208, 52), (min(w - 8, i + 12), max(4, mid - 2), 4, 4))
-        screen.blit(panel, (x, y))
-
     def _draw_konkatsu(self, screen: pygame.Surface, camera_x: float) -> None:
-        t = self._time
-        for idx, (cx, cy, w, h, sf, ph) in enumerate(self._stage3_gate_frames):
-            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 180) - 90
-            gate = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            gate.fill((18, 30, 48, 24))
-            pygame.draw.rect(gate, (86, 142, 190, 45), (0, 0, int(w), int(h)), 1, border_radius=4)
-            pygame.draw.rect(gate, (45, 82, 120, 46), (7, 8, max(6, int(w) - 14), max(8, int(h) - 16)), 1, border_radius=3)
-            scan_y = int((0.5 + 0.5 * math.sin(t * 0.8 + ph)) * max(1, int(h) - 18)) + 9
-            pygame.draw.line(gate, (100, 225, 230, 65), (8, scan_y), (int(w) - 9, scan_y), 2)
-            for k in range(3):
-                yy = 18 + k * max(14, int(h) // 4)
-                pygame.draw.line(gate, (110, 160, 210, 24), (14, yy), (int(w) - 15, yy), 1)
-            if idx % 2 == 0:
-                self._draw_tiny_heart(gate, int(w) - 22, 18, 7, (210, 112, 150, 42))
-            screen.blit(gate, (int(x), int(cy)))
-
         for (cx, cy, w, h, sf) in self._cells:
             x = (cx - camera_x * sf) % (SCREEN_WIDTH + 160) - 80
             card = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            card.fill((34, 48, 72, 48))
-            pygame.draw.rect(card, (94, 136, 184, 74), (0, 0, int(w), int(h)), 1, border_radius=4)
-            pygame.draw.rect(card, (70, 118, 168, 38), (0, 0, int(w), max(7, int(h * 0.18))), border_radius=4)
+            card.fill((40, 60, 90, 45))
+            pygame.draw.rect(card, (90, 130, 180, 70), (0, 0, int(w), int(h)), 1, border_radius=4)
             # アバター丸＋行
             pygame.draw.circle(card, (110, 150, 200, 70), (12, int(h // 2)), 7)
-            pygame.draw.rect(card, (98, 152, 198, 58), (26, int(h * 0.3), int(w - 36), 4))
-            pygame.draw.rect(card, (72, 106, 160, 48), (26, int(h * 0.6), int(w - 52), 4))
-            self._draw_tiny_heart(card, int(w) - 14, int(h) - 13, 5, (220, 110, 150, 48))
+            pygame.draw.rect(card, (90, 130, 180, 55), (26, int(h * 0.3), int(w - 36), 4))
+            pygame.draw.rect(card, (70, 100, 150, 45), (26, int(h * 0.6), int(w - 52), 4))
             screen.blit(card, (int(x), int(cy)))
 
     # ── Stage4 棋理深淵（将棋盤・駒）───────────────────────────
-        for cx, cy, sf, ph in self._stage3_badges:
-            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 90) - 45
-            r = int(8 + 3 * (0.5 + 0.5 * math.sin(t * 1.1 + ph)))
-            badge = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
-            self._draw_tiny_heart(badge, r * 2, r * 2, r, (224, 116, 150, 34))
-            pygame.draw.circle(badge, (96, 160, 210, 24), (r * 2, r * 2), r + 5, 1)
-            screen.blit(badge, (int(x) - r * 2, int(cy) - r * 2))
-
-    @staticmethod
-    def _draw_tiny_heart(
-        surface: pygame.Surface,
-        cx: int,
-        cy: int,
-        size: int,
-        color: tuple[int, int, int, int],
-    ) -> None:
-        r = max(2, size // 2)
-        pygame.draw.circle(surface, color, (cx - r, cy - r), r)
-        pygame.draw.circle(surface, color, (cx + r, cy - r), r)
-        pygame.draw.polygon(surface, color, ((cx - size, cy - r // 2), (cx + size, cy - r // 2), (cx, cy + size + r)))
-
-    # Stage4 shogi board depth.
     def _draw_shogi(self, screen: pygame.Surface, camera_x: float) -> None:
-        t = self._time
-        for cell, sf, alpha, ph in self._stage4_grid_layers:
-            off = int(camera_x * sf + math.sin(t * 0.22 + ph) * cell * 0.18) % cell
-            grid = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            col = (84, 72, 124, alpha)
-            for gx in range(-off, SCREEN_WIDTH + cell, cell):
-                pygame.draw.line(grid, col, (gx, 0), (gx, SCREEN_HEIGHT), 1)
-            for gy in range(-off // 2, SCREEN_HEIGHT + cell, cell):
-                pygame.draw.line(grid, (58, 50, 92, max(10, alpha - 14)), (0, gy), (SCREEN_WIDTH, gy), 1)
-            screen.blit(grid, (0, 0))
-
-        for idx, (cx, cy, size, sf, angle, ch) in enumerate(self._stage4_pieces):
-            x = (cx - camera_x * sf) % (SCREEN_WIDTH + 150) - 75
-            y = cy + math.sin(t * 0.35 + idx) * 8
-            self._draw_shogi_piece(screen, int(x), int(y), int(size), angle + math.sin(t * 0.14 + idx) * 0.05, ch)
-
-        cell = 72
         # 薄い将棋盤グリッド（視差スクロール）
         cell = 72
         off = int(camera_x * 0.25) % cell
-        grid_col = (52, 46, 78)
+        grid_col = (40, 38, 60)
         for gx in range(-off, SCREEN_WIDTH + cell, cell):
             pygame.draw.line(screen, grid_col, (gx, 0), (gx, SCREEN_HEIGHT), 1)
         for gy in range(0, SCREEN_HEIGHT + cell, cell):
@@ -430,35 +328,6 @@ class ScrollingBackground:
             self._piece_font = pygame.font.SysFont("yugothic, meiryo, sans-serif", 30)
         for (cx, cy, sf, ch) in self._cells:
             x = (cx - camera_x * sf) % (SCREEN_WIDTH + 80) - 40
-            surf = self._piece_font.render(ch, True, (104, 92, 146))
-            surf.set_alpha(54)
+            surf = self._piece_font.render(ch, True, (70, 64, 100))
+            surf.set_alpha(60)
             screen.blit(surf, (int(x), int(cy)))
-
-    def _draw_shogi_piece(
-        self,
-        screen: pygame.Surface,
-        cx: int,
-        cy: int,
-        size: int,
-        angle: float,
-        ch: str,
-    ) -> None:
-        if self._piece_font is None:
-            self._piece_font = pygame.font.SysFont("yugothic, meiryo, sans-serif", 30)
-        w = max(28, size)
-        h = int(w * 1.22)
-        piece = pygame.Surface((w + 12, h + 12), pygame.SRCALPHA)
-        pts = [
-            (w // 2 + 6, 6),
-            (w + 4, int(h * 0.34) + 6),
-            (int(w * 0.80) + 6, h + 4),
-            (int(w * 0.20) + 6, h + 4),
-            (8, int(h * 0.34) + 6),
-        ]
-        pygame.draw.polygon(piece, (32, 26, 50, 84), pts)
-        pygame.draw.lines(piece, (164, 132, 92, 70), True, pts, 2)
-        glyph = self._piece_font.render(ch, True, (184, 154, 112))
-        glyph.set_alpha(72)
-        piece.blit(glyph, glyph.get_rect(center=(w // 2 + 6, int(h * 0.56) + 6)))
-        rotated = pygame.transform.rotate(piece, math.degrees(angle))
-        screen.blit(rotated, rotated.get_rect(center=(cx, cy)))

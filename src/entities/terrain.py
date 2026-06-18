@@ -18,6 +18,7 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "wall":   ((70, 72, 82),  (110, 114, 128)),   # 金属/コンクリの壁
     "rock":   ((96, 78, 60),  (140, 116, 86)),    # 岩石
     "debris": ((84, 86, 96),  (130, 134, 150)),   # 宇宙デブリ
+    "data_block": ((10, 16, 18), (38, 82, 70)),
     "clot":   ((126, 24, 34), (230, 82, 76)),
 }
 
@@ -69,6 +70,13 @@ class Terrain(pygame.sprite.Sprite):
                 damage_ratio=damage_ratio,
                 fixed_drop=fixed_drop,
             )
+        if kind == "data_block":
+            return Terrain._make_data_block_surface(
+                w, h,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+                fixed_drop=fixed_drop,
+            )
 
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -82,7 +90,6 @@ class Terrain(pygame.sprite.Sprite):
             sy = rng.randint(2, max(2, h - 3))
             shade = tuple(max(0, c - 24) for c in base)
             pygame.draw.circle(surf, shade, (sx, sy), rng.randint(1, 3))
-        Terrain._draw_kind_details(surf, rng, w, h, kind, base, edge)
         if destructible:
             crack_col = (255, 190, 105)
             node_col = (255, 125, 70)
@@ -103,54 +110,64 @@ class Terrain(pygame.sprite.Sprite):
         return surf
 
     @staticmethod
-    def _draw_kind_details(
-        surf: pygame.Surface,
-        rng: random.Random,
+    def _make_data_block_surface(
         w: int,
         h: int,
-        kind: str,
-        base: tuple[int, int, int],
-        edge: tuple[int, int, int],
-    ) -> None:
-        dark = tuple(max(0, c - 34) for c in base)
-        pale = tuple(min(255, c + 28) for c in edge)
-        if kind == "wall":
-            for x in range(18, w, 32):
-                pygame.draw.line(surf, (*dark, 95), (x, 4), (x, h - 5), 1)
-            for y in range(16, h, 28):
-                pygame.draw.line(surf, (*pale, 50), (5, y), (w - 6, y), 1)
-            for _ in range(max(2, (w * h) // 2400)):
+        *,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+        fixed_drop: str | None = None,
+    ) -> pygame.Surface:
+        rng = random.Random((w * 61001) ^ (h * 97003) ^ 0xDADA)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf.fill((6, 10, 12, 242))
+        pygame.draw.rect(surf, (1, 3, 5, 190), (0, 0, w, h), 2)
+
+        panel_count = max(4, (w * h) // 1200)
+        for _ in range(panel_count):
+            px = rng.randint(2, max(2, w - 12))
+            py = rng.randint(2, max(2, h - 10))
+            pw = rng.randint(8, max(10, min(42, w - px)))
+            ph = rng.randint(5, max(7, min(28, h - py)))
+            panel = pygame.Rect(px, py, pw, ph)
+            col = rng.choice(((9, 18, 20, 118), (13, 25, 26, 96), (2, 6, 8, 142)))
+            pygame.draw.rect(surf, col, panel)
+            if rng.random() < 0.35:
+                pygame.draw.rect(surf, (34, 92, 78, 38), panel, 1)
+
+        for _ in range(max(3, (w * h) // 1700)):
+            sx = rng.randint(5, max(5, w - 6))
+            sy = rng.randint(5, max(5, h - 6))
+            pygame.draw.rect(surf, (82, 210, 168, rng.randint(32, 70)), (sx, sy, rng.randint(1, 3), 1))
+
+        for _ in range(max(2, w // 32)):
+            x = rng.randint(2, max(2, w - 4))
+            y = rng.choice((0, h - 1))
+            drip_h = rng.randint(5, max(6, min(22, h // 2)))
+            if y == 0:
+                rect = pygame.Rect(x, 0, rng.randint(1, 3), drip_h)
+            else:
+                rect = pygame.Rect(x, max(0, h - drip_h), rng.randint(1, 3), drip_h)
+            pygame.draw.rect(surf, (0, 2, 3, 170), rect)
+
+        if destructible:
+            damage = max(0.0, min(1.0, damage_ratio))
+            for _ in range(3 + int(damage * 6)):
+                x = rng.randint(7, max(7, w - 8))
+                y = rng.randint(7, max(7, h - 8))
+                pts = [(x, y)]
+                for _step in range(rng.randint(2, 4)):
+                    x += rng.randint(-12, 12)
+                    y += rng.randint(-10, 10)
+                    pts.append((max(3, min(w - 4, x)), max(3, min(h - 4, y))))
+                pygame.draw.lines(surf, (84, 156, 130, 92), False, pts, 1)
+            for _ in range(max(1, (w * h) // 6000)):
                 sx = rng.randint(8, max(8, w - 9))
                 sy = rng.randint(8, max(8, h - 9))
-                pygame.draw.circle(surf, (*pale, 92), (sx, sy), 2)
-                pygame.draw.circle(surf, (*dark, 70), (sx + 1, sy + 1), 2)
-        elif kind == "debris":
-            for _ in range(max(3, (w * h) // 1800)):
-                sx = rng.randint(4, max(4, w - 18))
-                sy = rng.randint(4, max(4, h - 16))
-                plate = pygame.Rect(sx, sy, rng.randint(12, max(14, min(34, w // 2))), rng.randint(8, max(10, min(24, h // 2))))
-                pygame.draw.rect(surf, (*dark, 72), plate, border_radius=2)
-                pygame.draw.rect(surf, (*pale, 50), plate, 1, border_radius=2)
-            for _ in range(max(2, (w * h) // 2600)):
-                pts = []
-                x = rng.randint(4, max(4, w - 5))
-                y = rng.randint(4, max(4, h - 5))
-                for _step in range(4):
-                    pts.append((max(2, min(w - 3, x)), max(2, min(h - 3, y))))
-                    x += rng.randint(-10, 14)
-                    y += rng.randint(-8, 10)
-                pygame.draw.lines(surf, (92, 210, 230, 54), False, pts, 1)
-        elif kind == "rock":
-            for _ in range(max(3, (w * h) // 1400)):
-                x = rng.randint(6, max(6, w - 7))
-                y = rng.randint(6, max(6, h - 7))
-                pts = [
-                    (x, y),
-                    (max(2, min(w - 3, x + rng.randint(-18, 18))), max(2, min(h - 3, y + rng.randint(8, 22)))),
-                    (max(2, min(w - 3, x + rng.randint(10, 28))), max(2, min(h - 3, y + rng.randint(-8, 12)))),
-                ]
-                pygame.draw.polygon(surf, (*dark, 46), pts)
-                pygame.draw.lines(surf, (*pale, 38), True, pts, 1)
+                pygame.draw.circle(surf, (130, 78, 112, 110), (sx, sy), rng.randint(2, 4))
+
+        Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
+        return surf
 
     @staticmethod
     def _make_clot_surface(
@@ -359,22 +376,22 @@ _STRIP_THEMES: dict[str, dict] = {
     "meme_static": {
         "base": (34, 62, 48),
         "dark": (10, 18, 18),
-        "edge": (82, 174, 130),
-        "glow": (92, 220, 180),
+        "edge": (104, 188, 122),
+        "glow": (130, 255, 150),
         "spot": (60, 120, 72),
     },
     "fortress": {
         "base": (64, 72, 86),
         "dark": (28, 34, 44),
-        "edge": (120, 145, 172),
-        "glow": (82, 165, 205),
+        "edge": (130, 148, 174),
+        "glow": (90, 180, 210),
         "spot": (88, 104, 124),
     },
     "shogi_void": {
         "base": (36, 30, 54),
         "dark": (14, 12, 24),
-        "edge": (116, 96, 148),
-        "glow": (168, 140, 220),
+        "edge": (102, 86, 150),
+        "glow": (190, 170, 255),
         "spot": (52, 44, 78),
     },
 }
@@ -440,6 +457,16 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         glow = colors["glow"]
         spot = colors["spot"]
         rng = random.Random(seed * 1009 + index * 9176 + (0 if side == "top" else 53))
+        if theme == "meme_static":
+            return TerrainStripSegment._make_meme_static_surface(
+                w,
+                h,
+                side=side,
+                rng=rng,
+                index=index,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+            )
 
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         surf.fill(base)
@@ -498,8 +525,6 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             col = spot if rng.random() < 0.7 else dark
             pygame.draw.circle(surf, col, (sx, sy), r)
 
-        TerrainStripSegment._draw_theme_details(surf, rng, w, h, side, theme, colors, index)
-
         if destructible:
             # 破壊可能な薄膜は縁と亀裂を明るくし、撃てる壁だと読めるようにする。
             crack_col = (255, 180, 100)
@@ -534,64 +559,72 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         return surf
 
     @staticmethod
-    def _draw_theme_details(
-        surf: pygame.Surface,
-        rng: random.Random,
+    def _make_meme_static_surface(
         w: int,
         h: int,
+        *,
         side: str,
-        theme: str,
-        colors: dict,
+        rng: random.Random,
         index: int,
-    ) -> None:
-        base = colors["base"]
-        dark = colors["dark"]
-        edge = colors["edge"]
-        glow = colors["glow"]
-        if theme == "meme_static":
-            for x in range(8 + (index % 3) * 5, w, 22):
-                y0 = rng.randint(8, max(8, h - 10))
-                y1 = max(4, min(h - 5, y0 + rng.randint(-22, 22)))
-                pygame.draw.line(surf, (*glow, 58), (x, y0), (min(w - 5, x + 14), y0), 1)
-                pygame.draw.line(surf, (*edge, 44), (min(w - 5, x + 14), y0), (min(w - 5, x + 14), y1), 1)
-                pygame.draw.rect(surf, (*glow, 58), (min(w - 8, x + 12), y1 - 2, 4, 4))
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+    ) -> pygame.Surface:
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf.fill((5, 9, 11, 246))
+
+        for _ in range(max(5, (w * h) // 950)):
+            px = rng.randint(0, max(0, w - 8))
+            py = rng.randint(0, max(0, h - 8))
+            pw = rng.randint(8, max(10, min(46, w - px)))
+            ph = rng.randint(6, max(8, min(34, h - py)))
+            rect = pygame.Rect(px, py, pw, ph)
+            pygame.draw.rect(surf, rng.choice(((2, 5, 7, 148), (10, 18, 20, 112), (15, 25, 25, 80))), rect)
+            if rng.random() < 0.22:
+                pygame.draw.rect(surf, (35, 90, 76, 32), rect, 1)
+
+        edge_step = 12
+        max_jitter = min(20, max(5, h // 4))
+        pts = []
+        for x in range(0, w + edge_step + 1, edge_step):
+            jitter = rng.randint(0, max_jitter)
+            y = h - jitter if side == "top" else jitter
+            pts.append((x, y))
+        if len(pts) >= 2:
+            pygame.draw.lines(surf, (0, 2, 3, 190), False, pts, 4)
+            pygame.draw.lines(surf, (38, 90, 78, 54), False, pts, 1)
+
+        for _ in range(max(3, w // 22)):
+            sx = rng.randint(2, max(2, w - 4))
+            if side == "top":
+                sy = rng.randint(max(0, h - max_jitter - 18), max(0, h - 3))
+                rect = pygame.Rect(sx, sy, rng.randint(1, 3), rng.randint(5, 18))
+            else:
+                sy = rng.randint(0, min(h - 3, max_jitter + 12))
+                rect = pygame.Rect(sx, sy, rng.randint(1, 3), rng.randint(5, 18))
+            pygame.draw.rect(surf, (0, 2, 3, 170), rect)
+
+        for _ in range(max(3, (w * h) // 1700)):
+            sx = rng.randint(3, max(3, w - 4))
+            sy = rng.randint(3, max(3, h - 4))
+            pygame.draw.rect(surf, (72, 178, 148, rng.randint(18, 42)), (sx, sy, rng.randint(1, 3), 1))
+
+        if destructible:
+            damage = max(0.0, min(1.0, damage_ratio))
+            for _ in range(3 + int(damage * 6)):
+                x = rng.randint(5, max(5, w - 6))
+                y = rng.randint(6, max(6, h - 7))
+                pts2 = [(x, y)]
+                for _step in range(rng.randint(2, 4)):
+                    x += rng.randint(-10, 10)
+                    y += rng.randint(-8, 8)
+                    pts2.append((max(2, min(w - 3, x)), max(3, min(h - 4, y))))
+                pygame.draw.lines(surf, (76, 146, 122, 88), False, pts2, 1)
             for _ in range(max(1, (w * h) // 5200)):
-                yy = rng.randint(6, max(6, h - 7))
-                pygame.draw.rect(surf, (116, 240, 190, 38), (0, yy, w, 2))
-        elif theme == "fortress":
-            seam_col = tuple(max(0, c - 18) for c in dark)
-            hi_col = tuple(min(255, c + 18) for c in edge)
-            for x in range(0, w, 28):
-                pygame.draw.line(surf, (*seam_col, 96), (x, 3), (x, h - 4), 1)
-            for y in range(14 + (index % 2) * 8, h, 30):
-                pygame.draw.line(surf, (*hi_col, 46), (4, y), (w - 5, y), 1)
-            for _ in range(max(2, (w * h) // 2300)):
-                sx = rng.randint(8, max(8, w - 9))
+                sx = rng.randint(5, max(5, w - 6))
                 sy = rng.randint(8, max(8, h - 9))
-                pygame.draw.circle(surf, (*hi_col, 88), (sx, sy), 2)
-                pygame.draw.circle(surf, (*seam_col, 72), (sx + 1, sy + 1), 2)
-            if h > 34 and index % 5 == 0:
-                stripe_y = 8 if side == "bottom" else max(6, h - 18)
-                for x in range(-10, w, 16):
-                    pygame.draw.line(surf, (220, 175, 70, 70), (x, stripe_y + 10), (x + 10, stripe_y), 2)
-        elif theme == "shogi_void":
-            board_col = (174, 136, 94, 24)
-            shadow_col = tuple(max(0, c - 4) for c in base)
-            for x in range((index * 7) % 46, w, 46):
-                pygame.draw.line(surf, (*shadow_col, 18), (x, 4), (x, h - 5), 1)
-                pygame.draw.line(surf, board_col, (x + 1, 4), (x + 1, h - 5), 1)
-            for y in range((index * 5) % 42, h, 42):
-                pygame.draw.line(surf, (*shadow_col, 16), (4, y), (w - 5, y), 1)
-                pygame.draw.line(surf, board_col, (4, y + 1), (w - 5, y + 1), 1)
-            for _ in range(max(1, (w * h) // 3600)):
-                sx = rng.randint(8, max(8, w - 9))
-                sy = rng.randint(8, max(8, h - 9))
-                pts = [(sx, sy)]
-                for _step in range(3):
-                    sx += rng.randint(-12, 12)
-                    sy += rng.randint(-10, 10)
-                    pts.append((max(3, min(w - 4, sx)), max(3, min(h - 4, sy))))
-                pygame.draw.lines(surf, (190, 154, 104, 62), False, pts, 1)
+                pygame.draw.circle(surf, (128, 72, 108, 112), (sx, sy), rng.randint(2, 4))
+
+        return surf
 
     @property
     def surface_y(self) -> float:
