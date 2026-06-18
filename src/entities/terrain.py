@@ -120,8 +120,8 @@ class Terrain(pygame.sprite.Sprite):
     ) -> pygame.Surface:
         rng = random.Random((w * 61001) ^ (h * 97003) ^ 0xDADA)
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        surf.fill((6, 10, 12, 242))
-        pygame.draw.rect(surf, (1, 3, 5, 190), (0, 0, w, h), 2)
+        surf.fill((2, 5, 7, 252))
+        pygame.draw.rect(surf, (0, 1, 2, 230), (0, 0, w, h), 2)
 
         panel_count = max(4, (w * h) // 1200)
         for _ in range(panel_count):
@@ -130,15 +130,15 @@ class Terrain(pygame.sprite.Sprite):
             pw = rng.randint(8, max(10, min(42, w - px)))
             ph = rng.randint(5, max(7, min(28, h - py)))
             panel = pygame.Rect(px, py, pw, ph)
-            col = rng.choice(((9, 18, 20, 118), (13, 25, 26, 96), (2, 6, 8, 142)))
+            col = rng.choice(((4, 10, 12, 112), (8, 15, 16, 88), (1, 4, 6, 132)))
             pygame.draw.rect(surf, col, panel)
-            if rng.random() < 0.35:
-                pygame.draw.rect(surf, (34, 92, 78, 38), panel, 1)
+            if rng.random() < 0.22:
+                pygame.draw.rect(surf, (26, 70, 60, 28), panel, 1)
 
-        for _ in range(max(3, (w * h) // 1700)):
+        for _ in range(max(2, (w * h) // 2600)):
             sx = rng.randint(5, max(5, w - 6))
             sy = rng.randint(5, max(5, h - 6))
-            pygame.draw.rect(surf, (82, 210, 168, rng.randint(32, 70)), (sx, sy, rng.randint(1, 3), 1))
+            pygame.draw.rect(surf, (74, 180, 146, rng.randint(18, 38)), (sx, sy, rng.randint(1, 3), 1))
 
         for _ in range(max(2, w // 32)):
             x = rng.randint(2, max(2, w - 4))
@@ -570,17 +570,17 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         damage_ratio: float = 0.0,
     ) -> pygame.Surface:
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        surf.fill((5, 9, 11, 246))
+        surf.fill((1, 4, 6, 254))
 
-        for _ in range(max(5, (w * h) // 950)):
+        for _ in range(max(4, (w * h) // 1250)):
             px = rng.randint(0, max(0, w - 8))
             py = rng.randint(0, max(0, h - 8))
             pw = rng.randint(8, max(10, min(46, w - px)))
             ph = rng.randint(6, max(8, min(34, h - py)))
             rect = pygame.Rect(px, py, pw, ph)
-            pygame.draw.rect(surf, rng.choice(((2, 5, 7, 148), (10, 18, 20, 112), (15, 25, 25, 80))), rect)
-            if rng.random() < 0.22:
-                pygame.draw.rect(surf, (35, 90, 76, 32), rect, 1)
+            pygame.draw.rect(surf, rng.choice(((0, 2, 4, 164), (5, 10, 12, 118), (11, 18, 18, 72))), rect)
+            if rng.random() < 0.16:
+                pygame.draw.rect(surf, (28, 72, 62, 26), rect, 1)
 
         edge_step = 12
         max_jitter = min(20, max(5, h // 4))
@@ -590,8 +590,8 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             y = h - jitter if side == "top" else jitter
             pts.append((x, y))
         if len(pts) >= 2:
-            pygame.draw.lines(surf, (0, 2, 3, 190), False, pts, 4)
-            pygame.draw.lines(surf, (38, 90, 78, 54), False, pts, 1)
+            pygame.draw.lines(surf, (0, 1, 2, 240), False, pts, 6)
+            pygame.draw.lines(surf, (38, 92, 78, 62), False, pts, 1)
 
         for _ in range(max(3, w // 22)):
             sx = rng.randint(2, max(2, w - 4))
@@ -603,10 +603,10 @@ class TerrainStripSegment(pygame.sprite.Sprite):
                 rect = pygame.Rect(sx, sy, rng.randint(1, 3), rng.randint(5, 18))
             pygame.draw.rect(surf, (0, 2, 3, 170), rect)
 
-        for _ in range(max(3, (w * h) // 1700)):
+        for _ in range(max(2, (w * h) // 2600)):
             sx = rng.randint(3, max(3, w - 4))
             sy = rng.randint(3, max(3, h - 4))
-            pygame.draw.rect(surf, (72, 178, 148, rng.randint(18, 42)), (sx, sy, rng.randint(1, 3), 1))
+            pygame.draw.rect(surf, (70, 172, 140, rng.randint(14, 32)), (sx, sy, rng.randint(1, 3), 1))
 
         if destructible:
             damage = max(0.0, min(1.0, damage_ratio))

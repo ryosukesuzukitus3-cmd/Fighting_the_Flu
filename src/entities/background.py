@@ -281,7 +281,12 @@ class ScrollingBackground:
         for x in range(-offset, SCREEN_WIDTH, width):
             screen.blit(bg, (x, 0))
         veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        veil.fill((0, 10, 10, 18))
+        veil.fill((0, 11, 12, 34))
+        for y in range(SCREEN_HEIGHT):
+            edge = abs(y - SCREEN_HEIGHT // 2) / (SCREEN_HEIGHT // 2)
+            alpha = int(18 * edge)
+            if alpha:
+                pygame.draw.line(veil, (0, 0, 0, alpha), (0, y), (SCREEN_WIDTH, y), 1)
         screen.blit(veil, (0, 0))
 
     def _load_stage2_backdrop(self) -> pygame.Surface | None:
