@@ -303,21 +303,24 @@ class BlackholeScene(Scene):
         if not self._pages:
             return
         pg = self._cur()
-        # 他シーンと同じ会話パネル（V2）に統一。立ち絵は左右割り当て、ノイズ演出は維持。
-        from src.scenes.dialogue_panel import DARK_STYLE, draw_story_panel
+        # 戦闘中と同じコンバットパネルに統一（フィールド演出と地続きにする）。
+        # 顔アイコンは出すが、渦を隠す大型の立ち絵は使わない。ノイズ演出は維持。
+        from src.scenes.dialogue_panel import (
+            COMBAT_BLUE_STYLE,
+            COMBAT_PANEL_RECT,
+            draw_combat_panel,
+        )
         noisy = pg.speaker == KARONARU and self._noise_level > 0.1
         transform = (lambda s: self._noisy_text(s, self._noise_level)) if noisy else None
-        # ブラックホールの渦が隠れないよう立ち絵は出さない（パネルのみ統一）
-        draw_story_panel(
+        draw_combat_panel(
             screen, self.game.resources, pg.speaker, pg.lines,
-            chars=int(self._chars), complete=self._is_text_complete(),
-            show_portrait=False, style=DARK_STYLE,
+            style=COMBAT_BLUE_STYLE, chars=int(self._chars),
+            complete=self._is_text_complete(),
             text_transform=transform,
             text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
         )
         if self._noise_level > 0.03:
-            panel = pygame.Rect(40, SCREEN_HEIGHT - 210, SCREEN_WIDTH - 80, 176)
-            self._draw_signal_noise(screen, panel)
+            self._draw_signal_noise(screen, COMBAT_PANEL_RECT)
 
     def _draw_signal_noise(self, screen: pygame.Surface, rect: pygame.Rect) -> None:
         noise = max(0.0, min(1.0, self._noise_level))
