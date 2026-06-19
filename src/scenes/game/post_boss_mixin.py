@@ -75,6 +75,13 @@ class GameScenePostBossMixin:
             # ── セリフ終了後: プレイヤー操作・アイテム取得を解放 ────────────
             self.player.update(dt)  # type: ignore[attr-defined]   # プレイヤーはスローなし
 
+            # 先輩も追従させる（右端へ歩くあいだ置いてけぼりにしない）
+            if self._companion:  # type: ignore[attr-defined]
+                self._companion.update(  # type: ignore[attr-defined]
+                    dt, self.player, self.player_bullets, self.camera,  # type: ignore[attr-defined]
+                    self.enemies, self.enemy_bullets, self.terrain,  # type: ignore[attr-defined]
+                )
+
             # 試し撃ち（ポストボスフェーズ）
             if self.player.shoot_requested:  # type: ignore[attr-defined]
                 wx, wy = self.player.muzzle_world(self.camera)  # type: ignore[attr-defined]
@@ -137,15 +144,42 @@ class GameScenePostBossMixin:
             item.rect.center = (int(sx), int(item.world_y))
 
     def _draw_post_boss_hint(self, screen: pygame.Surface) -> None:
-        """ボス撃破後: 右端移動ガイダンスを点滅表示する（ラスボス後は非表示）"""
+        """ボス撃破後: 画面右端に「NEXT STAGE →」の誘導を表示する（ラスボス後は非表示）。
+
+        従来の上部中央テキストは廃止。右端で波打つ矢印が「右へ進め」を直感的に示す。
+        撃破後セリフ（遅延待ち・表示中）のあいだは出さず、会話が終わってから表示する。
+        """
         if self._post_boss_next_id is None:  # type: ignore[attr-defined]
             return
+        # 撃破後セリフが終わるまでは誘導を隠す（プレイヤーが動けるのもこの後）
+        if self._defeat_dialogue_delay > 0 or self._defeat_dialogue_active:  # type: ignore[attr-defined]
+            return
 
-        font = self.game.resources.pixelfont(26)  # type: ignore[attr-defined]
-        if int(self._hint_blink * 2) % 2 == 0:  # type: ignore[attr-defined]
-            hint = font.render("→  右端へ移動で次のステージへ  →", True, (100, 255, 150))
-            screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 30))
+        t  = self._hint_blink  # type: ignore[attr-defined]
+        cy = SCREEN_HEIGHT // 2
 
+        # ── 右端の誘導矢印（3連シェブロンが右へ流れる）──────────────
+        dim    = (40, 92, 62)
+        bright = (120, 255, 165)
+        tri_w, tri_h, gap, n = 15, 24, 19, 3
+        tip_right = SCREEN_WIDTH - 18          # 一番右の矢印先端の x
+        for i in range(n):
+            level = 0.5 + 0.5 * math.sin(t * 4.0 - i * 0.9)   # 右へ流れる輝度波
+            col = tuple(int(d + (b - d) * level) for d, b in zip(dim, bright))
+            left_x = tip_right - tri_w - (n - 1 - i) * gap
+            top    = cy - tri_h // 2
+            pygame.draw.polygon(
+                screen, col,
+                [(left_x, top), (left_x, top + tri_h), (left_x + tri_w, cy)],
+            )
+
+        # ── "NEXT STAGE" ラベル（矢印の左・上下中央）──────────────────
+        font  = self.game.resources.pixelfont(24)  # type: ignore[attr-defined]
+        label = font.render("NEXT STAGE", True, (180, 240, 200))
+        lx = tip_right - tri_w - (n - 1) * gap - 14 - label.get_width()
+        screen.blit(label, (lx, cy - label.get_height() // 2))
+
+        # ── 自動遷移カウントダウン（右下・据え置き）──────────────────
         remaining = max(0, int(POST_BOSS_AUTO_TIMEOUT - self._post_boss_timer))  # type: ignore[attr-defined]
         count = self.game.resources.pixelfont(20).render(  # type: ignore[attr-defined]
             f"自動遷移まで: {remaining}秒", True, (150, 150, 150)
