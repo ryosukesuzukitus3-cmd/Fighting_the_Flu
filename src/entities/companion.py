@@ -137,6 +137,7 @@ class Karonaru(pygame.sprite.Sprite):
         enemies: pygame.sprite.Group,
         enemy_bullets: pygame.sprite.Group | None = None,
         terrain: pygame.sprite.Group | None = None,
+        can_fire: bool = True,
     ) -> None:
         if self._state == "retired":
             self._return_timer -= dt
@@ -173,8 +174,9 @@ class Karonaru(pygame.sprite.Sprite):
             self._blink_visible = True
 
         # ショット（連射間隔は解熱弾Lvで短縮）
+        # ボス出現演出中（alert/entering）は自機と同様に射撃を止める。
         self._shoot_cooldown = max(0.0, self._shoot_cooldown - dt)
-        if getattr(player, "fire_held", False) and self._shoot_cooldown <= 0.0:
+        if can_fire and getattr(player, "fire_held", False) and self._shoot_cooldown <= 0.0:
             self._fire(player_bullets, camera)
             self._shoot_cooldown = self._shoot_interval()
 

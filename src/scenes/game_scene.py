@@ -381,7 +381,8 @@ class GameScene(
             self.player.update(dt)
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera,
-                                   self.enemies, self.enemy_bullets, self.terrain)
+                                   self.enemies, self.enemy_bullets, self.terrain,
+                                   can_fire=self._boss_intro_state in ("", "fighting"))
 
         if self._stage_banner_timer <= 0 and self._boss_intro_state == "":
             self.spawner.update(dt, self.camera)
