@@ -183,20 +183,6 @@ class Terrain(pygame.sprite.Sprite):
         seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
         rng = random.Random(seed)
         surf = _stage3_material_surface(w, h, seed=seed, role="block")
-        pygame.draw.rect(surf, (0, 1, 2), (0, 0, w, h), 3)
-        pygame.draw.rect(surf, (82, 95, 94), (3, 3, max(0, w - 6), max(0, h - 6)), 1)
-
-        inset = 8
-        if w > inset * 2 and h > inset * 2:
-            pygame.draw.line(surf, (8, 12, 14), (inset, inset), (w - inset, inset), 2)
-            pygame.draw.line(surf, (42, 53, 52), (inset, h - inset), (w - inset, h - inset), 1)
-
-        seam_count = max(1, w // 96)
-        for _ in range(seam_count):
-            x = rng.randint(8, max(8, w - 9))
-            pygame.draw.line(surf, (3, 5, 7), (x, 5), (x, h - 6), 1)
-            if rng.random() < 0.55:
-                pygame.draw.line(surf, (70, 82, 80), (min(w - 1, x + 1), 8), (min(w - 1, x + 1), h - 9), 1)
 
         light_count = max(1, (w * h) // 8200)
         for _ in range(light_count):
@@ -703,33 +689,18 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         cap.fill((0, 2, 4, 118))
         if side == "top":
             surf.blit(cap, (0, 0))
-            pygame.draw.rect(surf, (3, 6, 8), (0, cap_h, w, 2))
         else:
             surf.blit(cap, (0, max(0, h - cap_h)))
-            pygame.draw.rect(surf, (3, 6, 8), (0, max(0, h - cap_h - 2), w, 2))
 
-        edge_step = 28
-        max_jitter = min(9, max(4, h // 6))
-        pts = []
-        for x in range(0, w + edge_step + 1, edge_step):
-            jitter = rng.randint(0, max_jitter)
-            y = h - jitter if side == "top" else jitter
-            pts.append((x, y))
-        if len(pts) >= 2:
-            pygame.draw.lines(surf, (0, 1, 2), False, pts, 4)
-            pygame.draw.lines(surf, (72, 84, 82), False, pts, 1)
-            if index % 3 == 0:
-                pygame.draw.lines(surf, (124, 68, 92), False, pts, 1)
-
-        for _ in range(max(2, w // 42)):
-            sx = rng.randint(3, max(3, w - 4))
-            if side == "top":
-                sy = rng.randint(max(0, h - max_jitter - 18), max(0, h - 3))
-                rect = pygame.Rect(sx, sy, rng.randint(2, 4), rng.randint(6, 20))
-            else:
-                sy = rng.randint(0, min(h - 3, max_jitter + 12))
-                rect = pygame.Rect(sx, sy, rng.randint(2, 4), rng.randint(6, 20))
-            pygame.draw.rect(surf, (2, 3, 5), rect)
+        shadow_h = min(18, max(8, h // 5))
+        shadow = pygame.Surface((w, shadow_h), pygame.SRCALPHA)
+        for sy in range(shadow_h):
+            alpha = int(38 * (1.0 - sy / shadow_h))
+            shadow.fill((0, 0, 0, alpha), rect=(0, sy, w, 1))
+        if side == "top":
+            surf.blit(pygame.transform.flip(shadow, False, True), (0, max(0, h - shadow_h)))
+        else:
+            surf.blit(shadow, (0, 0))
 
         for _ in range(max(1, (w * h) // 5200)):
             sx = rng.randint(4, max(4, w - 5))
