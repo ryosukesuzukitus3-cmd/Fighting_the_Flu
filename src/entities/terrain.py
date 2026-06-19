@@ -6,6 +6,7 @@
 from __future__ import annotations
 import math
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_HEIGHT
@@ -22,6 +23,59 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "fortress_block": ((42, 49, 55), (86, 96, 102)),
     "clot":   ((126, 24, 34), (230, 82, 76)),
 }
+_STAGE3_TERRAIN_SHEET_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_fortress_terrain_sheet.png"
+_STAGE3_TERRAIN_SHEET: pygame.Surface | None = None
+
+
+def _load_stage3_terrain_sheet() -> pygame.Surface | None:
+    global _STAGE3_TERRAIN_SHEET
+    if _STAGE3_TERRAIN_SHEET is not None:
+        return _STAGE3_TERRAIN_SHEET
+    try:
+        _STAGE3_TERRAIN_SHEET = pygame.image.load(_STAGE3_TERRAIN_SHEET_PATH)
+    except (FileNotFoundError, pygame.error):
+        return None
+    return _STAGE3_TERRAIN_SHEET
+
+
+def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.Surface:
+    sheet = _load_stage3_terrain_sheet()
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    surf.fill((12, 15, 18))
+    if sheet is None:
+        return surf
+
+    sw, sh = sheet.get_size()
+    bands = {
+        "strip": ((0.02, 0.17), (0.18, 0.48), (0.50, 0.74), (0.75, 0.97)),
+        "block": ((0.18, 0.48), (0.50, 0.74), (0.75, 0.97)),
+    }.get(role, ((0.18, 0.48),))
+    rng = random.Random(seed)
+    tile_w = max(36, min(148, w))
+    tile_h = max(40, min(128, h))
+
+    for dy in range(0, h, tile_h):
+        dh = min(tile_h, h - dy)
+        band_start, band_end = bands[(dy // tile_h + seed) % len(bands)]
+        y0 = int(sh * band_start)
+        band_h = max(1, int(sh * (band_end - band_start)))
+        for dx in range(0, w, tile_w):
+            dw = min(tile_w, w - dx)
+            src_w = min(sw, max(80, dw * 3))
+            src_h = min(band_h, max(80, dh * 3))
+            span_x = max(1, sw - src_w)
+            span_y = max(1, band_h - src_h)
+            sx = (seed * 37 + dx * 5 + rng.randint(0, span_x - 1)) % span_x
+            sy = y0 + ((seed * 17 + dy * 3 + rng.randint(0, span_y - 1)) % span_y)
+            tile = sheet.subsurface(pygame.Rect(sx, sy, src_w, src_h)).copy()
+            if tile.get_size() != (dw, dh):
+                tile = pygame.transform.smoothscale(tile, (dw, dh))
+            surf.blit(tile, (dx, dy))
+
+    veil = pygame.Surface((w, h), pygame.SRCALPHA)
+    veil.fill((0, 0, 0, 34 if role == "strip" else 22))
+    surf.blit(veil, (0, 0))
+    return surf
 
 
 class Terrain(pygame.sprite.Sprite):
@@ -126,31 +180,31 @@ class Terrain(pygame.sprite.Sprite):
         damage_ratio: float = 0.0,
         fixed_drop: str | None = None,
     ) -> pygame.Surface:
-        rng = random.Random((w * 33013) ^ (h * 77041) ^ 0xF077)
-        surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        surf.fill((18, 22, 25))
-        pygame.draw.rect(surf, (1, 2, 3), (0, 0, w, h), 3)
-        pygame.draw.rect(surf, (72, 82, 84), (3, 3, max(0, w - 6), max(0, h - 6)), 1)
+        seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
+        rng = random.Random(seed)
+        surf = _stage3_material_surface(w, h, seed=seed, role="block")
+        pygame.draw.rect(surf, (0, 1, 2), (0, 0, w, h), 3)
+        pygame.draw.rect(surf, (82, 95, 94), (3, 3, max(0, w - 6), max(0, h - 6)), 1)
 
-        for _ in range(max(4, (w * h) // 1500)):
-            px = rng.randint(3, max(3, w - 12))
-            py = rng.randint(3, max(3, h - 12))
-            pw = rng.randint(10, max(12, min(46, w - px)))
-            ph = rng.randint(8, max(10, min(32, h - py)))
-            panel = pygame.Rect(px, py, pw, ph)
-            pygame.draw.rect(surf, rng.choice(((12, 16, 19), (25, 30, 33), (38, 42, 42))), panel)
-            if rng.random() < 0.34:
-                pygame.draw.rect(surf, (82, 94, 94), panel, 1)
+        inset = 8
+        if w > inset * 2 and h > inset * 2:
+            pygame.draw.line(surf, (8, 12, 14), (inset, inset), (w - inset, inset), 2)
+            pygame.draw.line(surf, (42, 53, 52), (inset, h - inset), (w - inset, h - inset), 1)
 
-        for _ in range(max(1, (w * h) // 5200)):
-            sx = rng.randint(5, max(5, w - 6))
-            sy = rng.randint(5, max(5, h - 6))
-            pygame.draw.rect(surf, (174, 78, 106), (sx, sy, rng.randint(2, 5), rng.randint(2, 5)))
+        seam_count = max(1, w // 96)
+        for _ in range(seam_count):
+            x = rng.randint(8, max(8, w - 9))
+            pygame.draw.line(surf, (3, 5, 7), (x, 5), (x, h - 6), 1)
+            if rng.random() < 0.55:
+                pygame.draw.line(surf, (70, 82, 80), (min(w - 1, x + 1), 8), (min(w - 1, x + 1), h - 9), 1)
 
-        for _ in range(max(2, w // 58)):
-            x = rng.randint(4, max(4, w - 5))
-            pygame.draw.line(surf, (4, 6, 8), (x, 0), (x, h), 1)
-            pygame.draw.line(surf, (70, 78, 80), (min(w - 1, x + 1), 0), (min(w - 1, x + 1), h), 1)
+        light_count = max(1, (w * h) // 8200)
+        for _ in range(light_count):
+            sx = rng.randint(8, max(8, w - 10))
+            sy = rng.randint(8, max(8, h - 10))
+            pygame.draw.rect(surf, (174, 78, 108), (sx, sy, rng.randint(2, 4), rng.randint(1, 3)))
+            if rng.random() < 0.45:
+                pygame.draw.rect(surf, (80, 210, 170), (max(0, sx - 4), sy + 1, rng.randint(1, 3), 1))
 
         if destructible:
             damage = max(0.0, min(1.0, damage_ratio))
@@ -641,26 +695,18 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         destructible: bool = False,
         damage_ratio: float = 0.0,
     ) -> pygame.Surface:
-        surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        surf.fill((10, 13, 16))
+        seed = (index * 1009) ^ (w * 37) ^ (h * 131) ^ (0x71 if side == "top" else 0xE3)
+        surf = _stage3_material_surface(w, h, seed=seed, role="strip")
 
         cap_h = max(8, min(24, h // 4))
+        cap = pygame.Surface((w, cap_h), pygame.SRCALPHA)
+        cap.fill((0, 2, 4, 118))
         if side == "top":
-            pygame.draw.rect(surf, (1, 2, 4), (0, 0, w, cap_h))
-            pygame.draw.rect(surf, (24, 29, 33), (0, cap_h, w, max(2, h - cap_h)))
+            surf.blit(cap, (0, 0))
+            pygame.draw.rect(surf, (3, 6, 8), (0, cap_h, w, 2))
         else:
-            pygame.draw.rect(surf, (24, 29, 33), (0, 0, w, max(2, h - cap_h)))
-            pygame.draw.rect(surf, (1, 2, 4), (0, max(0, h - cap_h), w, cap_h))
-
-        for _ in range(max(4, (w * h) // 1150)):
-            px = rng.randint(0, max(0, w - 8))
-            py = rng.randint(0, max(0, h - 8))
-            pw = rng.randint(10, max(12, min(54, w - px)))
-            ph = rng.randint(7, max(9, min(34, h - py)))
-            rect = pygame.Rect(px, py, pw, ph)
-            pygame.draw.rect(surf, rng.choice(((11, 15, 18), (26, 31, 35), (42, 46, 46))), rect)
-            if rng.random() < 0.24:
-                pygame.draw.rect(surf, (78, 90, 88), rect, 1)
+            surf.blit(cap, (0, max(0, h - cap_h)))
+            pygame.draw.rect(surf, (3, 6, 8), (0, max(0, h - cap_h - 2), w, 2))
 
         edge_step = 28
         max_jitter = min(9, max(4, h // 6))
@@ -685,10 +731,10 @@ class TerrainStripSegment(pygame.sprite.Sprite):
                 rect = pygame.Rect(sx, sy, rng.randint(2, 4), rng.randint(6, 20))
             pygame.draw.rect(surf, (2, 3, 5), rect)
 
-        for _ in range(max(1, (w * h) // 3600)):
+        for _ in range(max(1, (w * h) // 5200)):
             sx = rng.randint(4, max(4, w - 5))
             sy = rng.randint(4, max(4, h - 5))
-            pygame.draw.rect(surf, (184, 78, 108), (sx, sy, rng.randint(2, 5), rng.randint(2, 5)))
+            pygame.draw.rect(surf, (184, 78, 108), (sx, sy, rng.randint(2, 4), rng.randint(1, 3)))
 
         if destructible:
             damage = max(0.0, min(1.0, damage_ratio))
