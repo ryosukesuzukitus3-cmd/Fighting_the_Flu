@@ -1300,6 +1300,53 @@ def test_companion_shoots_only_while_player_fires() -> None:
     assert 'getattr(player, "fire_held", False)' in companion_src
 
 
+def test_companion_holds_fire_during_boss_intro() -> None:
+    """ボス出現演出中（alert/entering）は先輩も射撃しない。
+
+    自機弾は game_scene 側で `_boss_intro_state in ("", "fighting")` のときだけ
+    生成されるため、先輩も同じゲートを共有しないと演出中だけ撃ててしまう。
+    """
+    from src.entities.companion import Karonaru
+
+    class SoundStub:
+        def play_se_alias(self, *_a, **_k) -> None:
+            pass
+
+    class GameStub:
+        sound = SoundStub()
+
+    class WeaponStub:
+        speed_multiplier = 1.0
+
+    class PlayerStub:
+        rect = pygame.Rect(400, 300, 24, 32)
+        weapon = WeaponStub()
+        fire_held = True
+
+    class CameraStub:
+        x = 0.0
+
+    companion = Karonaru(GameStub())
+    player = PlayerStub()
+    camera = CameraStub()
+    bullets = pygame.sprite.Group()
+    empty = pygame.sprite.Group()
+
+    # クールダウンを使い切った直後でも、演出中は撃たない。
+    companion._shoot_cooldown = 0.0
+    companion.update(0.016, player, bullets, camera, empty, empty, None, can_fire=False)
+    assert len(bullets) == 0
+
+    # 戦闘中（can_fire=True）なら同じ条件で撃つ。
+    companion._shoot_cooldown = 0.0
+    companion.update(0.016, player, bullets, camera, empty, empty, None, can_fire=True)
+    assert len(bullets) >= 1
+
+    # game_scene は自機弾と同じゲートを先輩へ渡す。
+    scene_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    assert 'can_fire=self._boss_intro_state in ("", "fighting")' in scene_src
+
+
 def test_boss_kill_clears_mid_dialogue_queue() -> None:
     src = (ROOT / "src" / "scenes" / "game" / "post_boss_mixin.py").read_text(encoding="utf-8")
     assert "self._boss_dialogue_timer = 0.0" in src
