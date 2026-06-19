@@ -115,6 +115,7 @@ py -3 -m venv .venv
 | `game` | ゲーム起動 |
 | `capture` | 任意状態のヘッドレス画面キャプチャ |
 | `preview-boss` | ボス弾幕プレビュー |
+| `stage3-rect-preview` | Stage3 地形素材 rect の全体/グループ別プレビュー画像を生成 |
 | `balance` | バランスシート出力 |
 | `pr-media` / `pr-html` / `pr-report` | PR 用に画像/HTML/レポートを `media` ブランチへ上げて貼り付けリンクを出力 |
 
