@@ -6,6 +6,7 @@ import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 
 _STAGE2_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage2_cyber_static_bg.png"
+_STAGE3_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
 
 
 class _StarLayer:
@@ -56,6 +57,7 @@ class ScrollingBackground:
         self._stage1_membranes: list = []
         self._stage2_fragments: list = []
         self._stage2_bg: pygame.Surface | None = None
+        self._stage3_bg: pygame.Surface | None = None
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -107,11 +109,12 @@ class ScrollingBackground:
                 for _ in range(26)
             ]
         elif sid == 3:
-            # 婚活UIカード矩形（x, y, w, h, 速度）
+            # Floating review panels and small approval lamps in the far layer.
             self._cells = [
-                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(30, SCREEN_HEIGHT - 90),
-                 rnd.uniform(70, 130), rnd.uniform(40, 64), rnd.uniform(0.12, 0.3))
-                for _ in range(8)
+                (rnd.uniform(0, SCREEN_WIDTH), rnd.uniform(36, SCREEN_HEIGHT - 116),
+                 rnd.uniform(42, 104), rnd.uniform(22, 54), rnd.uniform(0.07, 0.20),
+                 rnd.uniform(0, 6.28), rnd.random() < 0.42)
+                for _ in range(14)
             ]
         elif sid == 4:
             # 駒グリフ（x, y, 速度, 文字）
@@ -307,16 +310,58 @@ class ScrollingBackground:
 
     # ── Stage3 婚活・労働（UIカード）───────────────────────────
     def _draw_konkatsu(self, screen: pygame.Surface, camera_x: float) -> None:
-        for (cx, cy, w, h, sf) in self._cells:
+        t = self._time
+        self._draw_stage3_concept_backdrop(screen, camera_x)
+        for (cx, cy, w, h, sf, ph, lamp) in self._cells:
             x = (cx - camera_x * sf) % (SCREEN_WIDTH + 160) - 80
-            card = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
-            card.fill((40, 60, 90, 45))
-            pygame.draw.rect(card, (90, 130, 180, 70), (0, 0, int(w), int(h)), 1, border_radius=4)
-            # アバター丸＋行
-            pygame.draw.circle(card, (110, 150, 200, 70), (12, int(h // 2)), 7)
-            pygame.draw.rect(card, (90, 130, 180, 55), (26, int(h * 0.3), int(w - 36), 4))
-            pygame.draw.rect(card, (70, 100, 150, 45), (26, int(h * 0.6), int(w - 52), 4))
-            screen.blit(card, (int(x), int(cy)))
+            y = cy + math.sin(t * 0.28 + ph) * 4
+            panel = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            panel.fill((22, 30, 36, 34))
+            pygame.draw.rect(panel, (132, 152, 160, 42), panel.get_rect(), 1, border_radius=2)
+            for yy in range(6, int(h) - 5, 7):
+                pygame.draw.line(panel, (176, 190, 184, 18), (7, yy), (int(w) - 9, yy), 1)
+            if lamp:
+                pulse = int(46 + 28 * (0.5 + 0.5 * math.sin(t * 1.7 + ph)))
+                pygame.draw.rect(panel, (214, 118, 142, pulse), (int(w) - 14, 5, 5, 5))
+            screen.blit(panel, (int(x), int(y)))
+
+        haze = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for y in range(0, SCREEN_HEIGHT, 3):
+            pygame.draw.line(haze, (190, 214, 210, 5), (0, y), (SCREEN_WIDTH, y), 1)
+        screen.blit(haze, (0, 0))
+
+    def _draw_stage3_concept_backdrop(self, screen: pygame.Surface, camera_x: float) -> None:
+        bg = self._load_stage3_backdrop()
+        if bg is None:
+            return
+        width = bg.get_width()
+        offset = int(camera_x * 0.08) % width
+        for x in range(-offset, SCREEN_WIDTH, width):
+            screen.blit(bg, (x, 0))
+        veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        veil.fill((8, 12, 14, 30))
+        for y in range(SCREEN_HEIGHT):
+            edge = abs(y - SCREEN_HEIGHT // 2) / (SCREEN_HEIGHT // 2)
+            alpha = int(16 * edge)
+            if alpha:
+                pygame.draw.line(veil, (0, 0, 0, alpha), (0, y), (SCREEN_WIDTH, y), 1)
+        screen.blit(veil, (0, 0))
+
+    def _load_stage3_backdrop(self) -> pygame.Surface | None:
+        if self._stage3_bg is not None:
+            return self._stage3_bg
+        try:
+            raw = pygame.image.load(_STAGE3_BG_PATH)
+        except (FileNotFoundError, pygame.error):
+            return None
+        if raw.get_height() != SCREEN_HEIGHT:
+            scale = SCREEN_HEIGHT / raw.get_height()
+            raw = pygame.transform.smoothscale(
+                raw,
+                (max(SCREEN_WIDTH, int(raw.get_width() * scale)), SCREEN_HEIGHT),
+            )
+        self._stage3_bg = raw
+        return self._stage3_bg
 
     # ── Stage4 棋理深淵（将棋盤・駒）───────────────────────────
     def _draw_shogi(self, screen: pygame.Surface, camera_x: float) -> None:

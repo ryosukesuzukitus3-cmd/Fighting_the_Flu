@@ -6,6 +6,7 @@
 from __future__ import annotations
 import math
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_HEIGHT
@@ -19,8 +20,62 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "rock":   ((96, 78, 60),  (140, 116, 86)),    # 岩石
     "debris": ((84, 86, 96),  (130, 134, 150)),   # 宇宙デブリ
     "data_block": ((10, 16, 18), (38, 82, 70)),
+    "fortress_block": ((42, 49, 55), (86, 96, 102)),
     "clot":   ((126, 24, 34), (230, 82, 76)),
 }
+_STAGE3_TERRAIN_SHEET_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_fortress_terrain_sheet.png"
+_STAGE3_TERRAIN_SHEET: pygame.Surface | None = None
+
+
+def _load_stage3_terrain_sheet() -> pygame.Surface | None:
+    global _STAGE3_TERRAIN_SHEET
+    if _STAGE3_TERRAIN_SHEET is not None:
+        return _STAGE3_TERRAIN_SHEET
+    try:
+        _STAGE3_TERRAIN_SHEET = pygame.image.load(_STAGE3_TERRAIN_SHEET_PATH)
+    except (FileNotFoundError, pygame.error):
+        return None
+    return _STAGE3_TERRAIN_SHEET
+
+
+def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.Surface:
+    sheet = _load_stage3_terrain_sheet()
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    surf.fill((12, 15, 18))
+    if sheet is None:
+        return surf
+
+    sw, sh = sheet.get_size()
+    bands = {
+        "strip": ((0.02, 0.17), (0.18, 0.48), (0.50, 0.74), (0.75, 0.97)),
+        "block": ((0.18, 0.48), (0.50, 0.74), (0.75, 0.97)),
+    }.get(role, ((0.18, 0.48),))
+    rng = random.Random(seed)
+    tile_w = max(36, min(148, w))
+    tile_h = max(40, min(128, h))
+
+    for dy in range(0, h, tile_h):
+        dh = min(tile_h, h - dy)
+        band_start, band_end = bands[(dy // tile_h + seed) % len(bands)]
+        y0 = int(sh * band_start)
+        band_h = max(1, int(sh * (band_end - band_start)))
+        for dx in range(0, w, tile_w):
+            dw = min(tile_w, w - dx)
+            src_w = min(sw, max(80, dw * 3))
+            src_h = min(band_h, max(80, dh * 3))
+            span_x = max(1, sw - src_w)
+            span_y = max(1, band_h - src_h)
+            sx = (seed * 37 + dx * 5 + rng.randint(0, span_x - 1)) % span_x
+            sy = y0 + ((seed * 17 + dy * 3 + rng.randint(0, span_y - 1)) % span_y)
+            tile = sheet.subsurface(pygame.Rect(sx, sy, src_w, src_h)).copy()
+            if tile.get_size() != (dw, dh):
+                tile = pygame.transform.smoothscale(tile, (dw, dh))
+            surf.blit(tile, (dx, dy))
+
+    veil = pygame.Surface((w, h), pygame.SRCALPHA)
+    veil.fill((0, 0, 0, 34 if role == "strip" else 22))
+    surf.blit(veil, (0, 0))
+    return surf
 
 
 class Terrain(pygame.sprite.Sprite):
@@ -77,6 +132,13 @@ class Terrain(pygame.sprite.Sprite):
                 damage_ratio=damage_ratio,
                 fixed_drop=fixed_drop,
             )
+        if kind == "fortress_block":
+            return Terrain._make_fortress_block_surface(
+                w, h,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+                fixed_drop=fixed_drop,
+            )
 
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -106,6 +168,46 @@ class Terrain(pygame.sprite.Sprite):
                 sx = rng.randint(8, max(8, w - 9))
                 sy = rng.randint(12, max(12, h - 13))
                 pygame.draw.circle(surf, node_col, (sx, sy), rng.randint(3, 6))
+        Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
+        return surf
+
+    @staticmethod
+    def _make_fortress_block_surface(
+        w: int,
+        h: int,
+        *,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+        fixed_drop: str | None = None,
+    ) -> pygame.Surface:
+        seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
+        rng = random.Random(seed)
+        surf = _stage3_material_surface(w, h, seed=seed, role="block")
+
+        light_count = max(1, (w * h) // 8200)
+        for _ in range(light_count):
+            sx = rng.randint(8, max(8, w - 10))
+            sy = rng.randint(8, max(8, h - 10))
+            pygame.draw.rect(surf, (174, 78, 108), (sx, sy, rng.randint(2, 4), rng.randint(1, 3)))
+            if rng.random() < 0.45:
+                pygame.draw.rect(surf, (80, 210, 170), (max(0, sx - 4), sy + 1, rng.randint(1, 3), 1))
+
+        if destructible:
+            damage = max(0.0, min(1.0, damage_ratio))
+            for _ in range(4 + int(damage * 7)):
+                x = rng.randint(6, max(6, w - 7))
+                y = rng.randint(7, max(7, h - 8))
+                pts = [(x, y)]
+                for _step in range(rng.randint(2, 4)):
+                    x += rng.randint(-12, 12)
+                    y += rng.randint(-10, 10)
+                    pts.append((max(3, min(w - 4, x)), max(3, min(h - 4, y))))
+                pygame.draw.lines(surf, (190, 132, 104), False, pts, 1)
+            for _ in range(max(1, (w * h) // 6400)):
+                sx = rng.randint(7, max(7, w - 8))
+                sy = rng.randint(7, max(7, h - 8))
+                pygame.draw.circle(surf, (210, 96, 92), (sx, sy), rng.randint(2, 4))
+
         Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
         return surf
 
@@ -467,6 +569,16 @@ class TerrainStripSegment(pygame.sprite.Sprite):
                 destructible=destructible,
                 damage_ratio=damage_ratio,
             )
+        if theme == "fortress":
+            return TerrainStripSegment._make_fortress_surface(
+                w,
+                h,
+                side=side,
+                rng=rng,
+                index=index,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+            )
 
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         surf.fill(base)
@@ -555,6 +667,61 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             surf.blit(glow_surf, (0, max(0, edge_y - glow_h + 1)))
         else:
             surf.blit(pygame.transform.flip(glow_surf, False, True), (0, 0))
+
+        return surf
+
+    @staticmethod
+    def _make_fortress_surface(
+        w: int,
+        h: int,
+        *,
+        side: str,
+        rng: random.Random,
+        index: int,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+    ) -> pygame.Surface:
+        seed = (index * 1009) ^ (w * 37) ^ (h * 131) ^ (0x71 if side == "top" else 0xE3)
+        surf = _stage3_material_surface(w, h, seed=seed, role="strip")
+
+        cap_h = max(8, min(24, h // 4))
+        cap = pygame.Surface((w, cap_h), pygame.SRCALPHA)
+        cap.fill((0, 2, 4, 118))
+        if side == "top":
+            surf.blit(cap, (0, 0))
+        else:
+            surf.blit(cap, (0, max(0, h - cap_h)))
+
+        shadow_h = min(18, max(8, h // 5))
+        shadow = pygame.Surface((w, shadow_h), pygame.SRCALPHA)
+        for sy in range(shadow_h):
+            alpha = int(38 * (1.0 - sy / shadow_h))
+            shadow.fill((0, 0, 0, alpha), rect=(0, sy, w, 1))
+        if side == "top":
+            surf.blit(pygame.transform.flip(shadow, False, True), (0, max(0, h - shadow_h)))
+        else:
+            surf.blit(shadow, (0, 0))
+
+        for _ in range(max(1, (w * h) // 5200)):
+            sx = rng.randint(4, max(4, w - 5))
+            sy = rng.randint(4, max(4, h - 5))
+            pygame.draw.rect(surf, (184, 78, 108), (sx, sy, rng.randint(2, 4), rng.randint(1, 3)))
+
+        if destructible:
+            damage = max(0.0, min(1.0, damage_ratio))
+            for _ in range(3 + int(damage * 6)):
+                x = rng.randint(5, max(5, w - 6))
+                y = rng.randint(6, max(6, h - 7))
+                pts2 = [(x, y)]
+                for _step in range(rng.randint(2, 4)):
+                    x += rng.randint(-11, 11)
+                    y += rng.randint(-8, 8)
+                    pts2.append((max(2, min(w - 3, x)), max(3, min(h - 4, y))))
+                pygame.draw.lines(surf, (192, 136, 106), False, pts2, 1)
+            for _ in range(max(1, (w * h) // 5600)):
+                sx = rng.randint(5, max(5, w - 6))
+                sy = rng.randint(8, max(8, h - 9))
+                pygame.draw.circle(surf, (214, 98, 96), (sx, sy), rng.randint(2, 4))
 
         return surf
 
