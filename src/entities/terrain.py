@@ -25,6 +25,77 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
 }
 _STAGE3_TERRAIN_SHEET_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_fortress_terrain_sheet.png"
 _STAGE3_TERRAIN_SHEET: pygame.Surface | None = None
+_STAGE3_TERRAIN_PARTS: dict[str, tuple[tuple[int, int, int, int], ...]] = {
+    "strip_top": (
+        (14, 20, 149, 118),
+        (165, 55, 173, 82),
+        (400, 55, 147, 83),
+        (627, 20, 89, 118),
+        (772, 55, 120, 83),
+        (1092, 20, 90, 118),
+        (1517, 55, 178, 83),
+        (1698, 28, 57, 110),
+    ),
+    "strip_bottom": (
+        (14, 804, 154, 63),
+        (169, 804, 164, 63),
+        (334, 804, 198, 63),
+        (533, 804, 206, 63),
+        (740, 804, 170, 63),
+        (911, 804, 136, 63),
+        (1048, 804, 136, 63),
+        (1185, 804, 180, 63),
+        (1366, 804, 168, 63),
+        (1535, 804, 92, 63),
+        (1628, 804, 137, 63),
+    ),
+    "block_wide": (
+        (15, 434, 170, 131),
+        (192, 434, 96, 131),
+        (292, 434, 111, 131),
+        (406, 434, 137, 131),
+        (546, 434, 133, 131),
+        (15, 716, 98, 72),
+        (115, 716, 101, 72),
+        (219, 716, 102, 72),
+        (323, 716, 118, 72),
+        (443, 716, 135, 72),
+        (580, 716, 123, 72),
+        (706, 716, 120, 72),
+        (829, 716, 92, 72),
+        (922, 716, 116, 72),
+        (1040, 716, 94, 72),
+        (1137, 716, 103, 72),
+        (1242, 716, 109, 72),
+    ),
+    "block_square": (
+        (15, 577, 80, 127),
+        (98, 577, 126, 127),
+        (227, 577, 136, 127),
+        (365, 577, 123, 127),
+        (492, 577, 108, 127),
+        (604, 577, 94, 127),
+        (701, 577, 82, 127),
+        (787, 577, 108, 127),
+        (901, 577, 97, 127),
+        (1005, 577, 106, 127),
+        (1115, 577, 101, 127),
+        (1221, 577, 109, 127),
+    ),
+    "block_tall": (
+        (15, 156, 146, 263),
+        (167, 157, 143, 262),
+        (321, 157, 154, 262),
+        (482, 157, 99, 262),
+        (590, 157, 117, 262),
+        (719, 157, 101, 262),
+        (831, 157, 83, 262),
+        (921, 157, 108, 262),
+        (1451, 157, 74, 262),
+        (1533, 157, 133, 262),
+        (1675, 157, 82, 262),
+    ),
+}
 
 
 def _load_stage3_terrain_sheet() -> pygame.Surface | None:
@@ -38,7 +109,28 @@ def _load_stage3_terrain_sheet() -> pygame.Surface | None:
     return _STAGE3_TERRAIN_SHEET
 
 
-def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.Surface:
+def _stage3_part_groups(role: str, side: str | None, w: int, h: int) -> tuple[str, ...]:
+    if role == "strip":
+        if side == "top":
+            return ("strip_top", "block_wide")
+        return ("block_wide", "strip_bottom", "block_square")
+
+    aspect = w / max(1, h)
+    if aspect >= 1.5:
+        return ("block_wide", "block_square")
+    if aspect <= 0.8:
+        return ("block_tall", "block_square")
+    return ("block_square", "block_wide", "block_tall")
+
+
+def _stage3_material_surface(
+    w: int,
+    h: int,
+    *,
+    seed: int,
+    role: str,
+    side: str | None = None,
+) -> pygame.Surface:
     sheet = _load_stage3_terrain_sheet()
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
     surf.fill((12, 15, 18))
@@ -46,34 +138,31 @@ def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.
         return surf
 
     sw, sh = sheet.get_size()
-    bands = {
-        "strip": ((0.02, 0.17), (0.18, 0.48), (0.50, 0.74), (0.75, 0.97)),
-        "block": ((0.18, 0.48), (0.50, 0.74), (0.75, 0.97)),
-    }.get(role, ((0.18, 0.48),))
+    groups = _stage3_part_groups(role, side, w, h)
+    parts = [rect for group in groups for rect in _STAGE3_TERRAIN_PARTS[group]]
     rng = random.Random(seed)
-    tile_w = max(36, min(148, w))
-    tile_h = max(40, min(128, h))
+    tile_w = max(36, min(156 if role != "strip" else 72, w))
+    tile_h = max(40, min(132 if role != "strip" else 72, h))
 
     for dy in range(0, h, tile_h):
         dh = min(tile_h, h - dy)
-        band_start, band_end = bands[(dy // tile_h + seed) % len(bands)]
-        y0 = int(sh * band_start)
-        band_h = max(1, int(sh * (band_end - band_start)))
         for dx in range(0, w, tile_w):
             dw = min(tile_w, w - dx)
-            src_w = min(sw, max(80, dw * 3))
-            src_h = min(band_h, max(80, dh * 3))
-            span_x = max(1, sw - src_w)
-            span_y = max(1, band_h - src_h)
-            sx = (seed * 37 + dx * 5 + rng.randint(0, span_x - 1)) % span_x
-            sy = y0 + ((seed * 17 + dy * 3 + rng.randint(0, span_y - 1)) % span_y)
-            tile = sheet.subsurface(pygame.Rect(sx, sy, src_w, src_h)).copy()
+            part_index = (
+                seed
+                + dx // tile_w
+                + dy // tile_h
+                + rng.randrange(len(parts))
+            ) % len(parts)
+            sx, sy, src_w, src_h = parts[part_index]
+            src_rect = pygame.Rect(sx, sy, src_w, src_h).clip(pygame.Rect(0, 0, sw, sh))
+            tile = sheet.subsurface(src_rect).copy()
             if tile.get_size() != (dw, dh):
                 tile = pygame.transform.smoothscale(tile, (dw, dh))
             surf.blit(tile, (dx, dy))
 
     veil = pygame.Surface((w, h), pygame.SRCALPHA)
-    veil.fill((0, 0, 0, 34 if role == "strip" else 22))
+    veil.fill((0, 0, 0, 24 if role == "strip" else 14))
     surf.blit(veil, (0, 0))
     return surf
 
@@ -682,7 +771,7 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         damage_ratio: float = 0.0,
     ) -> pygame.Surface:
         seed = (index * 1009) ^ (w * 37) ^ (h * 131) ^ (0x71 if side == "top" else 0xE3)
-        surf = _stage3_material_surface(w, h, seed=seed, role="strip")
+        surf = _stage3_material_surface(w, h, seed=seed, role="strip", side=side)
 
         cap_h = max(8, min(24, h // 4))
         cap = pygame.Surface((w, cap_h), pygame.SRCALPHA)
