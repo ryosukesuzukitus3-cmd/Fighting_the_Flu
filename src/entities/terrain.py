@@ -467,6 +467,16 @@ class TerrainStripSegment(pygame.sprite.Sprite):
                 destructible=destructible,
                 damage_ratio=damage_ratio,
             )
+        if theme == "fever_cave":
+            return TerrainStripSegment._make_fever_cave_surface(
+                w,
+                h,
+                side=side,
+                rng=rng,
+                index=index,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+            )
 
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         surf.fill(base)
@@ -555,6 +565,116 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             surf.blit(glow_surf, (0, max(0, edge_y - glow_h + 1)))
         else:
             surf.blit(pygame.transform.flip(glow_surf, False, True), (0, 0))
+
+        return surf
+
+    @staticmethod
+    def _make_fever_cave_surface(
+        w: int,
+        h: int,
+        *,
+        side: str,
+        rng: random.Random,
+        index: int,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+    ) -> pygame.Surface:
+        """発熱回廊の上下壁。外縁=暗→通路側=明の肉壁グラデ＋膜グローで通路を際立たせる。
+
+        粒状感は抑え、筋繊維・血管・赤血球を有機的な線/楕円で控えめに描く。
+        """
+        h = max(1, h)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+
+        # 外縁(暗)→通路側(明) の縦グラデーション（肉壁の厚み・奥行き）
+        stops = ((0.0, (38, 12, 16)), (0.5, (100, 28, 34)),
+                 (0.82, (150, 46, 48)), (1.0, (178, 60, 56)))
+
+        def grad(t: float) -> tuple[int, int, int]:
+            t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
+            for i in range(len(stops) - 1):
+                t0, c0 = stops[i]
+                t1, c1 = stops[i + 1]
+                if t <= t1:
+                    f = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
+                    return (int(c0[0] + (c1[0] - c0[0]) * f),
+                            int(c0[1] + (c1[1] - c0[1]) * f),
+                            int(c0[2] + (c1[2] - c0[2]) * f))
+            return stops[-1][1]
+
+        denom = max(1, h - 1)
+        for y in range(h):
+            t = y / denom if side == "top" else 1.0 - y / denom
+            surf.fill(grad(t), (0, y, w, 1))
+
+        # 筋繊維（通路に沿う緩い曲線。粒状にしない）
+        for _ in range(max(2, h // 26)):
+            fy = rng.randint(1, max(1, h - 2))
+            amp = rng.uniform(1.5, 3.5)
+            pts = [(x, int(fy + math.sin(x * 0.18 + index + fy) * amp))
+                   for x in range(0, w + 5, 5)]
+            if len(pts) > 1:
+                pygame.draw.lines(surf, (132, 40, 44, 60), False, pts, 1)
+
+        # 血管（枝分かれ・局所アクセント）
+        for _ in range(max(1, w // 22)):
+            x = rng.randint(2, max(2, w - 3))
+            y = rng.randint(2, max(2, h - 3))
+            pts = [(x, y)]
+            for _s in range(rng.randint(2, 4)):
+                x += rng.randint(-9, 9)
+                y += rng.randint(-12, 12)
+                pts.append((max(1, min(w - 2, x)), max(1, min(h - 2, y))))
+            if len(pts) > 1:
+                pygame.draw.lines(surf, (66, 16, 22, 120), False, pts, 2)
+                pygame.draw.lines(surf, (206, 84, 74, 70), False, pts, 1)
+
+        # 通路側の膜グロー（高コントラストの縁取りで通路を読みやすく）
+        rim_h = min(16, max(5, h // 3))
+        for i in range(rim_h):
+            f = 1.0 - i / rim_h
+            a = int(150 * f * f)
+            y = (h - 1 - i) if side == "top" else i
+            surf.fill((240, 122, 104, a), (0, y, w, 1))
+        edge_y = h - 1 if side == "top" else 0
+        pygame.draw.line(surf, (255, 178, 150, 210), (0, edge_y), (w, edge_y), 2)
+
+        # 赤血球の局所アクセント（通路側にぷかぷか）
+        if w >= 10 and h >= 14:
+            for _ in range(rng.randint(1, 2)):
+                cw = min(w - 4, rng.randint(max(8, w // 3), max(10, w - 4)))
+                ch = max(5, cw // 2)
+                cxp = rng.randint(0, max(0, w - cw))
+                if side == "top":
+                    lo = max(0, h - rim_h - ch)
+                    hi = max(lo, h - ch - 1)
+                else:
+                    lo = 1
+                    hi = max(lo, min(rim_h + 4, h - ch - 1))
+                cyp = rng.randint(lo, max(lo, hi))
+                r = pygame.Rect(cxp, cyp, cw, ch)
+                pygame.draw.ellipse(surf, (188, 56, 56, 130), r)
+                pygame.draw.ellipse(surf, (250, 120, 108, 150), r, 1)
+                pygame.draw.ellipse(surf, (96, 18, 26, 90),
+                                    r.inflate(-max(4, cw // 3), -max(2, ch // 3)))
+
+        if destructible:
+            damage = max(0.0, min(1.0, damage_ratio))
+            for _ in range(3 + int(damage * 6)):
+                x = rng.randint(4, max(4, w - 5))
+                y = rng.randint(6, max(6, h - 7))
+                pts = [(x, y)]
+                for _s in range(rng.randint(2, 4)):
+                    x += rng.randint(-10, 10)
+                    y += rng.randint(-9, 9)
+                    pts.append((max(2, min(w - 3, x)), max(3, min(h - 4, y))))
+                pygame.draw.lines(surf, (255, 196, 120), False, pts, 1)
+            # 膿っぽい腫れの局所アクセント（破壊可能だと読めるように）
+            for _ in range(max(1, (w * h) // 5200)):
+                sx = rng.randint(6, max(6, w - 7))
+                sy = rng.randint(8, max(8, h - 9))
+                pygame.draw.circle(surf, (255, 150, 110, 150), (sx, sy), rng.randint(3, 5))
+                pygame.draw.circle(surf, (255, 220, 170, 120), (sx - 1, sy - 1), 2)
 
         return surf
 

@@ -56,6 +56,7 @@ class ScrollingBackground:
         self._stage1_membranes: list = []
         self._stage2_fragments: list = []
         self._stage2_bg: pygame.Surface | None = None
+        self._stage1_lumen: pygame.Surface | None = None
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -159,8 +160,12 @@ class ScrollingBackground:
             pygame.draw.lines(rib, (108, 28, 34, 20), False, pts_r, 1)
         screen.blit(rib, (0, 0))
 
-        # 熱の霞。
-        haze_alpha = int(18 + 10 * (0.5 + 0.5 * math.sin(t * 1.5)))
+        # 管腔（ルーメン）の奥行き。中央を沈ませて血管トンネルの深さを出し、
+        # 手前の血球・敵・弾のコントラストを上げる（壁側はそのまま明るく残す）。
+        screen.blit(self._stage1_lumen_surface(), (0, 0))
+
+        # 熱の霞（弱め）。
+        haze_alpha = int(10 + 8 * (0.5 + 0.5 * math.sin(t * 1.5)))
         haze = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         haze.fill((120, 22, 18, haze_alpha))
         screen.blit(haze, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
@@ -185,6 +190,21 @@ class ScrollingBackground:
             self._draw_blood_cell_layer(screen, camera_x, t, cell, 0.92 + 0.10 * pulse)
         for cell in self._stage1_near_cells:
             self._draw_blood_cell_layer(screen, camera_x, t, cell, 1.02 + 0.08 * pulse)
+
+    def _stage1_lumen_surface(self) -> pygame.Surface:
+        """血管トンネルの深部を表す中央の暗がり（静的・キャッシュ）。"""
+        if self._stage1_lumen is not None:
+            return self._stage1_lumen
+        surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        cy = SCREEN_HEIGHT * 0.52
+        spread = SCREEN_HEIGHT * 0.30
+        for y in range(SCREEN_HEIGHT):
+            d = math.exp(-((y - cy) / spread) ** 2)
+            a = int(64 * d)
+            if a > 0:
+                surf.fill((6, 0, 3, a), (0, y, SCREEN_WIDTH, 1))
+        self._stage1_lumen = surf
+        return surf
 
     def _draw_vessel_depth(self, screen: pygame.Surface, camera_x: float, t: float) -> None:
         depth = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
