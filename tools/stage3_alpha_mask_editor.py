@@ -121,6 +121,7 @@ class Stage3AlphaMaskEditor:
         self.line_value: int | None = None
         self.line_start: tuple[int, int] | None = None
         self.line_preview_pos: tuple[int, int] | None = None
+        self.paint_last_pos: tuple[int, int] | None = None
         self.panning = False
         self.pan_anchor = pygame.Vector2(0, 0)
         self.pan_offset = pygame.Vector2(0, 0)
@@ -183,6 +184,7 @@ class Stage3AlphaMaskEditor:
         self.line_value = None
         self.line_start = None
         self.line_preview_pos = None
+        self.paint_last_pos = None
         self._invalidate_preview()
 
     def _invalidate_preview(self) -> None:
@@ -221,6 +223,7 @@ class Stage3AlphaMaskEditor:
         self.line_value = None
         self.line_start = None
         self.line_preview_pos = None
+        self.paint_last_pos = None
         self.message = "Undo"
         self._invalidate_preview()
 
@@ -251,18 +254,44 @@ class Stage3AlphaMaskEditor:
             return None
         return x, y
 
-    def _paint(self, pos: tuple[int, int], value: int) -> None:
+    def _stamp(self, surface: pygame.Surface, pos: tuple[int, int], value: int) -> None:
         color = (255, 255, 255) if value else (0, 0, 0)
-        pygame.draw.circle(self.mask, color, pos, self.brush)
+        w, h = surface.get_size()
+        left = pos[0] - (self.brush - 1) // 2
+        top = pos[1] - (self.brush - 1) // 2
+        rect = pygame.Rect(left, top, self.brush, self.brush).clip(pygame.Rect(0, 0, w, h))
+        if rect.width > 0 and rect.height > 0:
+            pygame.draw.rect(surface, color, rect)
+
+    def _line_points(self, start: tuple[int, int], end: tuple[int, int]) -> list[tuple[int, int]]:
+        x0, y0 = start
+        x1, y1 = end
+        dx = abs(x1 - x0)
+        dy = -abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx + dy
+        points: list[tuple[int, int]] = []
+        while True:
+            points.append((x0, y0))
+            if x0 == x1 and y0 == y1:
+                return points
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy
+                x0 += sx
+            if e2 <= dx:
+                err += dx
+                y0 += sy
+
+    def _paint(self, pos: tuple[int, int], value: int) -> None:
+        self._stamp(self.mask, pos, value)
         self.dirty = True
         self._invalidate_preview()
 
     def _paint_line(self, start: tuple[int, int], end: tuple[int, int], value: int) -> None:
-        color = (255, 255, 255) if value else (0, 0, 0)
-        width = max(1, self.brush * 2)
-        pygame.draw.line(self.mask, color, start, end, width)
-        pygame.draw.circle(self.mask, color, start, self.brush)
-        pygame.draw.circle(self.mask, color, end, self.brush)
+        for point in self._line_points(start, end):
+            self._stamp(self.mask, point, value)
         self.dirty = True
         self._invalidate_preview()
 
@@ -271,6 +300,7 @@ class Stage3AlphaMaskEditor:
         w, h = self.crop.get_size()
         sx, sy = start
         seed = self.crop.get_at((sx, sy))
+        seed_masked = self.mask.get_at((sx, sy)).r >= 128
         seen = bytearray(w * h)
         queue: deque[tuple[int, int]] = deque([(sx, sy)])
         seen[sy * w + sx] = 1
@@ -279,6 +309,8 @@ class Stage3AlphaMaskEditor:
 
         while queue:
             x, y = queue.popleft()
+            if (self.mask.get_at((x, y)).r >= 128) != seed_masked:
+                continue
             if _color_distance(self.crop.get_at((x, y)), seed) > self.tolerance:
                 continue
             self.mask.set_at((x, y), color)
@@ -446,6 +478,7 @@ class Stage3AlphaMaskEditor:
             else:
                 self._push_undo()
                 self.painting = 1
+                self.paint_last_pos = image_pos
                 self._paint(image_pos, 1)
         elif event.button == 3:
             if mods & pygame.KMOD_SHIFT:
@@ -457,6 +490,7 @@ class Stage3AlphaMaskEditor:
             else:
                 self._push_undo()
                 self.painting = 0
+                self.paint_last_pos = image_pos
                 self._paint(image_pos, 0)
 
     def _handle_mouse_up(self, event: pygame.event.Event) -> None:
@@ -472,6 +506,7 @@ class Stage3AlphaMaskEditor:
                 self.line_preview_pos = None
                 self.line_value = None
             self.painting = None
+            self.paint_last_pos = None
 
     def _handle_mouse_motion(self, event: pygame.event.Event) -> None:
         if self.panning:
@@ -487,7 +522,11 @@ class Stage3AlphaMaskEditor:
             return
         image_pos = self._screen_to_image(event.pos)
         if image_pos is not None:
-            self._paint(image_pos, self.painting)
+            if self.paint_last_pos is None:
+                self._paint(image_pos, self.painting)
+            else:
+                self._paint_line(self.paint_last_pos, image_pos, self.painting)
+            self.paint_last_pos = image_pos
 
     def _handle_wheel(self, event: pygame.event.Event) -> None:
         mods = pygame.key.get_mods()
@@ -518,12 +557,15 @@ class Stage3AlphaMaskEditor:
         if self.show_overlay:
             preview.blit(overlay, (0, 0))
         if self.line_start is not None and self.line_preview_pos is not None and self.line_value is not None:
-            color = (255, 255, 255) if self.line_value else (0, 0, 0)
-            outline = (60, 210, 255) if self.line_value else (255, 210, 60)
-            pygame.draw.line(preview, outline, self.line_start, self.line_preview_pos, max(1, self.brush * 2 + 2))
-            pygame.draw.line(preview, color, self.line_start, self.line_preview_pos, max(1, self.brush * 2))
-            pygame.draw.circle(preview, outline, self.line_start, self.brush + 1)
-            pygame.draw.circle(preview, outline, self.line_preview_pos, self.brush + 1)
+            color = (80, 220, 255, 156) if self.line_value else (255, 220, 80, 156)
+            line_preview = pygame.Surface(self.crop.get_size(), pygame.SRCALPHA)
+            for point in self._line_points(self.line_start, self.line_preview_pos):
+                self._stamp(line_preview, point, 1)
+            for y in range(line_preview.get_height()):
+                for x in range(line_preview.get_width()):
+                    if line_preview.get_at((x, y)).r >= 128:
+                        line_preview.set_at((x, y), color)
+            preview.blit(line_preview, (0, 0))
         self.preview_cache = preview
         return preview
 
@@ -631,7 +673,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--window-w", type=int, default=1220, help="Window width")
     parser.add_argument("--window-h", type=int, default=820, help="Window height")
     parser.add_argument("--zoom", type=float, default=2.0, help="Initial zoom")
-    parser.add_argument("--brush", type=int, default=8, help="Initial brush radius in pixels")
+    parser.add_argument("--brush", type=int, default=8, help="Initial brush size in pixels")
     parser.add_argument("--tolerance", type=int, default=10, help="Initial flood color tolerance")
     return parser.parse_args(argv)
 
