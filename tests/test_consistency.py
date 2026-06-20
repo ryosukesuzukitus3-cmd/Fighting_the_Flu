@@ -466,6 +466,44 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert stage.boss_terrain_mode == "preplaced"
 
 
+def test_stage3_terrain_overlays_are_visual_only() -> None:
+    from src.entities.terrain import (
+        TerrainStripSegment,
+        TerrainVisualOverlay,
+        make_stage3_terrain_overlays,
+        make_terrain_strip,
+    )
+
+    terrain = pygame.sprite.Group()
+    terrain.add(*make_terrain_strip(
+        -100,
+        length=1800,
+        theme="fortress",
+        segment_w=48,
+        seed=303,
+        gap_min=330,
+        gap_max=330,
+        center_y=300,
+        center_wave=0,
+        top_min=40,
+        bottom_min=40,
+        irregularity=0,
+        breakable_chance=0.0,
+    ))
+    overlays = make_stage3_terrain_overlays(terrain, seed=303)
+
+    assert overlays
+    assert all(isinstance(overlay, TerrainVisualOverlay) for overlay in overlays)
+    assert all(not isinstance(overlay, TerrainStripSegment) for overlay in overlays)
+    assert all(overlay not in terrain for overlay in overlays)
+    image = overlays[0].image
+    assert any(
+        image.get_at((x, y)).a == 0
+        for y in range(image.get_height())
+        for x in range(image.get_width())
+    )
+
+
 def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     from src.core.constants import SCREEN_WIDTH
     from src.stages.stage import Stage

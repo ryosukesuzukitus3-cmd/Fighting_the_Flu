@@ -201,6 +201,8 @@ class GameScenePostBossMixin:
             self._pending_boss_stage_id = None  # type: ignore[attr-defined]
             self._boss_terrain_spawned = False  # type: ignore[attr-defined]
             self.terrain.empty()  # type: ignore[attr-defined]
+            if hasattr(self, "terrain_overlays"):
+                self.terrain_overlays.empty()  # type: ignore[attr-defined]
             self.enemy_bullets.empty()  # type: ignore[attr-defined]
             self.laser.state = "ready"  # type: ignore[attr-defined]
             return

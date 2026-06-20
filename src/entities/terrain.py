@@ -4,6 +4,8 @@
 ステージごとに `kind` と配置を変えて特色を出す（宇宙=debris まばら / 岩石=wall・rock 多め）。
 """
 from __future__ import annotations
+from collections import deque
+import json
 import math
 import random
 from pathlib import Path
@@ -24,7 +26,9 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "clot":   ((126, 24, 34), (230, 82, 76)),
 }
 _STAGE3_TERRAIN_SHEET_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_fortress_terrain_sheet.png"
+_STAGE3_TERRAIN_RECTS_PATH = Path(__file__).parent.parent.parent / "tools" / "stage3_terrain_rects.json"
 _STAGE3_TERRAIN_SHEET: pygame.Surface | None = None
+_STAGE3_ATLAS_GROUPS: dict[str, tuple[pygame.Surface, ...]] | None = None
 
 
 def _load_stage3_terrain_sheet() -> pygame.Surface | None:
@@ -36,6 +40,94 @@ def _load_stage3_terrain_sheet() -> pygame.Surface | None:
     except (FileNotFoundError, pygame.error):
         return None
     return _STAGE3_TERRAIN_SHEET
+
+
+def _outer_dark_to_alpha(src: pygame.Surface, *, threshold: int = 30) -> pygame.Surface:
+    result = pygame.Surface(src.get_size(), pygame.SRCALPHA)
+    result.blit(src, (0, 0))
+    w, h = result.get_size()
+    if w <= 0 or h <= 0:
+        return result
+
+    visited = bytearray(w * h)
+    queue: deque[tuple[int, int]] = deque()
+
+    def idx(x: int, y: int) -> int:
+        return y * w + x
+
+    def is_outer_dark(x: int, y: int) -> bool:
+        r, g, b, a = result.get_at((x, y))
+        return a > 0 and max(r, g, b) <= threshold
+
+    def push(x: int, y: int) -> None:
+        i = idx(x, y)
+        if visited[i] or not is_outer_dark(x, y):
+            return
+        visited[i] = 1
+        queue.append((x, y))
+
+    for x in range(w):
+        push(x, 0)
+        push(x, h - 1)
+    for y in range(h):
+        push(0, y)
+        push(w - 1, y)
+
+    while queue:
+        x, y = queue.popleft()
+        r, g, b, _a = result.get_at((x, y))
+        result.set_at((x, y), (r, g, b, 0))
+        if x > 0:
+            push(x - 1, y)
+        if x + 1 < w:
+            push(x + 1, y)
+        if y > 0:
+            push(x, y - 1)
+        if y + 1 < h:
+            push(x, y + 1)
+
+    return result
+
+
+def _load_stage3_atlas_groups() -> dict[str, tuple[pygame.Surface, ...]]:
+    global _STAGE3_ATLAS_GROUPS
+    if _STAGE3_ATLAS_GROUPS is not None:
+        return _STAGE3_ATLAS_GROUPS
+
+    groups: dict[str, tuple[pygame.Surface, ...]] = {}
+    try:
+        data = json.loads(_STAGE3_TERRAIN_RECTS_PATH.read_text(encoding="utf-8"))
+        sheet_path = data.get("sheet", str(_STAGE3_TERRAIN_SHEET_PATH))
+        sheet_path = Path(sheet_path)
+        if not sheet_path.is_absolute():
+            sheet_path = _STAGE3_TERRAIN_RECTS_PATH.parent.parent / sheet_path
+        sheet = pygame.image.load(str(sheet_path))
+        raw_groups = data.get("groups", {})
+    except (OSError, json.JSONDecodeError, pygame.error, TypeError, ValueError):
+        _STAGE3_ATLAS_GROUPS = {}
+        return _STAGE3_ATLAS_GROUPS
+
+    for group_name, group in raw_groups.items():
+        rects = group.get("rects", []) if isinstance(group, dict) else group
+        if not isinstance(rects, list):
+            continue
+        surfaces: list[pygame.Surface] = []
+        for raw in rects:
+            try:
+                if isinstance(raw, dict):
+                    rect = pygame.Rect(int(raw["x"]), int(raw["y"]), int(raw["w"]), int(raw["h"]))
+                else:
+                    rect = pygame.Rect(*(int(v) for v in raw[:4]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if rect.w <= 0 or rect.h <= 0 or not sheet.get_rect().contains(rect):
+                continue
+            crop = sheet.subsurface(rect).copy()
+            surfaces.append(_outer_dark_to_alpha(crop))
+        groups[str(group_name)] = tuple(surfaces)
+
+    _STAGE3_ATLAS_GROUPS = groups
+    return _STAGE3_ATLAS_GROUPS
 
 
 def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.Surface:
@@ -826,6 +918,103 @@ class TerrainStripSegment(pygame.sprite.Sprite):
 
     def is_off_left(self, camera: "Camera") -> bool:
         return self.world_x + self.rect.width < camera.x
+
+
+class TerrainVisualOverlay(pygame.sprite.Sprite):
+    """Visual-only terrain decoration. It is drawn separately from collision terrain."""
+
+    def __init__(self, world_x: float, y: float, image: pygame.Surface) -> None:
+        super().__init__()
+        self.world_x = float(world_x)
+        self.y = float(y)
+        self.image = image
+        self.rect = self.image.get_rect(topleft=(int(world_x), int(y)))
+
+    def update(self, dt: float, camera: "Camera") -> None:
+        self.rect.topleft = (int(camera.to_screen_x(self.world_x)), int(self.y))
+
+    def is_off_left(self, camera: "Camera") -> bool:
+        return self.world_x + self.rect.width < camera.x
+
+
+def _surface_samples_for_span(
+    segments: list[TerrainStripSegment],
+    *,
+    start_x: float,
+    width: int,
+    side: str,
+    step: int,
+) -> list[float]:
+    samples: list[float] = []
+    sample_count = max(2, math.ceil(width / step) + 1)
+    for i in range(sample_count):
+        wx = start_x + min(width - 1, i * step)
+        found = None
+        for segment in segments:
+            if segment.side != side or segment.destructible:
+                continue
+            left = segment.world_x
+            right = left + segment.rect.width
+            if left <= wx < right:
+                found = float(segment.surface_y)
+                break
+        if found is None:
+            return []
+        samples.append(found)
+    return samples
+
+
+def make_stage3_terrain_overlays(
+    terrain: pygame.sprite.Group,
+    *,
+    seed: int = 303,
+) -> list[TerrainVisualOverlay]:
+    """Create Stage3 visual-only top-edge overlays from the rect atlas.
+
+    Collision remains owned by the logical TerrainStrip sprites. The atlas crops
+    are decorative and have their border-connected dark background made
+    transparent before placement.
+    """
+    atlas = _load_stage3_atlas_groups()
+    strips = list(atlas.get("strip_top", ()))
+    if not strips:
+        return []
+
+    segments = [
+        ter for ter in terrain
+        if isinstance(ter, TerrainStripSegment)
+        and ter.theme == "fortress"
+        and not ter.destructible
+    ]
+    bottom_segments = [ter for ter in segments if ter.side == "bottom"]
+    if not bottom_segments:
+        return []
+    bottom_segments.sort(key=lambda ter: ter.world_x)
+
+    min_x = min(ter.world_x for ter in bottom_segments)
+    max_x = max(ter.world_x + ter.rect.width for ter in bottom_segments)
+    segment_w = max(16, min(ter.rect.width for ter in bottom_segments))
+    rng = random.Random(seed ^ 0x57A6E3)
+
+    overlays: list[TerrainVisualOverlay] = []
+    cursor = min_x + 80.0
+    while cursor < max_x - 120:
+        image = rng.choice(strips)
+        samples = _surface_samples_for_span(
+            bottom_segments,
+            start_x=cursor,
+            width=image.get_width(),
+            side="bottom",
+            step=int(segment_w),
+        )
+        if samples and max(samples) - min(samples) <= 18:
+            y = min(samples)
+            overlays.append(TerrainVisualOverlay(cursor, y, image))
+            cursor += image.get_width() + rng.randint(160, 280)
+        else:
+            cursor += segment_w
+
+    return overlays
 
 
 def make_terrain_strip(

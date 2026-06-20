@@ -88,6 +88,7 @@ class GameScene(
         self.enemies:        pygame.sprite.Group = pygame.sprite.Group()
         self.items:          pygame.sprite.Group = pygame.sprite.Group()
         self.terrain:        pygame.sprite.Group = pygame.sprite.Group()
+        self.terrain_overlays: pygame.sprite.Group = pygame.sprite.Group()
         self.spawner = EnemySpawner(
             self.game, self.enemies, self.enemy_bullets,
             self.stage.events, self.player, stage_id=self._stage_id,
@@ -95,6 +96,7 @@ class GameScene(
             world_events=self.stage.world_events,
         )
         self.spawner.spawn_terrain_events(self.stage.terrain_layout, self.camera)
+        self._refresh_terrain_overlays()
         self._boss_terrain_spawned = False
         self._pending_boss_stage_id: int | None = None
         self._active_boss_stage_id: int | None = None
@@ -268,7 +270,9 @@ class GameScene(
     def _replace_boss_terrain(self, stage_id: int) -> None:
         boss_stage = self._boss_stage_data(stage_id)
         self.terrain.empty()
+        self.terrain_overlays.empty()
         self.spawner.spawn_terrain_events(boss_stage.boss_terrain, self.camera)
+        self._refresh_terrain_overlays()
 
     def _prepare_boss_terrain(self, stage_id: int) -> None:
         boss_stage = self._boss_stage_data(stage_id)
@@ -279,6 +283,13 @@ class GameScene(
         if not preplaced_here:
             self._replace_boss_terrain(stage_id)
         self._boss_terrain_spawned = True
+
+    def _refresh_terrain_overlays(self) -> None:
+        self.terrain_overlays.empty()
+        if self._stage_id != 3:
+            return
+        from src.entities.terrain import make_stage3_terrain_overlays
+        self.terrain_overlays.add(*make_stage3_terrain_overlays(self.terrain, seed=303))
 
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
@@ -475,6 +486,10 @@ class GameScene(
             ter.update(dt, self.camera)
             if ter.is_off_left(self.camera):
                 ter.kill()
+        for overlay in list(self.terrain_overlays):
+            overlay.update(dt, self.camera)
+            if overlay.is_off_left(self.camera):
+                overlay.kill()
 
         if self._resolve_player_terrain_collision():
             self._damage_player(PLAYER_DMG_TERRAIN)
@@ -656,6 +671,7 @@ class GameScene(
         self.bg.draw(buf, self.camera.x)
         self._draw_bg_text(buf)
         self.terrain.draw(buf)
+        self.terrain_overlays.draw(buf)
         self.items.draw(buf)
         self.player_bullets.draw(buf)
         self.enemy_bullets.draw(buf)
