@@ -100,9 +100,49 @@
       "PowerShell(Remove-Item captures\\*)",
       "PowerShell(Remove-Item tmp\\*)",
       "PowerShell(Remove-Item tools\\_cap*)",
+      "PowerShell(git -C * fetch:*)",
+      "PowerShell(git -C * status:*)",
+      "PowerShell(git -C * log:*)",
+      "PowerShell(git -C * branch:*)",
+      "PowerShell(git -C * rev-parse:*)",
+      "PowerShell(git -C * worktree:*)",
+      "PowerShell(git -C * add:*)",
+      "PowerShell(git -C * commit:*)",
+      "PowerShell(git -C * push:*)",
+      "PowerShell(git -C * merge --ff-only:*)",
+      "PowerShell(.\\.venv\\Scripts\\python tools\\run.py:*)",
+      "PowerShell(.\\.venv\\Scripts\\python tools\\*)",
+      "PowerShell(.\\.venv\\Scripts\\python -m pytest:*)",
+      "PowerShell(.\\.venv\\Scripts\\pytest:*)",
+      "PowerShell(.\\.venv\\Scripts\\python tmp\\*)",
+      "Grep",
+      "Glob",
       "Read",
       "Edit",
-      "Write"
+      "Write",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(sort:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(xargs:*)",
+      "Bash(sed:*)",
+      "Bash(cd:*)",
+      "Bash(claude --version*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(git ls-remote*)",
+      "Bash(git checkout -- *)",
+      "PowerShell(Select-String:*)",
+      "PowerShell(Start-Sleep:*)",
+      "PowerShell(git ls-remote:*)",
+      "PowerShell(git -C * diff:*)",
+      "PowerShell(git -C * --no-pager:*)",
+      "PowerShell(& \"C:/02_work/01_Fighting_the_Flu-worktrees/*)",
+      "PowerShell(& \"C:/Program Files/GitHub CLI/gh.exe\" pr *)",
+      "PowerShell(& \"C:/Program Files/GitHub CLI/gh.exe\" run *)",
+      "PowerShell(Remove-Item \"C:/02_work/01_Fighting_the_Flu-worktrees/*)",
+      "WebFetch(domain:qiita.com)"
     ],
     "deny": [
       "Bash(sudo *)",
@@ -137,6 +177,9 @@
       "PowerShell(git push -f:*)",
       "PowerShell(git push --force-with-lease:*)",
       "PowerShell(git merge:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\02_work\\01_Fighting_the_Flu-worktrees"
     ]
   },
   "hooks": {
@@ -167,8 +210,19 @@
         "hooks": [
           {
             "type": "command",
-            "shell": "powershell",
-            "command": "[System.Media.SystemSounds]::Exclamation.Play(); Start-Sleep -Milliseconds 700"
+            "command": "[System.Media.SystemSounds]::Exclamation.Play(); Start-Sleep -Milliseconds 700",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/ps_no_compound.py\""
           }
         ]
       }
