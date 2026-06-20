@@ -6,6 +6,7 @@ opaque areas. The terrain composer prefers these manual masks when they exist.
 Controls:
   Left drag              paint transparent
   Right drag             restore opaque
+  L                      toggle straight-line paint mode
   Shift + Left click     flood-fill transparent from clicked pixel
   Shift + Right click    flood-fill opaque from clicked pixel
   Mouse wheel            brush size
@@ -17,6 +18,7 @@ Controls:
   1..9                   switch group
   A                      seed mask from border-connected dark pixels
   C                      clear current mask
+  Ctrl+Z                 undo
   S                      save current mask
   O                      toggle magenta mask overlay
   G                      toggle pixel grid
@@ -114,7 +116,11 @@ class Stage3AlphaMaskEditor:
         self.show_help = True
         self.show_overlay = True
         self.show_grid = False
+        self.line_mode = False
         self.painting: int | None = None
+        self.line_value: int | None = None
+        self.line_start: tuple[int, int] | None = None
+        self.line_preview_pos: tuple[int, int] | None = None
         self.panning = False
         self.pan_anchor = pygame.Vector2(0, 0)
         self.pan_offset = pygame.Vector2(0, 0)
@@ -122,6 +128,7 @@ class Stage3AlphaMaskEditor:
         self.dirty = False
         self.preview_cache: pygame.Surface | None = None
         self.scaled_cache: tuple[float, pygame.Surface] | None = None
+        self.undo_stack: list[pygame.Surface] = []
 
         self.crop = pygame.Surface((1, 1), pygame.SRCALPHA)
         self.mask = pygame.Surface((1, 1))
@@ -171,6 +178,11 @@ class Stage3AlphaMaskEditor:
         else:
             self.message = f"No mask yet: {path.name}"
         self.dirty = False
+        self.undo_stack.clear()
+        self.painting = None
+        self.line_value = None
+        self.line_start = None
+        self.line_preview_pos = None
         self._invalidate_preview()
 
     def _invalidate_preview(self) -> None:
@@ -194,7 +206,26 @@ class Stage3AlphaMaskEditor:
         self.dirty = False
         self.message = f"Saved: {self.current_mask_path}"
 
+    def _push_undo(self) -> None:
+        self.undo_stack.append(self.mask.copy())
+        if len(self.undo_stack) > 80:
+            self.undo_stack.pop(0)
+
+    def _undo(self) -> None:
+        if not self.undo_stack:
+            self.message = "Nothing to undo"
+            return
+        self.mask = self.undo_stack.pop()
+        self.dirty = True
+        self.painting = None
+        self.line_value = None
+        self.line_start = None
+        self.line_preview_pos = None
+        self.message = "Undo"
+        self._invalidate_preview()
+
     def _clear(self) -> None:
+        self._push_undo()
         self.mask.fill((0, 0, 0))
         self.dirty = True
         self.message = "Cleared mask"
@@ -226,7 +257,17 @@ class Stage3AlphaMaskEditor:
         self.dirty = True
         self._invalidate_preview()
 
+    def _paint_line(self, start: tuple[int, int], end: tuple[int, int], value: int) -> None:
+        color = (255, 255, 255) if value else (0, 0, 0)
+        width = max(1, self.brush * 2)
+        pygame.draw.line(self.mask, color, start, end, width)
+        pygame.draw.circle(self.mask, color, start, self.brush)
+        pygame.draw.circle(self.mask, color, end, self.brush)
+        self.dirty = True
+        self._invalidate_preview()
+
     def _flood(self, start: tuple[int, int], value: int) -> None:
+        self._push_undo()
         w, h = self.crop.get_size()
         sx, sy = start
         seed = self.crop.get_at((sx, sy))
@@ -268,6 +309,7 @@ class Stage3AlphaMaskEditor:
         self._invalidate_preview()
 
     def _seed_border_dark(self) -> None:
+        self._push_undo()
         w, h = self.crop.get_size()
         seen = bytearray(w * h)
         queue: deque[tuple[int, int]] = deque()
@@ -358,6 +400,8 @@ class Stage3AlphaMaskEditor:
             self._switch_rect(-1)
         elif event.key == pygame.K_s:
             self._save()
+        elif event.key == pygame.K_z and mods & pygame.KMOD_CTRL:
+            self._undo()
         elif event.key == pygame.K_c:
             self._clear()
         elif event.key == pygame.K_a:
@@ -366,6 +410,10 @@ class Stage3AlphaMaskEditor:
             self.show_overlay = not self.show_overlay
         elif event.key == pygame.K_g:
             self.show_grid = not self.show_grid
+        elif event.key == pygame.K_l:
+            self.line_mode = not self.line_mode
+            mode = "line" if self.line_mode else "freehand"
+            self.message = f"Paint mode: {mode}"
         elif event.key == pygame.K_h:
             self.show_help = not self.show_help
         elif event.key in (pygame.K_PLUS, pygame.K_EQUALS):
@@ -391,13 +439,23 @@ class Stage3AlphaMaskEditor:
         if event.button == 1:
             if mods & pygame.KMOD_SHIFT:
                 self._flood(image_pos, 1)
+            elif self.line_mode:
+                self.line_value = 1
+                self.line_start = image_pos
+                self.line_preview_pos = image_pos
             else:
+                self._push_undo()
                 self.painting = 1
                 self._paint(image_pos, 1)
         elif event.button == 3:
             if mods & pygame.KMOD_SHIFT:
                 self._flood(image_pos, 0)
+            elif self.line_mode:
+                self.line_value = 0
+                self.line_start = image_pos
+                self.line_preview_pos = image_pos
             else:
+                self._push_undo()
                 self.painting = 0
                 self._paint(image_pos, 0)
 
@@ -405,6 +463,14 @@ class Stage3AlphaMaskEditor:
         if event.button == 2:
             self.panning = False
         if event.button in (1, 3):
+            if self.line_start is not None and self.line_value is not None:
+                end = self._screen_to_image(event.pos) or self.line_preview_pos or self.line_start
+                self._push_undo()
+                self._paint_line(self.line_start, end, self.line_value)
+                self.message = "Line painted"
+                self.line_start = None
+                self.line_preview_pos = None
+                self.line_value = None
             self.painting = None
 
     def _handle_mouse_motion(self, event: pygame.event.Event) -> None:
@@ -413,6 +479,11 @@ class Stage3AlphaMaskEditor:
             self._invalidate_preview()
             return
         if self.painting is None:
+            if self.line_start is not None:
+                image_pos = self._screen_to_image(event.pos)
+                if image_pos is not None:
+                    self.line_preview_pos = image_pos
+                    self._invalidate_preview()
             return
         image_pos = self._screen_to_image(event.pos)
         if image_pos is not None:
@@ -446,6 +517,13 @@ class Stage3AlphaMaskEditor:
         preview.blit(cut, (0, 0))
         if self.show_overlay:
             preview.blit(overlay, (0, 0))
+        if self.line_start is not None and self.line_preview_pos is not None and self.line_value is not None:
+            color = (255, 255, 255) if self.line_value else (0, 0, 0)
+            outline = (60, 210, 255) if self.line_value else (255, 210, 60)
+            pygame.draw.line(preview, outline, self.line_start, self.line_preview_pos, max(1, self.brush * 2 + 2))
+            pygame.draw.line(preview, color, self.line_start, self.line_preview_pos, max(1, self.brush * 2))
+            pygame.draw.circle(preview, outline, self.line_start, self.brush + 1)
+            pygame.draw.circle(preview, outline, self.line_preview_pos, self.brush + 1)
         self.preview_cache = preview
         return preview
 
@@ -470,7 +548,8 @@ class Stage3AlphaMaskEditor:
         if not self.show_help:
             return
         lines = [
-            "Left drag: transparent / Right drag: opaque / Shift+click: flood",
+            "Left drag: transparent / Right drag: opaque / L: line mode / Ctrl+Z: undo",
+            "Shift+click: flood transparent/opaque from clicked color",
             "Wheel: brush / Ctrl+wheel: zoom / Shift+wheel: tolerance",
             "[ ] or P/N: rect / Tab: group / A: auto seed / C: clear / S: save",
             "O: overlay / G: grid / Home: fit / Esc: save and quit",
@@ -508,6 +587,7 @@ class Stage3AlphaMaskEditor:
         title = (
             f"{dirty}{self.current_group} #{self.rect_index + 1}/{max(1, len(self.current_rects))} "
             f"rect=({rect.x},{rect.y},{rect.w},{rect.h}) "
+            f"mode={'line' if self.line_mode else 'free'} "
             f"brush={self.brush} tol={self.tolerance} zoom={self.zoom:.2f}"
         )
         self._draw_text(title, (14, 10))
