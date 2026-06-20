@@ -1,0 +1,49 @@
+name: CI
+
+# PR と main への push で、SSOT 整合性チェックとテストを必ず回す。
+# ローカルの Stop フックをすり抜けた変更（Codex 由来・直接 push 等）への最後の砦。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# 同一ブランチで新しい push が来たら、進行中の古い run はキャンセルして無駄を省く。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check & test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # 宣言した下限 (requires-python >=3.11) と現行モダン版の両方を検証する。
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install (editable + dev deps)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      # pygame はヘッドレス実行（SDL ダミードライバ）。env は tools/run.py が設定する。
+      - name: Byte-compile (syntax gate)
+        run: python tools/run.py pycompile
+
+      - name: Consistency check (SSOT / AUTOGEN docs)
+        run: python tools/run.py check
+
+      - name: Tests
+        run: python tools/run.py test
