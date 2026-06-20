@@ -7,11 +7,16 @@ Examples:
   python tools/stage3_rect_preview.py
   python tools/stage3_rect_preview.py --group block_wide --group block_square
   python tools/stage3_rect_preview.py --out captures/stage3_rect_check
+  python tools/stage3_rect_preview.py --open
 """
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import os
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -222,6 +227,74 @@ def _render_group_sheet(
     return path
 
 
+def _write_index(paths: list[Path], out: Path) -> Path:
+    path = out.with_name(f"{out.name}_index.html")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cards = []
+    for image_path in paths:
+        src = html.escape(image_path.name, quote=True)
+        caption = html.escape(image_path.stem)
+        cards.append(f'<section><h2>{caption}</h2><img src="{src}" alt="{caption}"></section>')
+    body = "\n".join(cards)
+    path.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage3 Rect Preview</title>
+  <style>
+    body {{
+      margin: 24px;
+      background: #111418;
+      color: #e6e8eb;
+      font-family: Consolas, monospace;
+    }}
+    section {{
+      margin: 0 0 28px;
+    }}
+    h1, h2 {{
+      font-weight: 600;
+    }}
+    img {{
+      display: block;
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #3a424c;
+      background: #0b0d10;
+    }}
+  </style>
+</head>
+<body>
+  <h1>Stage3 Rect Preview</h1>
+  {body}
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _should_open_preview(open_arg: bool | None) -> bool:
+    if open_arg is not None:
+        return open_arg
+    return os.name == "nt" and sys.stdout.isatty() and not os.environ.get("CI")
+
+
+def _open_file(path: Path) -> bool:
+    try:
+        if os.name == "nt":
+            os.startfile(str(path))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        print(f"[stage3-rect-preview] open failed: {exc}")
+        return False
+    return True
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--config", default=str(DEFAULT_CONFIG), help="rect定義JSON")
@@ -233,6 +306,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--cell-h", type=int, default=190, help="グループ一覧の1セル高さ")
     p.add_argument("--cols", type=int, default=4, help="グループ一覧の列数")
     p.add_argument("--max-preview-h", type=int, default=120, help="グループ一覧内の切り出し表示最大高さ")
+    p.add_argument("--open", dest="open_preview", action="store_true", help="open the generated HTML preview")
+    p.add_argument("--no-open", dest="open_preview", action="store_false", help="do not open the generated HTML preview")
+    p.set_defaults(open_preview=None)
     return p.parse_args(argv)
 
 
@@ -262,12 +338,16 @@ def main(argv: list[str] | None = None) -> int:
             )
             for group in selected
         )
+        index_path = _write_index(paths, out)
     except (OSError, json.JSONDecodeError, pygame.error, ValueError) as exc:
         print(f"[stage3-rect-preview] error: {exc}")
         return 2
 
     for path in paths:
         print(path)
+    print(index_path)
+    if _should_open_preview(args.open_preview) and _open_file(index_path):
+        print(f"opened: {index_path}")
     return 0
 
 
