@@ -18,20 +18,19 @@ import os
 import random
 import subprocess
 import sys
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pygame
 
+from stage3_alpha_mask_common import DEFAULT_MASK_DIR, mask_path
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STAGE = ROOT / "data" / "stages" / "stage3.json"
 DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
 DEFAULT_OUT = ROOT / "captures" / "stage3_terrain_composer"
 DEFAULT_VIEW_X = (0, 2200, 4400, 6600, 8800, 10800)
-DEFAULT_BACKGROUND_THRESHOLD = 30
-DEFAULT_BACKGROUND_CHROMA = 14
 BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
 
 
@@ -102,68 +101,32 @@ def _rect_from_json(raw: Any, *, group: str, index: int) -> tuple[pygame.Rect, s
     raise ValueError(f"{group}[{index}] must be {{x,y,w,h}} or [x,y,w,h]")
 
 
-def _is_background_pixel(
-    surface: pygame.Surface,
-    x: int,
-    y: int,
-    threshold: int,
-    chroma_threshold: int,
-) -> bool:
-    r, g, b, a = surface.get_at((x, y))
-    brightest = max(r, g, b)
-    darkest = min(r, g, b)
-    return a > 0 and brightest <= threshold and brightest - darkest <= chroma_threshold
-
-
-def _crop_piece(
-    sheet: pygame.Surface,
-    rect: pygame.Rect,
-    *,
-    threshold: int,
-    chroma_threshold: int,
-) -> pygame.Surface:
+def _source_crop(sheet: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
     crop = pygame.Surface(rect.size, pygame.SRCALPHA)
     crop.blit(sheet, (0, 0), rect)
-    w, h = crop.get_size()
-    if w <= 0 or h <= 0:
-        return crop
-
-    seen = bytearray(w * h)
-    queue: deque[tuple[int, int]] = deque()
-
-    def push(x: int, y: int) -> None:
-        idx = y * w + x
-        if not seen[idx] and _is_background_pixel(crop, x, y, threshold, chroma_threshold):
-            seen[idx] = 1
-            queue.append((x, y))
-
-    for x in range(w):
-        push(x, 0)
-        push(x, h - 1)
-    for y in range(h):
-        push(0, y)
-        push(w - 1, y)
-
-    while queue:
-        x, y = queue.popleft()
-        r, g, b, _a = crop.get_at((x, y))
-        crop.set_at((x, y), (r, g, b, 0))
-        if x > 0:
-            push(x - 1, y)
-        if x < w - 1:
-            push(x + 1, y)
-        if y > 0:
-            push(x, y - 1)
-        if y < h - 1:
-            push(x, y + 1)
     return crop
+
+
+def _apply_manual_mask(crop: pygame.Surface, path: Path) -> pygame.Surface | None:
+    if not path.exists():
+        return None
+    mask = pygame.image.load(str(path))
+    if mask.get_size() != crop.get_size():
+        raise ValueError(f"alpha mask size mismatch: {path}")
+    masked = crop.copy()
+    w, h = masked.get_size()
+    for y in range(h):
+        for x in range(w):
+            if mask.get_at((x, y)).r >= 128:
+                r, g, b, _a = masked.get_at((x, y))
+                masked.set_at((x, y), (r, g, b, 0))
+    return masked
 
 
 def _load_pieces(
     rects_path: Path,
     *,
-    threshold: int,
-    chroma_threshold: int,
+    mask_dir: Path,
 ) -> dict[str, list[Piece]]:
     data = json.loads(rects_path.read_text(encoding="utf-8"))
     sheet_path = _resolve(data.get("sheet", "assets/graphic/stage3_fortress_terrain_sheet.png"))
@@ -185,7 +148,9 @@ def _load_pieces(
                 raise ValueError(f"{group}[{i}] has non-positive size")
             if not bounds.contains(rect):
                 raise ValueError(f"{group}[{i}] is out of sheet bounds: {tuple(rect)}")
-            image = _crop_piece(sheet, rect, threshold=threshold, chroma_threshold=chroma_threshold)
+            source = _source_crop(sheet, rect)
+            manual = _apply_manual_mask(source, mask_path(mask_dir, group, i, rect))
+            image = manual if manual is not None else source
             group_pieces.append(Piece(group, i, image, rect, label or f"{group}:{i + 1}"))
         pieces[group] = group_pieces
     return pieces
@@ -564,6 +529,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compose Stage3 terrain preview from atlas pieces")
     parser.add_argument("--stage-json", default=str(DEFAULT_STAGE), help="Stage JSON path")
     parser.add_argument("--rects", default=str(DEFAULT_RECTS), help="Rect JSON path")
+    parser.add_argument("--mask-dir", default=str(DEFAULT_MASK_DIR), help="Manual alpha mask directory")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="Output path prefix")
     parser.add_argument("--x", type=float, action="append", default=[], help="Camera X to render; can be repeated")
     parser.add_argument("--width", type=int, default=800, help="Preview width")
@@ -571,18 +537,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--sample-step", type=int, default=48, help="Collision surface sample step")
     parser.add_argument("--tolerance", type=int, default=26, help="Y tolerance for merging visual runs")
     parser.add_argument("--overlap", type=int, default=18, help="Atlas piece overlap to hide seams")
-    parser.add_argument(
-        "--background-threshold",
-        type=int,
-        default=DEFAULT_BACKGROUND_THRESHOLD,
-        help="Dark border-connected pixels at or below this value become transparent",
-    )
-    parser.add_argument(
-        "--background-chroma",
-        type=int,
-        default=DEFAULT_BACKGROUND_CHROMA,
-        help="Only low-chroma border-connected pixels are treated as background",
-    )
     parser.add_argument("--debug-lines", action="store_true", help="Draw collision surface guide lines")
     parser.add_argument("--open", action="store_true", help="Open generated HTML preview")
     parser.add_argument("--no-open", action="store_true", help="Do not open generated HTML preview")
@@ -596,14 +550,14 @@ def main(argv: list[str] | None = None) -> int:
         pygame.font.init()
         stage_path = _resolve(args.stage_json)
         rects_path = _resolve(args.rects)
+        mask_dir = _resolve(args.mask_dir)
         out = _resolve(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
 
         segments = _stage3_segments(stage_path)
         pieces = _load_pieces(
             rects_path,
-            threshold=max(0, min(255, args.background_threshold)),
-            chroma_threshold=max(0, min(255, args.background_chroma)),
+            mask_dir=mask_dir,
         )
         camera_xs = args.x or list(DEFAULT_VIEW_X)
 

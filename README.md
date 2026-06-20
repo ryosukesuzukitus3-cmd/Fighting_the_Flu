@@ -117,6 +117,7 @@ py -3 -m venv .venv
 | `preview-boss` | ボス弾幕プレビュー |
 | `stage3-rect-preview` | Stage3 地形素材 rect の全体/グループ別プレビュー画像とHTML一覧を生成（対話実行では自動表示） |
 | `stage3-rect-editor` | Stage3 地形素材 rect を画像上でドラッグ編集してJSON保存 |
+| `stage3-alpha-mask-editor` | Stage3 地形素材 rect ごとの手動透明マスクをペイント編集してPNG保存 |
 | `stage3-terrain-composer` | Stage3 地形素材を実寸のまま組み合わせた地形構成プレビュー画像とHTML一覧を生成 |
 | `balance` | バランスシート出力 |
 | `pr-media` / `pr-html` / `pr-report` | PR 用に画像/HTML/レポートを `media` ブランチへ上げて貼り付けリンクを出力 |
