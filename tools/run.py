@@ -8,6 +8,7 @@ Examples:
   python tools/run.py preview-boss --stage 4 --pattern all
   python tools/run.py stage3-rect-preview
   python tools/run.py stage3-rect-editor
+  python tools/run.py stage3-terrain-composer
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage3-rect-preview|stage3-rect-editor|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
+            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage3-rect-preview|stage3-rect-editor|stage3-terrain-composer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -60,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         "preview-boss": ([py, "tools/preview_boss.py", *argv], False),
         "stage3-rect-preview": ([py, "tools/stage3_rect_preview.py", *argv], True),
         "stage3-rect-editor": ([py, "tools/stage3_rect_editor.py", *argv], False),
+        "stage3-terrain-composer": ([py, "tools/stage3_terrain_composer_preview.py", *argv], True),
         "boss-concepts": ([py, "tools/capture_boss_concepts.py", *argv], True),
         "dialogues":  ([py, "tools/capture_dialogues.py", *argv], True),
         "dummies":    ([py, "tools/gen_dummy_portraits.py", *argv], True),
