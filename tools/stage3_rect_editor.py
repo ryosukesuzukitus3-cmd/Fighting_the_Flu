@@ -3,6 +3,8 @@
 Controls:
   Left drag        add a rect to the active group
   Left click       select an existing rect in the active group
+  Drag selected edge/corner
+                   resize the selected rect
   Right/Middle drag pan
   Mouse wheel      zoom around cursor
   1..9             switch active group
@@ -13,6 +15,7 @@ Controls:
   S                save JSON
   U or Ctrl+Z      undo
   A                toggle dim mode (active group / selected rect)
+  B                toggle 1px outside boundary outline
   H                toggle help
   Esc              quit
 """
@@ -154,10 +157,13 @@ class Stage3RectEditor:
         self.selected_index: int | None = None
         self.drag_start: tuple[int, int] | None = None
         self.draft_rect: pygame.Rect | None = None
+        self.resize_handle: str | None = None
+        self.resize_start_rect: pygame.Rect | None = None
         self.panning = False
         self.pan_anchor = pygame.Vector2(0, 0)
         self.pan_offset = pygame.Vector2(0, 0)
         self.dim_mode = "group"
+        self.show_boundary_outline = False
         self.show_help = True
         self.dirty = False
         self.message = "Ready"
@@ -227,6 +233,67 @@ class Stage3RectEditor:
             if _rect_to_pygame(rects[i]).collidepoint(point.x, point.y):
                 return i
         return None
+
+    def _resize_handle_at(self, image_pos: tuple[int, int]) -> str | None:
+        rect = self._selected_rect()
+        if rect is None:
+            return None
+
+        x, y = image_pos
+        tolerance = max(2, int(8 / max(0.01, self.zoom)))
+        if not rect.inflate(tolerance * 2, tolerance * 2).collidepoint(x, y):
+            return None
+
+        near_left = abs(x - rect.left) <= tolerance and rect.top - tolerance <= y <= rect.bottom + tolerance
+        near_right = abs(x - rect.right) <= tolerance and rect.top - tolerance <= y <= rect.bottom + tolerance
+        near_top = abs(y - rect.top) <= tolerance and rect.left - tolerance <= x <= rect.right + tolerance
+        near_bottom = abs(y - rect.bottom) <= tolerance and rect.left - tolerance <= x <= rect.right + tolerance
+
+        handle = ""
+        if near_top:
+            handle += "n"
+        elif near_bottom:
+            handle += "s"
+        if near_left:
+            handle += "w"
+        elif near_right:
+            handle += "e"
+        return handle or None
+
+    def _begin_resize(self, handle: str) -> None:
+        rect = self._selected_rect()
+        if rect is None:
+            return
+        self._push_undo()
+        self.resize_handle = handle
+        self.resize_start_rect = rect.copy()
+        self.drag_start = None
+        self.draft_rect = None
+        self.message = f"Resizing {self.active_group} #{self.selected_index + 1}: {handle}"
+
+    def _resized_rect(self, image_pos: tuple[int, int]) -> pygame.Rect | None:
+        if self.resize_handle is None or self.resize_start_rect is None:
+            return None
+        x, y = image_pos
+        start = self.resize_start_rect
+        min_size = 1
+        left = start.left
+        right = start.right
+        top = start.top
+        bottom = start.bottom
+        bounds = pygame.Rect(0, 0, *self.sheet.get_size())
+
+        if "w" in self.resize_handle:
+            left = max(bounds.left, min(x, right - min_size))
+        elif "e" in self.resize_handle:
+            right = min(bounds.right, max(x, left + min_size))
+
+        if "n" in self.resize_handle:
+            top = max(bounds.top, min(y, bottom - min_size))
+        elif "s" in self.resize_handle:
+            bottom = min(bounds.bottom, max(y, top + min_size))
+
+        return pygame.Rect(left, top, right - left, bottom - top)
 
     def _cycle_group(self, direction: int) -> None:
         index = self.groups.index(self.active_group)
@@ -319,6 +386,10 @@ class Stage3RectEditor:
         elif event.key == pygame.K_a:
             self.dim_mode = "selected" if self.dim_mode == "group" else "group"
             self.message = f"Dim mode: {self.dim_mode}"
+        elif event.key == pygame.K_b:
+            self.show_boundary_outline = not self.show_boundary_outline
+            state = "visible" if self.show_boundary_outline else "hidden"
+            self.message = f"Boundary outline: {state}"
         elif event.key == pygame.K_h:
             self.show_help = not self.show_help
         elif event.key in (pygame.K_PLUS, pygame.K_EQUALS):
@@ -351,9 +422,18 @@ class Stage3RectEditor:
         mods = pygame.key.get_mods()
         if hit is not None and not (mods & pygame.KMOD_SHIFT):
             self.selected_index = hit
+            handle = self._resize_handle_at(image_pos)
+            if handle is not None:
+                self._begin_resize(handle)
+                return
             rect = self._active_rects()[hit]
-            self.message = f"Selected {self.active_group} #{hit + 1}: {rect}"
+            self.message = f"Selected {self.active_group} #{hit + 1}: {rect}; drag edge/corner to resize"
             return
+        if not (mods & pygame.KMOD_SHIFT):
+            handle = self._resize_handle_at(image_pos)
+            if handle is not None:
+                self._begin_resize(handle)
+                return
         self.selected_index = None
         self.drag_start = image_pos
         self.draft_rect = pygame.Rect(image_pos[0], image_pos[1], 1, 1)
@@ -361,6 +441,11 @@ class Stage3RectEditor:
     def _handle_mouse_motion(self, event: pygame.event.Event) -> None:
         if self.panning:
             self.offset = self.pan_offset + (pygame.Vector2(event.pos) - self.pan_anchor)
+            return
+        if self.resize_handle is not None:
+            rect = self._resized_rect(self._screen_to_image(event.pos))
+            if rect is not None:
+                self._set_selected_rect(rect)
             return
         if self.drag_start is None:
             return
@@ -373,6 +458,12 @@ class Stage3RectEditor:
     def _handle_mouse_up(self, event: pygame.event.Event) -> None:
         if event.button in (2, 3):
             self.panning = False
+            return
+        if event.button == 1 and self.resize_handle is not None:
+            rect = self._selected_rect()
+            self.message = f"Resized rect: {tuple(rect) if rect is not None else ''}"
+            self.resize_handle = None
+            self.resize_start_rect = None
             return
         if event.button != 1 or self.drag_start is None or self.draft_rect is None:
             return
@@ -432,6 +523,31 @@ class Stage3RectEditor:
             overlay.fill((0, 0, 0, 0), self._image_to_screen_rect(rect))
         self.screen.blit(overlay, (0, 0))
 
+    def _outside_outline_segments(self, rect: pygame.Rect) -> list[pygame.Rect]:
+        bounds = pygame.Rect(0, 0, *self.sheet.get_size())
+        candidates = [
+            pygame.Rect(rect.x - 1, rect.y - 1, rect.w + 2, 1),
+            pygame.Rect(rect.x - 1, rect.y + rect.h, rect.w + 2, 1),
+            pygame.Rect(rect.x - 1, rect.y, 1, rect.h),
+            pygame.Rect(rect.x + rect.w, rect.y, 1, rect.h),
+        ]
+        segments = []
+        for segment in candidates:
+            clipped = segment.clip(bounds)
+            if clipped.w > 0 and clipped.h > 0:
+                segments.append(clipped)
+        return segments
+
+    def _draw_boundary_outlines(self) -> None:
+        if not self.show_boundary_outline:
+            return
+        color = (*_group_color(self.data, self.active_group), 235)
+        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        for rect in self._hole_rects():
+            for segment in self._outside_outline_segments(rect):
+                pygame.draw.rect(overlay, color, self._image_to_screen_rect(segment))
+        self.screen.blit(overlay, (0, 0))
+
     def _draw_text(self, text: str, pos: tuple[int, int], color: tuple[int, int, int] = (230, 232, 235)) -> int:
         image = self.font.render(text, True, color)
         bg = pygame.Rect(pos[0] - 4, pos[1] - 3, image.get_width() + 8, image.get_height() + 6)
@@ -444,10 +560,11 @@ class Stage3RectEditor:
         dirty = "*" if self.dirty else ""
         rect_count = len(self._active_rects())
         selected = f" selected=#{self.selected_index + 1}" if self.selected_index is not None else ""
+        outline = "on" if self.show_boundary_outline else "off"
         mouse = self._screen_to_image(pygame.mouse.get_pos())
         y = 8
         y += self._draw_text(
-            f"{dirty} group={self.active_group} rects={rect_count}{selected} zoom={self.zoom:.2f} mouse={mouse}",
+            f"{dirty} group={self.active_group} rects={rect_count}{selected} outline={outline} zoom={self.zoom:.2f} mouse={mouse}",
             (10, y),
             color,
         )
@@ -456,8 +573,9 @@ class Stage3RectEditor:
         if not self.show_help:
             return
         help_lines = [
-            "L-drag add | click select | Shift+L-drag force add | S save | Del delete | U/Ctrl+Z undo",
-            "Wheel zoom | RMB/MMB pan | 1..9/Tab group | arrows move | Shift+arrows resize | A dim | H help",
+            "L-drag add | click select | drag edge/corner resize | Shift+L-drag force add",
+            "S save | Del delete | U/Ctrl+Z undo | A dim | B outline | H help",
+            "Wheel zoom | RMB/MMB pan | 1..9/Tab group | arrows move | Shift+arrows resize",
         ]
         for line in help_lines:
             y += self._draw_text(line, (10, y), (190, 198, 208))
@@ -466,6 +584,7 @@ class Stage3RectEditor:
         self.screen.fill((12, 14, 18))
         self.screen.blit(self._scaled_sheet(), self.offset)
         self._draw_dim_overlay()
+        self._draw_boundary_outlines()
         self._draw_ui()
         pygame.display.flip()
 
