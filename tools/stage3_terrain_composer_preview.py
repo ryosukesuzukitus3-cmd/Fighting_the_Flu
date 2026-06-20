@@ -30,6 +30,8 @@ DEFAULT_STAGE = ROOT / "data" / "stages" / "stage3.json"
 DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
 DEFAULT_OUT = ROOT / "captures" / "stage3_terrain_composer"
 DEFAULT_VIEW_X = (0, 2200, 4400, 6600, 8800, 10800)
+DEFAULT_BACKGROUND_THRESHOLD = 30
+DEFAULT_BACKGROUND_CHROMA = 14
 BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
 
 
@@ -100,12 +102,26 @@ def _rect_from_json(raw: Any, *, group: str, index: int) -> tuple[pygame.Rect, s
     raise ValueError(f"{group}[{index}] must be {{x,y,w,h}} or [x,y,w,h]")
 
 
-def _is_background_pixel(surface: pygame.Surface, x: int, y: int, threshold: int) -> bool:
+def _is_background_pixel(
+    surface: pygame.Surface,
+    x: int,
+    y: int,
+    threshold: int,
+    chroma_threshold: int,
+) -> bool:
     r, g, b, a = surface.get_at((x, y))
-    return a > 0 and max(r, g, b) <= threshold
+    brightest = max(r, g, b)
+    darkest = min(r, g, b)
+    return a > 0 and brightest <= threshold and brightest - darkest <= chroma_threshold
 
 
-def _crop_piece(sheet: pygame.Surface, rect: pygame.Rect, *, threshold: int) -> pygame.Surface:
+def _crop_piece(
+    sheet: pygame.Surface,
+    rect: pygame.Rect,
+    *,
+    threshold: int,
+    chroma_threshold: int,
+) -> pygame.Surface:
     crop = pygame.Surface(rect.size, pygame.SRCALPHA)
     crop.blit(sheet, (0, 0), rect)
     w, h = crop.get_size()
@@ -117,7 +133,7 @@ def _crop_piece(sheet: pygame.Surface, rect: pygame.Rect, *, threshold: int) -> 
 
     def push(x: int, y: int) -> None:
         idx = y * w + x
-        if not seen[idx] and _is_background_pixel(crop, x, y, threshold):
+        if not seen[idx] and _is_background_pixel(crop, x, y, threshold, chroma_threshold):
             seen[idx] = 1
             queue.append((x, y))
 
@@ -143,7 +159,12 @@ def _crop_piece(sheet: pygame.Surface, rect: pygame.Rect, *, threshold: int) -> 
     return crop
 
 
-def _load_pieces(rects_path: Path, *, threshold: int) -> dict[str, list[Piece]]:
+def _load_pieces(
+    rects_path: Path,
+    *,
+    threshold: int,
+    chroma_threshold: int,
+) -> dict[str, list[Piece]]:
     data = json.loads(rects_path.read_text(encoding="utf-8"))
     sheet_path = _resolve(data.get("sheet", "assets/graphic/stage3_fortress_terrain_sheet.png"))
     sheet = pygame.image.load(str(sheet_path))
@@ -164,7 +185,7 @@ def _load_pieces(rects_path: Path, *, threshold: int) -> dict[str, list[Piece]]:
                 raise ValueError(f"{group}[{i}] has non-positive size")
             if not bounds.contains(rect):
                 raise ValueError(f"{group}[{i}] is out of sheet bounds: {tuple(rect)}")
-            image = _crop_piece(sheet, rect, threshold=threshold)
+            image = _crop_piece(sheet, rect, threshold=threshold, chroma_threshold=chroma_threshold)
             group_pieces.append(Piece(group, i, image, rect, label or f"{group}:{i + 1}"))
         pieces[group] = group_pieces
     return pieces
@@ -280,33 +301,31 @@ def _draw_body_fill(
     height: int,
     rng: random.Random,
     overlap: int,
+    surface_depth: int,
 ) -> None:
-    block_groups = [name for name in ("block_tall", "block_square", "block_wide") if pieces.get(name)]
+    block_groups = [name for name in ("block_tall", "block_square") if pieces.get(name)]
     if not block_groups:
         return
 
     x = run.x0 - 16
     clip = pygame.Rect(run.x0, 0, run.x1 - run.x0, height)
     while x < run.x1 + 16:
-        remaining_w = run.x1 - x
-        if remaining_w > 240 and pieces.get("block_wide"):
-            group = "block_wide"
-        elif pieces.get("block_tall") and rng.random() < 0.48:
+        if pieces.get("block_tall") and rng.random() < 0.58:
             group = "block_tall"
         else:
             group = rng.choice(block_groups)
         piece = _choice(rng, pieces[group])
-        image = piece.image
+        image = _interior_piece_image(piece)
         iw, ih = image.get_size()
 
         if run.side == "bottom":
-            y = run.y + 26
+            y = run.y + surface_depth
             while y < height + ih:
                 _clip_blit(target, image, (x, y), clip=clip)
                 y += max(28, ih - overlap)
         else:
             flipped = pygame.transform.flip(image, False, True)
-            y = run.y - 26 - ih
+            y = run.y - surface_depth - ih
             while y > -ih * 2:
                 _clip_blit(target, flipped, (x, y), clip=clip)
                 y -= max(28, ih - overlap)
@@ -339,6 +358,41 @@ def _draw_cap(
             y = run.y - image.get_height() + 2
         _clip_blit(target, image, (x, y), clip=clip)
         x += max(40, image.get_width() - overlap)
+
+
+def _interior_piece_image(piece: Piece) -> pygame.Surface:
+    image = piece.image
+    w, h = image.get_size()
+    if h <= 18:
+        return image
+    trim = max(10, min(34, int(h * 0.16)))
+    if h - trim < 12:
+        return image
+    return image.subsurface(pygame.Rect(0, trim, w, h - trim)).copy()
+
+
+def _surface_band_depth(pieces: dict[str, list[Piece]]) -> int:
+    caps = pieces.get("strip_top", [])
+    if not caps:
+        return 42
+    heights = sorted(piece.image.get_height() for piece in caps)
+    median = heights[len(heights) // 2]
+    return max(56, min(94, int(median * 0.70)))
+
+
+def _draw_body_base(
+    target: pygame.Surface,
+    run: SurfaceRun,
+    *,
+    height: int,
+    surface_depth: int,
+) -> None:
+    base = pygame.Surface((max(1, run.x1 - run.x0), height), pygame.SRCALPHA)
+    base.fill((8, 12, 14, 208))
+    if run.side == "bottom":
+        target.blit(base, (run.x0, max(0, run.y + surface_depth)))
+    else:
+        target.blit(base, (run.x0, 0), area=pygame.Rect(0, 0, base.get_width(), max(0, run.y - surface_depth)))
 
 
 def _draw_props(
@@ -405,6 +459,7 @@ def _render_view(
     debug_lines: bool,
 ) -> pygame.Surface:
     surface = _load_backdrop(width, height)
+    surface_depth = _surface_band_depth(pieces)
 
     for side in ("top", "bottom"):
         runs = _surface_runs(
@@ -416,8 +471,17 @@ def _render_view(
             tolerance=tolerance,
         )
         for run in runs:
+            _draw_body_base(surface, run, height=height, surface_depth=surface_depth)
             rng = random.Random(_stable_seed(int(camera_x), run.x0, run.x1, run.y, 1 if side == "top" else 2))
-            _draw_body_fill(surface, pieces, run, height=height, rng=rng, overlap=overlap)
+            _draw_body_fill(
+                surface,
+                pieces,
+                run,
+                height=height,
+                rng=rng,
+                overlap=overlap,
+                surface_depth=surface_depth,
+            )
         for run in runs:
             rng = random.Random(_stable_seed(int(camera_x), run.x0, run.x1, run.y, 11 if side == "top" else 12))
             _draw_cap(surface, pieces, run, height=height, rng=rng, overlap=overlap)
@@ -510,8 +574,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--background-threshold",
         type=int,
-        default=30,
+        default=DEFAULT_BACKGROUND_THRESHOLD,
         help="Dark border-connected pixels at or below this value become transparent",
+    )
+    parser.add_argument(
+        "--background-chroma",
+        type=int,
+        default=DEFAULT_BACKGROUND_CHROMA,
+        help="Only low-chroma border-connected pixels are treated as background",
     )
     parser.add_argument("--debug-lines", action="store_true", help="Draw collision surface guide lines")
     parser.add_argument("--open", action="store_true", help="Open generated HTML preview")
@@ -530,7 +600,11 @@ def main(argv: list[str] | None = None) -> int:
         out.parent.mkdir(parents=True, exist_ok=True)
 
         segments = _stage3_segments(stage_path)
-        pieces = _load_pieces(rects_path, threshold=max(0, min(255, args.background_threshold)))
+        pieces = _load_pieces(
+            rects_path,
+            threshold=max(0, min(255, args.background_threshold)),
+            chroma_threshold=max(0, min(255, args.background_chroma)),
+        )
         camera_xs = args.x or list(DEFAULT_VIEW_X)
 
         paths: list[Path] = []
