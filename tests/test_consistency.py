@@ -1303,8 +1303,8 @@ def test_companion_shoots_only_while_player_fires() -> None:
 def test_companion_holds_fire_during_boss_intro() -> None:
     """ボス出現演出中（alert/entering）は先輩も射撃しない。
 
-    自機弾は game_scene 側で `_boss_intro_state in ("", "fighting")` のときだけ
-    生成されるため、先輩も同じゲートを共有しないと演出中だけ撃ててしまう。
+    自機弾は game_scene 側で `_combat_active` のときだけ生成されるため、
+    先輩も同じゲートを共有しないと演出中だけ撃ててしまう。
     """
     from src.entities.companion import Karonaru
 
@@ -1342,9 +1342,11 @@ def test_companion_holds_fire_during_boss_intro() -> None:
     companion.update(0.016, player, bullets, camera, empty, empty, None, can_fire=True)
     assert len(bullets) >= 1
 
-    # game_scene は自機弾と同じゲートを先輩へ渡す。
+    # game_scene は自機弾・先輩で同一の _combat_active ゲートを共有する
+    # （状態テーブル _INTRO_BEHAVIOR から導出。両者が別条件に分岐しないことを保証）。
     scene_src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
-    assert 'can_fire=self._boss_intro_state in ("", "fighting")' in scene_src
+    assert "can_fire=self._combat_active" in scene_src   # 先輩側
+    assert "if self._combat_active:" in scene_src        # 自機側
 
 
 def test_boss_kill_clears_mid_dialogue_queue() -> None:

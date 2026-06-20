@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math
 import random
+from dataclasses import dataclass
 from pathlib import Path as _Path
 import pygame
 
@@ -46,7 +47,30 @@ from src.core.balance import (
 
 # ボス演出シーケンス状態
 # "" -> alert -> entering -> boss_name -> boss_dialogue -> fight_banner -> fighting
-_BOSS_INTRO_FREEZE = {"boss_name", "boss_dialogue", "fight_banner"}
+@dataclass(frozen=True)
+class _IntroBehavior:
+    combat: bool      # 自機・先輩・レーザーの射撃が可能か
+    frozen: bool      # ゲームプレイ全体を停止するか（一切更新しない）
+    runs_intro: bool  # ボス出現演出ステートマシン (_update_boss_intro) を回すか
+
+
+# 各 _boss_intro_state が許可する振る舞いの唯一のソース（SSOT）。
+# コード中に散在していた状態比較は、すべてこの表から導出する
+# （"" = 通常プレイ / "fighting" = ボス戦闘中）。
+# これにより「自機は撃てないのに先輩だけ撃てる」(PR #48) のような
+# 「一方の判定だけ抜ける」バグが構造的に起きにくくなる。
+_INTRO_BEHAVIOR: dict[str, _IntroBehavior] = {
+    "":              _IntroBehavior(combat=True,  frozen=False, runs_intro=False),
+    "alert":         _IntroBehavior(combat=False, frozen=False, runs_intro=True),
+    "entering":      _IntroBehavior(combat=False, frozen=False, runs_intro=True),
+    "boss_name":     _IntroBehavior(combat=False, frozen=True,  runs_intro=True),
+    "boss_dialogue": _IntroBehavior(combat=False, frozen=True,  runs_intro=True),
+    "fight_banner":  _IntroBehavior(combat=False, frozen=True,  runs_intro=True),
+    "fighting":      _IntroBehavior(combat=True,  frozen=False, runs_intro=False),
+}
+
+# 後方互換の別名（フリーズ状態集合）は表から導出する。
+_BOSS_INTRO_FREEZE = frozenset(s for s, b in _INTRO_BEHAVIOR.items() if b.frozen)
 _BOSS_GATE_ENEMIES = {"EnemyBilly", "EnemyCoughSprayer", "EnemySporeSplitter"}
 
 
@@ -255,6 +279,36 @@ class GameScene(
     def _boss_stage_id(self) -> int:
         return self._active_boss_stage_id or self._pending_boss_stage_id or self._stage_id
 
+    # ── ボス演出状態の派生プロパティ（_INTRO_BEHAVIOR 表から導出）──────────
+    @property
+    def _intro_behavior(self) -> _IntroBehavior:
+        return _INTRO_BEHAVIOR[self._boss_intro_state]
+
+    @property
+    def _combat_active(self) -> bool:
+        """自機・先輩・レーザーが射撃できる状態（通常プレイ or ボス戦闘中）。"""
+        return self._intro_behavior.combat
+
+    @property
+    def _gameplay_frozen(self) -> bool:
+        """ボス演出オーバーレイ中などでゲームプレイ全体を停止すべき状態。"""
+        return self._intro_behavior.frozen
+
+    @property
+    def _intro_machine_running(self) -> bool:
+        """ボス出現演出の進行中（_update_boss_intro を回す）。"""
+        return self._intro_behavior.runs_intro
+
+    @property
+    def _is_normal_play(self) -> bool:
+        """ボス演出が一切絡まない通常プレイ。"""
+        return self._boss_intro_state == ""
+
+    @property
+    def _in_boss_fight(self) -> bool:
+        """ボスが出現済みで戦闘フェーズにある。"""
+        return self._boss is not None and self._boss_intro_state == "fighting"
+
     def _queue_boss_spawn(self, stage_id: int | None = None) -> None:
         self._pending_boss_stage_id = self._stage_id if stage_id is None else stage_id
         self.spawner.skip_all_events()
@@ -350,7 +404,7 @@ class GameScene(
             return
 
         # ── ボス演出ステートマシン ────────────────────────────
-        if self._boss_intro_state != "" and self._boss_intro_state != "fighting":
+        if self._intro_machine_running:
             self._update_boss_intro(dt)
 
         # ── 常時更新 ───────────────────────────────────────
@@ -358,7 +412,7 @@ class GameScene(
         self._update_bg_text(dt)
 
         # Freeze gameplay during boss intro overlays.
-        if self._boss_intro_state in _BOSS_INTRO_FREEZE:
+        if self._gameplay_frozen:
             self.particles.update(dt)
             return
 
@@ -382,13 +436,13 @@ class GameScene(
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera,
                                    self.enemies, self.enemy_bullets, self.terrain,
-                                   can_fire=self._boss_intro_state in ("", "fighting"))
+                                   can_fire=self._combat_active)
 
-        if self._stage_banner_timer <= 0 and self._boss_intro_state == "":
+        if self._stage_banner_timer <= 0 and self._is_normal_play:
             self.spawner.update(dt, self.camera)
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
-        if self.spawner.boss_gate_pending and self._boss_intro_state == "":
+        if self.spawner.boss_gate_pending and self._is_normal_play:
             if self._boss_gate_blocked():
                 self._hold_before_boss_room()
                 self._show_boss_gate_notice(dt)
@@ -397,7 +451,7 @@ class GameScene(
                 self.camera.scroll_speed = getattr(self, "_stage_scroll_speed", 80.0)
 
         # ボス保留検知 -> ALERT 開始
-        if self.spawner.boss_pending and self._boss_intro_state == "":
+        if self.spawner.boss_pending and self._is_normal_play:
             if self._boss_gate_blocked():
                 self._hold_before_boss_room()
                 self._show_boss_gate_notice(dt)
@@ -415,7 +469,7 @@ class GameScene(
                 self._boss.update(dt, self.enemy_bullets, self.player)
 
         # 通常射撃
-        if self._boss_intro_state in ("", "fighting"):
+        if self._combat_active:
             if self.player.shoot_requested:
                 from src.entities.bullets.player_bullet import HomingBullet
                 wx, wy = self.player.muzzle_world(self.camera)
@@ -532,7 +586,7 @@ class GameScene(
         self._process_terrain_bullet_collisions()
 
         # Queue boss mid-fight dialogue once after HP drops below half.
-        if (self._boss is not None and self._boss_intro_state == "fighting"
+        if (self._in_boss_fight
                 and self._final_phase == 0
                 and not self._boss_mid_dialogue_shown
                 and self._boss.hp / self._boss.max_hp <= 0.5):
@@ -543,7 +597,7 @@ class GameScene(
                 self._boss_mid_dialogue_shown = True
 
         # Update final-battle special effects and companion sequence.
-        if (self._boss is not None and self._boss_intro_state == "fighting"
+        if (self._in_boss_fight
                 and self._final_phase > 0 and self._final_seq == ""):
             self._update_final_combat(dt)
 
@@ -937,7 +991,7 @@ class GameScene(
             if blocked_by_shield or not getattr(bullet, "piercing", False):
                 bullet.kill()
 
-        if self._boss is not None and self._boss_intro_state == "fighting":
+        if self._in_boss_fight:
             for bullet in list(self.player_bullets):
                 if getattr(bullet, "_terrain_bounced", False):
                     continue
@@ -989,7 +1043,7 @@ class GameScene(
                 return True
 
         # Damage player on direct boss contact during combat.
-        if (self._boss is not None and self._boss_intro_state == "fighting"
+        if (self._in_boss_fight
                 and self.player.hit_rect.colliderect(self._boss.rect)):
             self._damage_player(PLAYER_DMG_BOSS)
             if self.player.hp <= 0 and not self._is_debug_stage:

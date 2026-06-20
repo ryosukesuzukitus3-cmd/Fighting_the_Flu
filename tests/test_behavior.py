@@ -283,3 +283,55 @@ def test_boss_intro_freeze_states_are_distinct_from_combat() -> None:
     for state in ("alert", "entering"):
         assert state not in _BOSS_INTRO_FREEZE
         assert state not in combat
+
+
+# ── 状態テーブル (_INTRO_BEHAVIOR) と派生プロパティ ──────────────────
+
+_EXPECTED_INTRO_STATES = {
+    "", "alert", "entering", "boss_name", "boss_dialogue", "fight_banner", "fighting",
+}
+
+
+def test_intro_behavior_table_is_consistent() -> None:
+    """状態テーブルが全状態を漏れなく定義し、内部矛盾がないこと。"""
+    from src.scenes.game_scene import _INTRO_BEHAVIOR, _BOSS_INTRO_FREEZE
+
+    assert set(_INTRO_BEHAVIOR) == _EXPECTED_INTRO_STATES
+
+    # 派生集合が従来の定義と一致する
+    assert _BOSS_INTRO_FREEZE == frozenset({"boss_name", "boss_dialogue", "fight_banner"})
+    combat_states = {s for s, b in _INTRO_BEHAVIOR.items() if b.combat}
+    assert combat_states == {"", "fighting"}
+
+    # 不変条件: フリーズ中は絶対に戦闘可能でない（PR #48 のバグ class を構造で禁止）
+    for state, beh in _INTRO_BEHAVIOR.items():
+        if beh.frozen:
+            assert not beh.combat, f"{state}: frozen なのに combat 許可"
+
+
+def test_scene_state_properties_match_table() -> None:
+    """GameScene の派生プロパティが _INTRO_BEHAVIOR と一致すること。"""
+    from src.scenes.game_scene import GameScene, _INTRO_BEHAVIOR
+
+    s = object.__new__(GameScene)
+    s._boss = None
+    for state, beh in _INTRO_BEHAVIOR.items():
+        s._boss_intro_state = state
+        assert s._combat_active == beh.combat
+        assert s._gameplay_frozen == beh.frozen
+        assert s._intro_machine_running == beh.runs_intro
+        assert s._is_normal_play == (state == "")
+
+
+def test_scene_in_boss_fight_requires_boss() -> None:
+    """_in_boss_fight は state=='fighting' かつ boss 存在のときのみ True。"""
+    from src.scenes.game_scene import GameScene
+
+    s = object.__new__(GameScene)
+    s._boss_intro_state = "fighting"
+    s._boss = None
+    assert s._in_boss_fight is False
+    s._boss = object()  # ダミー（存在さえすればよい）
+    assert s._in_boss_fight is True
+    s._boss_intro_state = "entering"
+    assert s._in_boss_fight is False
