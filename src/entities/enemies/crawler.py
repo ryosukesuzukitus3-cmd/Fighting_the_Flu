@@ -21,12 +21,9 @@ _ENH_INTERVAL = 1.15
 _GROUND_TOL = 14.0        # 障害物が壁面に接地しているとみなす許容(px)
 _CLIMB_SPEED = 150.0      # 登坂中の縦移動上限(px/s)
 _CLIMB_X_FACTOR = 0.4     # 登坂中の水平前進係数(<1で斜めに駆け上がる)
-_LOOKAHEAD = 22.0         # 機体角度を決める進行方向の傾き探査距離(px)
 _DESCEND_EASE = 16.0      # 平坦・下りでの追従の速さ
 _STEP_TOL = 4.0           # 登り判定の閾値(px)
 _CLIMB_CAP_MARGIN = 8.0   # 通路中央からさらに残す余白(px)
-_ANGLE_STEP = 30          # 機体角度のスナップ刻み(度)
-_ANGLE_MAX = 90           # 機体角度の上限(度)
 
 
 class EnemyCrawler(Enemy):
@@ -55,8 +52,6 @@ class EnemyCrawler(Enemy):
         self._shoot_interval = _ENH_INTERVAL if enhanced else _BASE_INTERVAL
         self._shoot_timer = self._shoot_interval * 0.55
         self._lost_surface_timer = 0.0
-        self._angle_bucket = 0        # 30°刻みにスナップした登坂角(度)
-        self._angle_deg = 0.0         # 実際にスプライトへ適用する回転角(符号込み)
         self.image = self._make_sprite(self._surface)
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._init_glow()
@@ -146,8 +141,6 @@ class EnemyCrawler(Enemy):
             self._lost_surface_timer += dt
             drift = 45.0 if self._surface == "top" else -45.0
             self.world_y += drift * dt
-            self._angle_bucket = 0
-            self._angle_deg = 0.0
             return
         self._lost_surface_timer = 0.0
         target_center = tgt - _FOOT_OFFSET if self._surface == "bottom" else tgt + _FOOT_OFFSET
@@ -162,41 +155,14 @@ class EnemyCrawler(Enemy):
             # ほぼ平坦。通常前進しつつレール面へ滑らかに追従。
             self.world_x = desired_x
             self.world_y += dy * min(1.0, dt * _DESCEND_EASE)
-        self._update_angle()
-
-    def _update_angle(self) -> None:
-        """走行面の傾きから機体角度を 30°刻みで決める（ヒステリシス付き）。"""
-        here = self._walk_surface_y(self.world_x)
-        ahead = self._walk_surface_y(self.world_x - _LOOKAHEAD)
-        if here is None or ahead is None:
-            raw = 0.0
-        else:
-            raw = math.degrees(math.atan2(here - ahead, _LOOKAHEAD))
-        raw = max(-_ANGLE_MAX, min(_ANGLE_MAX, raw))
-        bucket = int(round(raw / _ANGLE_STEP)) * _ANGLE_STEP
-        # 現バケットから十分離れたときだけ切替（角でのカクつき防止）
-        if bucket != self._angle_bucket and abs(raw - self._angle_bucket) >= _ANGLE_STEP * 0.6:
-            self._angle_bucket = bucket
-        # 床は上り左で機体前方を上げ、天井は符号反転
-        sign = 1 if self._surface == "bottom" else -1
-        self._angle_deg = float(sign * self._angle_bucket)
 
     def update(self, dt: float, camera: "Camera") -> None:
         super().update(dt, camera)
-        self._apply_rotation()
         if self._enemy_bullets is not None and self._player is not None:
             self._shoot_timer -= dt
             if self._shoot_timer <= 0:
                 self._fire()
                 self._shoot_timer = self._shoot_interval
-
-    def _apply_rotation(self) -> None:
-        """super().update() が合成した素体（点滅/グロウ込み）を角度で回転する。"""
-        if not self._angle_deg:
-            return
-        center = self.rect.center
-        self.image = pygame.transform.rotate(self.image, self._angle_deg)
-        self.rect = self.image.get_rect(center=center)
 
     def _fire(self) -> None:
         from src.entities.bullets.enemy_bullet import EnemyBullet
