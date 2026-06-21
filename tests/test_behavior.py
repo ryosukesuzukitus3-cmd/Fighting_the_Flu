@@ -228,6 +228,35 @@ def test_companion_holds_fire_when_can_fire_false() -> None:
     assert len(bullets) >= 1
 
 
+def test_companion_y_holds_within_deadzone() -> None:
+    """澤口とのy差がデッドゾーン未満なら y 方向に動かない（固定offset廃止・被弾率低減）。"""
+    from src.entities.companion import Karonaru, _FOLLOW_Y_DEADZONE
+
+    c = Karonaru(_GameStub())
+    player = _PlayerStub()  # centery = 316
+    c.sx = 100.0
+    c.sy = float(player.rect.centery) + (_FOLLOW_Y_DEADZONE - 5.0)  # 15px差（<20）
+    before_y = c.sy
+    c.update(0.016, player, pygame.sprite.Group(), None, pygame.sprite.Group())
+    assert c.sy == before_y, (c.sy, before_y)
+
+
+def test_companion_y_follows_beyond_deadzone() -> None:
+    """澤口とのy差がデッドゾーン以上なら澤口のyへ向かって追従し、最終的にゾーン内へ収まる。"""
+    from src.entities.companion import Karonaru, _FOLLOW_Y_DEADZONE
+
+    c = Karonaru(_GameStub())
+    player = _PlayerStub()  # centery = 316
+    c.sx = 100.0
+    c.sy = float(player.rect.centery) + 120.0  # 120px下（>20）
+    start_gap = abs(c.sy - player.rect.centery)
+    for _ in range(60):
+        c.update(0.016, player, pygame.sprite.Group(), None, pygame.sprite.Group())
+    end_gap = abs(c.sy - player.rect.centery)
+    assert end_gap < start_gap, (start_gap, end_gap)
+    assert end_gap <= _FOLLOW_Y_DEADZONE + 1.0, end_gap
+
+
 # ── ボス出現演出ステートマシン ──────────────────────────────────────
 
 class _InputStub:
