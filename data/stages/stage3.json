@@ -1,6 +1,6 @@
 {
   "stage_id": 3,
-  "bgm": "MEGALOVANIA.mp3",
+  "bgm": "戦艦ハルバード：甲板.mp3",
   "boss_terrain_mode": "preplaced",
   "random_drop_scale": 0.45,
   "terrain_layout": [
