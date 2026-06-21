@@ -20,6 +20,7 @@ DEFAULT_TOLERANCE = 26
 DEFAULT_COLLISION_STEP = 8
 DEFAULT_COLLISION_TOLERANCE = 10
 DEFAULT_OVERLAP = 0
+SURFACE_CAP_OVERHANG = 2
 
 
 @dataclass(frozen=True)
@@ -278,7 +279,7 @@ def _surface_band_depth(pieces: dict[str, list[Stage3ComposerPiece]]) -> int:
         return 96
     heights = sorted(piece.image.get_height() for piece in caps)
     median = heights[len(heights) // 2]
-    return max(96, min(150, int(median)))
+    return max(94, min(148, int(median) - SURFACE_CAP_OVERHANG))
 
 
 def _add_body_fill(
@@ -333,10 +334,10 @@ def _add_cap(
         piece = _choice(rng, caps)
         image = piece.image
         if run.side == "bottom":
-            y = run.y - 2
+            y = run.y - SURFACE_CAP_OVERHANG
         else:
             image = pygame.transform.flip(image, False, True)
-            y = run.y - image.get_height() + 2
+            y = run.y - image.get_height() + SURFACE_CAP_OVERHANG
         _place_piece(placements, image, x, y, clip=clip, side=run.side, role="cap")
         x += max(40, image.get_width() - max(0, overlap))
 

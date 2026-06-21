@@ -899,6 +899,19 @@ def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
     assert all(placement.clip.size == placement.image.get_size() for placement in body)
 
 
+def test_stage3_composer_body_fill_touches_surface_caps() -> None:
+    from src.entities.stage3_composer_terrain import (
+        SURFACE_CAP_OVERHANG,
+        _surface_band_depth,
+        load_stage3_composer_pieces,
+    )
+
+    pieces = load_stage3_composer_pieces()
+    cap_heights = sorted(piece.image.get_height() for piece in pieces["strip_top"])
+
+    assert _surface_band_depth(pieces) == cap_heights[len(cap_heights) // 2] - SURFACE_CAP_OVERHANG
+
+
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
     from src.entities.terrain import Terrain
 
