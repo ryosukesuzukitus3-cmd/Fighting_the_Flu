@@ -209,7 +209,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--tolerance", type=int, default=26, help="Y tolerance for merging visual runs")
     parser.add_argument("--collision-step", type=int, default=8, help="Sample step for composer-derived collision runs")
     parser.add_argument("--collision-tolerance", type=int, default=10, help="Y tolerance for composer-derived collision runs")
-    parser.add_argument("--overlap", type=int, default=18, help="Atlas piece overlap to hide seams")
+    parser.add_argument("--overlap", type=int, default=0, help="Atlas piece overlap to hide seams")
     parser.add_argument("--debug-lines", action="store_true", help="Compare current strip lines and composer-derived cap edge runs")
     parser.add_argument("--open", action="store_true", help="Open generated HTML preview")
     parser.add_argument("--no-open", action="store_true", help="Do not open generated HTML preview")

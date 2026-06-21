@@ -19,7 +19,8 @@ DEFAULT_SAMPLE_STEP = 48
 DEFAULT_TOLERANCE = 26
 DEFAULT_COLLISION_STEP = 8
 DEFAULT_COLLISION_TOLERANCE = 10
-DEFAULT_OVERLAP = 18
+DEFAULT_OVERLAP = 0
+SURFACE_CAP_OVERHANG = 2
 
 
 @dataclass(frozen=True)
@@ -58,10 +59,20 @@ class Stage3CollisionRun:
 
 
 @dataclass(frozen=True)
+class Stage3CollisionRect:
+    x: int
+    y: int
+    w: int
+    h: int
+    side: str = ""
+
+
+@dataclass(frozen=True)
 class Stage3ComposerLayout:
     surface_runs: tuple[Stage3SurfaceRun, ...]
     placements: tuple[Stage3PlacedPiece, ...]
     collision_runs: tuple[Stage3CollisionRun, ...]
+    collision_rects: tuple[Stage3CollisionRect, ...]
     surface_depth: int
     bounds: pygame.Rect
 
@@ -226,6 +237,22 @@ def _choice(rng: random.Random, pieces: list[Stage3ComposerPiece]) -> Stage3Comp
     return pieces[rng.randrange(len(pieces))]
 
 
+def _opaque_bounds(image: pygame.Surface) -> pygame.Rect:
+    w, h = image.get_size()
+    min_x, min_y = w, h
+    max_x, max_y = -1, -1
+    for y in range(h):
+        for x in range(w):
+            if image.get_at((x, y)).a >= ALPHA_SOLID_THRESHOLD:
+                min_x = min(min_x, x)
+                min_y = min(min_y, y)
+                max_x = max(max_x, x)
+                max_y = max(max_y, y)
+    if max_x < min_x or max_y < min_y:
+        return pygame.Rect(0, 0, w, h)
+    return pygame.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+
+
 def _place_piece(
     placements: list[Stage3PlacedPiece],
     image: pygame.Surface,
@@ -235,32 +262,24 @@ def _place_piece(
     clip: pygame.Rect,
     side: str,
     role: str,
+    allow_partial: bool = True,
 ) -> None:
     image_rect = pygame.Rect(x, y, image.get_width(), image.get_height())
+    if not allow_partial and not clip.contains(image_rect):
+        return
     clipped = image_rect.clip(clip)
     if clipped.width <= 0 or clipped.height <= 0:
         return
     placements.append(Stage3PlacedPiece(image, x, y, clipped, side, role))
 
 
-def _interior_piece_image(piece: Stage3ComposerPiece) -> pygame.Surface:
-    image = piece.image
-    w, h = image.get_size()
-    if h <= 18:
-        return image
-    trim = max(10, min(34, int(h * 0.16)))
-    if h - trim < 12:
-        return image
-    return image.subsurface(pygame.Rect(0, trim, w, h - trim)).copy()
-
-
 def _surface_band_depth(pieces: dict[str, list[Stage3ComposerPiece]]) -> int:
     caps = pieces.get("strip_top", [])
     if not caps:
-        return 42
+        return 96
     heights = sorted(piece.image.get_height() for piece in caps)
     median = heights[len(heights) // 2]
-    return max(56, min(94, int(median * 0.70)))
+    return max(94, min(148, int(median) - SURFACE_CAP_OVERHANG))
 
 
 def _add_body_fill(
@@ -273,31 +292,27 @@ def _add_body_fill(
     overlap: int,
     surface_depth: int,
 ) -> None:
-    block_groups = [name for name in ("block_tall", "block_square") if pieces.get(name)]
-    if not block_groups:
+    square_pieces = pieces.get("block_square") or []
+    body_pieces = [piece for piece in square_pieces if piece.image.get_width() <= 130]
+    body_pieces = body_pieces or square_pieces or pieces.get("block_tall")
+    if not body_pieces:
         return
 
-    x = run.x0 - 16
-    clip = pygame.Rect(run.x0, 0, run.x1 - run.x0, height)
-    while x < run.x1 + 16:
-        group = "block_tall" if pieces.get("block_tall") and rng.random() < 0.58 else rng.choice(block_groups)
-        piece = _choice(rng, pieces[group])
-        image = _interior_piece_image(piece)
+    clip = pygame.Rect(run.x0, -height, run.x1 - run.x0, height * 3)
+    y = run.y + surface_depth if run.side == "bottom" else run.y - surface_depth
+    while (run.side == "bottom" and y < height) or (run.side == "top" and y > 0):
+        piece = _choice(rng, body_pieces)
+        image = piece.image
+        if run.side == "top":
+            image = pygame.transform.flip(image, False, True)
         iw, ih = image.get_size()
-
-        if run.side == "bottom":
-            y = run.y + surface_depth
-            while y < height + ih:
-                _place_piece(placements, image, x, y, clip=clip, side=run.side, role="body")
-                y += max(28, ih - overlap)
-        else:
-            flipped = pygame.transform.flip(image, False, True)
-            y = run.y - surface_depth - ih
-            while y > -ih * 2:
-                _place_piece(placements, flipped, x, y, clip=clip, side=run.side, role="body")
-                y -= max(28, ih - overlap)
-
-        x += max(28, iw - overlap)
+        x = run.x0
+        while x < run.x1:
+            py = y if run.side == "bottom" else y - ih
+            _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body", allow_partial=False)
+            x += max(32, iw - max(0, overlap))
+        step = max(32, ih - max(0, overlap))
+        y = y + step if run.side == "bottom" else y - step
 
 
 def _add_cap(
@@ -314,17 +329,17 @@ def _add_cap(
         return
 
     clip = pygame.Rect(run.x0, 0, run.x1 - run.x0, height)
-    x = run.x0 - rng.randrange(0, 44)
+    x = run.x0
     while x < run.x1:
         piece = _choice(rng, caps)
         image = piece.image
         if run.side == "bottom":
-            y = run.y - 2
+            y = run.y - SURFACE_CAP_OVERHANG
         else:
             image = pygame.transform.flip(image, False, True)
-            y = run.y - image.get_height() + 2
+            y = run.y - image.get_height() + SURFACE_CAP_OVERHANG
         _place_piece(placements, image, x, y, clip=clip, side=run.side, role="cap")
-        x += max(40, image.get_width() - overlap)
+        x += max(40, image.get_width() - max(0, overlap))
 
 
 def _add_props(
@@ -341,11 +356,33 @@ def _add_props(
     if rng.random() > 0.46:
         return
     piece = _choice(rng, props)
+    opaque = _opaque_bounds(piece.image)
     x = rng.randint(run.x0 + 12, max(run.x0 + 12, run.x1 - piece.image.get_width() - 12))
-    y = run.y - piece.image.get_height() + 6
+    y = run.y - opaque.bottom + 6
     if -piece.image.get_height() < y < height:
         clip = pygame.Rect(x, y, piece.image.get_width(), piece.image.get_height())
         _place_piece(placements, piece.image, x, y, clip=clip, side=run.side, role="prop")
+
+
+def _prop_collision_rects(placements: list[Stage3PlacedPiece]) -> list[Stage3CollisionRect]:
+    rects: list[Stage3CollisionRect] = []
+    for placement in placements:
+        if placement.role != "prop":
+            continue
+        opaque = _opaque_bounds(placement.image)
+        world = pygame.Rect(
+            placement.x + opaque.x,
+            placement.y + opaque.y,
+            opaque.width,
+            opaque.height,
+        ).clip(placement.clip)
+        if world.width <= 0 or world.height <= 0:
+            continue
+        world = world.inflate(-min(8, world.width // 5), -min(8, world.height // 5))
+        if world.width <= 0 or world.height <= 0:
+            continue
+        rects.append(Stage3CollisionRect(world.x, world.y, world.width, world.height))
+    return rects
 
 
 def _solid_edge_local_y(image: pygame.Surface, local_x: int, side: str) -> int | None:
@@ -454,7 +491,7 @@ def build_stage3_composer_layout(
 ) -> Stage3ComposerLayout:
     if not segments:
         empty = pygame.Rect(0, 0, 0, height)
-        return Stage3ComposerLayout((), (), (), 0, empty)
+        return Stage3ComposerLayout((), (), (), (), 0, empty)
     if pieces is None:
         pieces = load_stage3_composer_pieces()
 
@@ -504,11 +541,13 @@ def build_stage3_composer_layout(
                 tolerance=collision_tolerance,
             )
         )
+    collision_rects = _prop_collision_rects(placements)
     bounds = pygame.Rect(start, 0, max(0, end - start), height)
     return Stage3ComposerLayout(
         tuple(surface_runs),
         tuple(placements),
         tuple(collision_runs),
+        tuple(collision_rects),
         surface_depth,
         bounds,
     )
@@ -545,7 +584,7 @@ def draw_stage3_composer_layout(
     debug_lines: bool = False,
 ) -> None:
     target_rect = target.get_rect()
-    base_color = (8, 12, 14, 208)
+    base_color = (28, 33, 36, 232)
     for run in layout.surface_runs:
         sx = int(round(run.x0 - camera_x))
         ex = int(round(run.x1 - camera_x))
@@ -607,6 +646,16 @@ def _draw_collision_debug(target: pygame.Surface, layout: Stage3ComposerLayout, 
             continue
         color = (255, 228, 86) if run.side == "top" else (92, 255, 176)
         pygame.draw.line(target, color, (sx, run.y), (ex, run.y), 3)
+    for rect in layout.collision_rects:
+        screen_rect = pygame.Rect(
+            int(round(rect.x - camera_x)),
+            rect.y,
+            rect.w,
+            rect.h,
+        )
+        if screen_rect.right < 0 or screen_rect.left > target.get_width():
+            continue
+        pygame.draw.rect(target, (255, 158, 92), screen_rect, 2)
 
 
 def _draw_current_strip_debug(
@@ -739,6 +788,24 @@ class Stage3ComposerCollisionBlock(pygame.sprite.Sprite):
         return self.world_x + self.rect.width < float(getattr(camera, "x", 0.0))
 
 
+class Stage3ComposerCollisionRectBlock(pygame.sprite.Sprite):
+    def __init__(self, rect: Stage3CollisionRect) -> None:
+        super().__init__()
+        self.world_x = float(rect.x)
+        self.y = float(rect.y)
+        self.side = rect.side
+        self.image = pygame.Surface((max(1, rect.w), max(1, rect.h)), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(topleft=(rect.x, rect.y))
+
+    def update(self, dt: float, camera: object) -> None:
+        to_screen_x = getattr(camera, "to_screen_x", None)
+        sx = to_screen_x(self.world_x) if callable(to_screen_x) else self.world_x - float(getattr(camera, "x", 0.0))
+        self.rect.topleft = (int(sx), int(self.y))
+
+    def is_off_left(self, camera: object) -> bool:
+        return self.world_x + self.rect.width < float(getattr(camera, "x", 0.0))
+
+
 def make_stage3_composer_terrain(
     segments: list[Any],
     *,
@@ -760,4 +827,5 @@ def make_stage3_composer_terrain(
     )
     sprites: list[pygame.sprite.Sprite] = [Stage3ComposerVisualLayer(layout)]
     sprites.extend(Stage3ComposerCollisionBlock(run) for run in layout.collision_runs)
+    sprites.extend(Stage3ComposerCollisionRectBlock(rect) for rect in layout.collision_rects)
     return sprites

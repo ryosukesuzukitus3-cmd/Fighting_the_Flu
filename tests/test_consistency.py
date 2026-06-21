@@ -813,7 +813,115 @@ def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
     assert len(visuals) == 1
     assert collisions
     assert {getattr(sprite, "side", "") for sprite in collisions} >= {"top", "bottom"}
-    assert all(getattr(sprite, "surface_y", None) is not None for sprite in collisions)
+    assert all(
+        getattr(sprite, "surface_y", None) is not None
+        for sprite in collisions
+        if getattr(sprite, "side", "") in {"top", "bottom"}
+    )
+
+
+def test_stage3_composer_floor_props_are_collidable() -> None:
+    from src.entities.stage3_composer_terrain import (
+        build_stage3_composer_layout,
+        load_stage3_composer_pieces,
+        make_stage3_composer_terrain,
+    )
+    from src.entities.terrain import make_terrain_strip
+
+    stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    layout = stage3["terrain_layout"][0]
+    segments = make_terrain_strip(
+        float(layout.get("start_offset", 0)),
+        length=int(layout["length"]),
+        theme=str(layout["theme"]),
+        profile=str(layout["profile"]),
+        segment_w=int(layout["segment_w"]),
+        seed=int(layout["seed"]),
+        gap_min=int(layout["gap_min"]),
+        gap_max=int(layout["gap_max"]),
+        center_y=int(layout["center_y"]),
+        center_wave=int(layout["center_wave"]),
+        top_min=int(layout["top_min"]),
+        bottom_min=int(layout["bottom_min"]),
+        irregularity=int(layout["irregularity"]),
+        breakable_chance=float(layout["breakable_chance"]),
+        breakable_hp=int(layout["breakable_hp"]),
+        breakable_drop_chance=float(layout["breakable_drop_chance"]),
+    )
+    composer_layout = build_stage3_composer_layout(segments, load_stage3_composer_pieces())
+    sprites = make_stage3_composer_terrain(segments)
+    prop_blocks = [
+        sprite
+        for sprite in sprites
+        if not getattr(sprite, "terrain_visual_only", False)
+        and getattr(sprite, "side", "") == ""
+    ]
+
+    assert any(placement.role == "prop" for placement in composer_layout.placements)
+    assert composer_layout.collision_rects
+    assert prop_blocks
+    assert all(block.rect.width > 0 and block.rect.height > 0 for block in prop_blocks)
+
+
+def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
+    from src.entities.stage3_composer_terrain import build_stage3_composer_layout, load_stage3_composer_pieces
+    from src.entities.terrain import make_terrain_strip
+
+    pieces = load_stage3_composer_pieces()
+    source_sizes = {
+        piece.image.get_size()
+        for piece in pieces.get("block_square", [])
+        if piece.image.get_width() <= 130
+    }
+    source_sizes = source_sizes or {piece.image.get_size() for piece in pieces.get("block_square", [])}
+    assert source_sizes
+
+    segments = make_terrain_strip(
+        -100,
+        length=1200,
+        theme="fortress",
+        profile="mountain",
+        segment_w=48,
+        seed=303,
+        gap_min=292,
+        gap_max=390,
+        center_y=292,
+        center_wave=118,
+        top_min=28,
+        bottom_min=34,
+        irregularity=58,
+    )
+    layout = build_stage3_composer_layout(segments, pieces, start_x=0, end_x=1000)
+    body = [placement for placement in layout.placements if placement.role == "body"]
+
+    assert body
+    assert all(placement.image.get_size() in source_sizes for placement in body)
+    assert all(placement.clip.size == placement.image.get_size() for placement in body)
+
+
+def test_stage3_composer_body_fill_touches_surface_caps() -> None:
+    from src.entities.stage3_composer_terrain import (
+        SURFACE_CAP_OVERHANG,
+        _surface_band_depth,
+        load_stage3_composer_pieces,
+    )
+
+    pieces = load_stage3_composer_pieces()
+    cap_heights = sorted(piece.image.get_height() for piece in pieces["strip_top"])
+
+    assert _surface_band_depth(pieces) == cap_heights[len(cap_heights) // 2] - SURFACE_CAP_OVERHANG
+
+
+def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
+    from src.entities.terrain import Terrain
+
+    floor_block = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=3)
+    ceiling_block = Terrain(0, 0, 126, 168, "fortress_block", destructible=True, hp=3)
+
+    assert floor_block._surface_anchor == "floor"
+    assert ceiling_block._surface_anchor == "ceiling"
+    assert floor_block.take_damage(1) is False
+    assert floor_block._surface_anchor == "floor"
 
 
 def test_spawner_surface_ignores_visual_only_terrain() -> None:
@@ -1285,6 +1393,14 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     src = (ROOT / "tools" / "run.py").read_text(encoding="utf-8")
     assert "PYTHONIOENCODING" in src
     assert ".venv" in src
+    assert "stage3-composer-report" in src
+
+
+def test_stage3_composer_report_opens_preview_by_default() -> None:
+    from tools import stage3_composer_report
+
+    assert stage3_composer_report._parse_args([]).open_preview is True
+    assert stage3_composer_report._parse_args(["--no-open"]).open_preview is False
 
 
 def test_settings_manager_ignores_wrong_json_shapes(tmp_path, monkeypatch) -> None:
