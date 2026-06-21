@@ -14,6 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.0",
+    "Pillow>=10.0.0",   # gameplay_clip の GIF 書き出しに使用
 ]
 
 [project.scripts]
