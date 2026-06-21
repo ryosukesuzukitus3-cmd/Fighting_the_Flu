@@ -22,7 +22,8 @@ from src.scenes.game.upgrade_mixin  import GameSceneUpgradeMixin
 from src.scenes.game.overlay_mixin  import GameSceneOverlayMixin
 from src.scenes.game.post_boss_mixin import GameScenePostBossMixin
 from src.scenes.game.debug_mixin    import GameSceneDebugMixin
-from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
+# 最終決戦（Form3 投了王サワグチ）の演出シーケンス
+from src.scenes.game.final_battle import FinalBattleDirector
 
 # ゲームシーン専用定数
 from src.scenes.game.config import (
@@ -37,7 +38,6 @@ from src.scenes.game.config import (
 # セリフ内容の SSOT
 from src.story.script import (
     BOSS_INTRO, BOSS_MID, STAGE_BG_TEXT,
-    BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS,
 )
 # 被ダメージ／反撃ダメージ定数
 from src.core.balance import (
@@ -200,31 +200,8 @@ class GameScene(
             self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
                                        spawn_heal_fn=self._companion_spawn_heal)
 
-        # 最終決戦（Form3 投了王サワグチ）
-        self._final_phase: int = 0     # 0=非Form3 / 1=Act1 / 2=Act2
-        self._final_seq:   str = ""    # ""/fakeout/sengen/return/final_sengen/final_chance
-        self._final_dialogue_pages:  list = []
-        self._final_dialogue_idx:    int  = 0
-        self._final_dialogue_active: bool = False
-        self._final_dialogue_on_done = None
-        self._final_dialogue_font    = None
-        self._final_banner_text: tuple = ()
-        self._final_banner_timer: float = 0.0
-        self._sengen_overlay_timer: float = 0.0
-        self._regen_timer: float = 0.0
-        self._f3_act1_mid_shown:    bool = False
-        self._f3_act2_mid_shown:    bool = False
-        self._fakeout_triggered:    bool = False
-        self._final_sengen_triggered: bool = False
-        self._karonaru_return_timer: float = 0.0
-        self._karonaru_return_from: tuple[float, float] = (0.0, 0.0)
-        self._karonaru_return_to: tuple[float, float] = (0.0, 0.0)
-        self._karonaru_arrival_timer: float = 0.0
-        self._karonaru_arrival_pos: tuple[float, float] = (0.0, 0.0)
-        self._karonaru_arrival_duration: float = 0.0
-        self._karonaru_arrival_from: tuple[float, float] = (0.0, 0.0)
-        self._karonaru_arrival_to: tuple[float, float] = (0.0, 0.0)
-        self._karonaru_arrival_trail: list[tuple[float, float, float]] = []
+        # 最終決戦（Form3 投了王サワグチ）の状態・演出は専用ディレクタが所有
+        self._final = FinalBattleDirector(self)
 
         self._player_prev_rect = self.player.rect.copy()
 
@@ -352,12 +329,7 @@ class GameScene(
         if self._boss_kill_flash_timer > 0: self._boss_kill_flash_timer -= dt
         if self._laser_flash_timer     > 0: self._laser_flash_timer     -= dt
         if self._stage_banner_timer    > 0: self._stage_banner_timer    -= dt
-        if self._final_banner_timer    > 0: self._final_banner_timer    -= dt
-        if self._sengen_overlay_timer  > 0: self._sengen_overlay_timer  -= dt
-        if self._karonaru_arrival_timer > 0:
-            self._update_karonaru_arrival_motion(dt)
-        elif self._karonaru_arrival_trail:
-            self._decay_karonaru_arrival_trail(dt)
+        self._final.update_timers(dt)
         self._tick_boss_dialogue(dt)
         if self._combo_pulse           > 0: self._combo_pulse           -= dt * 4.0
         if self._combo_break_timer     > 0: self._combo_break_timer     -= dt
@@ -417,12 +389,12 @@ class GameScene(
             return
 
         # Freeze gameplay during final scripted dialogue.
-        if self._final_dialogue_active:
-            self._update_final_dialogue()
+        if self._final.dialogue_active:
+            self._final.update_dialogue()
             self.particles.update(dt)
             return
-        if self._final_seq == "return_join":
-            self._update_karonaru_return_join(dt)
+        if self._final.seq == "return_join":
+            self._final.update_return_join(dt)
             self.particles.update(dt)
             return
 
@@ -505,9 +477,9 @@ class GameScene(
                     self._on_enemy_killed(enemy)
                 if self._boss is not None:
                     if getattr(self.laser, "boss_form2_transition", False):
-                        self._on_form2_transition()
+                        self._final.on_form2_transition()
                     if self._boss is not None and getattr(self.laser, "boss_form3_transition", False):
-                        self._on_form3_transition()
+                        self._final.on_form3_transition()
                     if laser_boss_killed:
                         self._on_boss_killed()
                         if not self._is_debug_stage:
@@ -587,7 +559,7 @@ class GameScene(
 
         # Queue boss mid-fight dialogue once after HP drops below half.
         if (self._in_boss_fight
-                and self._final_phase == 0
+                and self._final.phase == 0
                 and not self._boss_mid_dialogue_shown
                 and self._boss.hp / self._boss.max_hp <= 0.5):
             boss_stage_id = self._boss_stage_id()
@@ -598,8 +570,8 @@ class GameScene(
 
         # Update final-battle special effects and companion sequence.
         if (self._in_boss_fight
-                and self._final_phase > 0 and self._final_seq == ""):
-            self._update_final_combat(dt)
+                and self._final.phase > 0 and self._final.seq == ""):
+            self._final.update_combat(dt)
 
         if self._process_collisions():
             return
@@ -723,8 +695,7 @@ class GameScene(
                 buf.blit(tint, self._boss.rect)
         self._draw_boss_gimmick(buf)
         self.particles.draw(buf)
-        if self._karonaru_arrival_trail:
-            self._draw_karonaru_arrival_trail(buf)
+        self._final.draw_arrival_trail(buf)
         if self._companion:
             self._companion.draw(buf)
         self.player.draw(buf)
@@ -791,12 +762,7 @@ class GameScene(
         if self._boss_dialogue_timer > 0:
             self._draw_boss_dialogue(screen)
 
-        if self._sengen_overlay_timer > 0:
-            self._draw_sengen_overlay(screen)
-        if self._final_banner_timer > 0:
-            self._draw_final_banner(screen)
-        if self._final_dialogue_active:
-            self._draw_final_dialogue(screen)
+        self._final.draw_overlays(screen)
 
         if __debug__:
             self._debug_draw_overlay(screen)
@@ -1021,9 +987,9 @@ class GameScene(
                             return True
                         break
                     if self._boss is not None and not was_form2 and self._boss._form2:
-                        self._on_form2_transition()
+                        self._final.on_form2_transition()
                     if self._boss is not None and not was_form3 and self._boss._form3:
-                        self._on_form3_transition()
+                        self._final.on_form3_transition()
 
         if pygame.sprite.spritecollideany(self.player, self.enemies, _hit_rect_collide):
             self._damage_player(PLAYER_DMG_ENEMY)
@@ -1168,326 +1134,6 @@ class GameScene(
             self.game.sound.play_se_alias("SE_ITEM_HEAL", volume=0.75)
         else:
             self.game.sound.play_se_alias("SE_ITEM", volume=0.7)
-
-    def _on_form2_transition(self) -> None:
-        self.camera.shake(22.0)
-        self._hitstop_timer = 0.14
-        self.particles.spawn_big_explosion(self._boss.sx, self._boss.sy)
-        self.enemy_bullets.empty()
-        self.player._invincible_timer = max(self.player._invincible_timer, 2.5)
-        self._form2_flash_timer = 0.5
-        f2_key = f"{self._boss_stage_id()}f2"
-        self._enqueue_boss_dialogue(BOSS_MID.get(f2_key, []), BOSS_MID_LINE_DURATION)
-        self._boss_mid_dialogue_shown = False
-
-    def _show_final_banner(self, key: str, duration: float = 2.6) -> None:
-        self._final_banner_text  = FINAL_BANNERS.get(key, ())
-        self._final_banner_timer = duration
-
-    def _play_final_dialogue(self, pages: list, on_done) -> None:
-        """Play final dialogue pages and invoke a completion callback."""
-        self._final_dialogue_pages   = list(pages)
-        self._final_dialogue_idx     = 0
-        self._final_dialogue_active  = True
-        self._final_dialogue_on_done = on_done
-
-    def _update_final_dialogue(self) -> None:
-        inp = self.game.input
-        if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
-            self._final_dialogue_idx += 1
-            if self._final_dialogue_idx >= len(self._final_dialogue_pages):
-                self._final_dialogue_active = False
-                cb = self._final_dialogue_on_done
-                self._final_dialogue_on_done = None
-                if cb is not None:
-                    cb()
-
-    def _on_form3_transition(self) -> None:
-        """Transition from form 2 to the true final form."""
-        self.camera.shake(26.0)
-        self._hitstop_timer = 0.18
-        self.particles.spawn_big_explosion(self._boss.sx, self._boss.sy)
-        self.enemy_bullets.empty()
-        self.player._invincible_timer = max(self.player._invincible_timer, 2.5)
-        self._boss_kill_flash_timer = 1.2
-        self.game.sound.stop_bgm(fadeout_ms=600)
-        boss_stage_id = self._boss_stage_id()
-        self.game.sound.play_bgm(BOSS_BGM.get(boss_stage_id, "music/bgm/決戦.mp3"))
-        self._final_phase = 1
-        self._final_seq   = ""
-        self._show_final_banner("true_final", 3.0)
-        self._play_final_dialogue(BOSS_FORM3_INTRO, on_done=lambda: None)
-
-    def _update_final_combat(self, dt: float) -> None:
-        """Update special story beats during the final form."""
-        boss = self._boss
-        if boss is None:
-            return
-        ratio = boss.hp / boss.max_hp
-
-        if self._final_phase == 1:
-            if getattr(boss, "_regen_enabled", False):
-                self._regen_timer -= dt
-                if self._regen_timer <= 0.0:
-                    self._regen_timer = 1.0
-                    boss.regen(2)
-            if not self._f3_act1_mid_shown and ratio <= 0.6:
-                self._enqueue_boss_dialogue(BOSS_MID.get("4f3mid", []), BOSS_MID_LINE_DURATION)
-                self._f3_act1_mid_shown = True
-            if not self._fakeout_triggered and ratio <= 0.3:
-                self._fakeout_triggered = True
-                self._start_fakeout()
-        elif self._final_phase == 2:
-            if not self._f3_act2_mid_shown and ratio <= 0.5:
-                self._enqueue_boss_dialogue(BOSS_MID.get("4f3act2mid", []), BOSS_MID_LINE_DURATION)
-                self._f3_act2_mid_shown = True
-            if not self._final_sengen_triggered and boss.hp <= 1:
-                self._final_sengen_triggered = True
-                self._start_final_sengen()
-
-    def _start_fakeout(self) -> None:
-        self._final_seq = "fakeout"
-        self.enemy_bullets.empty()
-        self.camera.shake(16.0)
-        self._play_final_dialogue(FINAL_SEQ["fakeout"], on_done=self._start_sengen)
-
-    def _start_sengen(self) -> None:
-        if self._boss is not None:
-            self._boss.hp = self._boss.max_hp // 2
-        self._final_seq = "sengen"
-        self._sengen_overlay_timer = 2.5
-        self._show_final_banner("sengen", 2.6)
-        self.player.hp = 1   # 蝗樣∩荳崎・ 竊・轢墓ｭｻ
-        self.player._invincible_timer = max(self.player._invincible_timer, 3.0)
-        self._play_final_dialogue(FINAL_SEQ["sengen"], on_done=self._start_karonaru_return)
-
-    def _start_karonaru_return(self) -> None:
-        self._final_seq = "return"
-        self._show_final_banner("kouhatsu", 3.0)
-        self._boss_kill_flash_timer = 1.2   # 逋ｽ髢・・
-        self.game.sound.play_bgm("music/bgm/Rebirth_the_edge.mp3", volume=0.7)
-        self.game.sound.play_se_alias("SE_LIGHT")
-        self._spawn_returning_karonaru()
-        self._play_final_dialogue(FINAL_SEQ["return"], on_done=self._start_karonaru_return_join)
-
-    def _spawn_returning_karonaru(self) -> None:
-        if self._companion is None:
-            from src.entities.companion import Karonaru
-            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
-                                       spawn_heal_fn=self._companion_spawn_heal)
-        arrival_y = float(self.player.rect.centery) + 18.0
-        end_x = max(62.0, float(self.player.rect.centerx) - 76.0)
-        start = (-48.0, arrival_y)
-        end = (end_x, arrival_y)
-        self._companion.sx, self._companion.sy = start
-        self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
-        self._karonaru_arrival_duration = 1.65
-        self._karonaru_arrival_timer = self._karonaru_arrival_duration
-        self._karonaru_arrival_from = start
-        self._karonaru_arrival_to = end
-        self._karonaru_arrival_pos = start
-        self._karonaru_arrival_trail = [(start[0], start[1], 0.45)]
-        self.game.sound.play_se_alias("SE_KARONARU_ARRIVE", volume=0.7)
-
-    def _update_karonaru_arrival_motion(self, dt: float) -> None:
-        if self._companion is None:
-            self._karonaru_arrival_timer = 0.0
-            return
-        dur = max(0.001, self._karonaru_arrival_duration)
-        self._karonaru_arrival_timer = max(0.0, self._karonaru_arrival_timer - dt)
-        t = 1.0 - self._karonaru_arrival_timer / dur
-        ease = 1.0 - (1.0 - t) ** 3
-        sx0, sy0 = self._karonaru_arrival_from
-        sx1, sy1 = self._karonaru_arrival_to
-        self._companion.sx = sx0 + (sx1 - sx0) * ease
-        self._companion.sy = sy0 + (sy1 - sy0) * ease
-        self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
-        self._karonaru_arrival_pos = (self._companion.sx, self._companion.sy)
-        self._karonaru_arrival_trail.append((self._companion.sx, self._companion.sy, 0.55))
-        self._karonaru_arrival_trail = [
-            (x, y, life - dt) for x, y, life in self._karonaru_arrival_trail
-            if life - dt > 0.0
-        ]
-
-    def _decay_karonaru_arrival_trail(self, dt: float) -> None:
-        self._karonaru_arrival_trail = [
-            (x, y, life - dt) for x, y, life in self._karonaru_arrival_trail
-            if life - dt > 0.0
-        ]
-
-    def _draw_karonaru_arrival_trail(self, surf: pygame.Surface) -> None:
-        trail = self._karonaru_arrival_trail
-        if len(trail) < 2:
-            return
-        layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i, (x, y, life) in enumerate(trail):
-            alpha = max(0, min(180, int(180 * life / 0.55)))
-            radius = 2 + min(4, i // 3)
-            pygame.draw.circle(layer, (170, 255, 205, alpha), (int(x), int(y)), radius)
-        pts = [(int(x), int(y)) for x, y, _ in trail]
-        if len(pts) >= 2:
-            pygame.draw.lines(layer, (125, 245, 180, 80), False, pts, 2)
-        surf.blit(layer, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-
-    def _start_karonaru_return_join(self) -> None:
-        if self._companion is None:
-            self._spawn_returning_karonaru()
-        if self._karonaru_arrival_timer > 0:
-            self._karonaru_arrival_timer = 0.0
-            self._companion.sx, self._companion.sy = self._karonaru_arrival_to
-            self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
-        self._final_seq = "return_join"
-        self._karonaru_return_timer = 0.0
-        self._karonaru_return_from = (float(self._companion.sx), float(self._companion.sy))
-        self._karonaru_return_to = (
-            float(self.player.rect.centerx) - 52.0,
-            float(self.player.rect.centery) + 18.0,
-        )
-        self.game.sound.play_se_alias("SE_LIGHT")
-
-    def _update_karonaru_return_join(self, dt: float) -> None:
-        if self._companion is None:
-            self._do_karonaru_max()
-            return
-        self._karonaru_return_timer += dt
-        dur = 1.35
-        t = min(1.0, self._karonaru_return_timer / dur)
-        ease = 1.0 - (1.0 - t) ** 3
-        sx0, sy0 = self._karonaru_return_from
-        sx1, sy1 = self._karonaru_return_to
-        arc = math.sin(t * math.pi) * 36.0
-        self._companion.sx = sx0 + (sx1 - sx0) * ease
-        self._companion.sy = sy0 + (sy1 - sy0) * ease - arc
-        self._companion.rect.center = (int(self._companion.sx), int(self._companion.sy))
-        self.particles.spawn_glow(
-            self._companion.sx,
-            self._companion.sy,
-            color=(190, 255, 210),
-            count=2,
-            speed=45.0,
-        )
-        if t >= 1.0:
-            self._spawn_popup("LET'S GO", int(self._companion.sx), int(self._companion.sy) - 34,
-                              color=(180, 255, 200), life=1.8)
-            self._do_karonaru_max()
-
-    def _do_karonaru_max(self) -> None:
-        if self._companion is None:
-            from src.entities.companion import Karonaru
-            self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
-                                       spawn_heal_fn=self._companion_spawn_heal)
-            self._companion.sx = float(self.player.rect.centerx) - 50.0
-            self._companion.sy = float(self.player.rect.centery) + 16.0
-        self._companion.set_max()
-        self._companion.reseed_trail(self.player)
-        self._karonaru_heal_player()
-        self.game.story.karonaru_lost        = False
-        # Story flags for Karonaru return.
-        self.game.story.karonaru_available   = True
-        self.game.story.karonaru_max         = True
-        self.game.story.final_self_distanced = True
-        self._show_final_banner("anti_rumin", 3.0)
-        # Start the anti-rumination field and final gauge.
-        from src.entities.enemies.boss import _FORM3_ACT2_HP
-        if self._boss is not None:
-            self._boss.begin_act2(_FORM3_ACT2_HP)
-        self._final_phase = 2
-        self._boss_mid_dialogue_shown = False
-        self._play_final_dialogue(FINAL_SEQ["act2_start"], on_done=self._resume_final_combat)
-
-    def _karonaru_heal_player(self) -> None:
-        before = self.player.hp
-        self.player.hp = self.player.max_hp
-        self.player._invincible_timer = max(self.player._invincible_timer, 2.8)
-        healed = max(0, self.player.hp - before)
-        px, py = self.player.rect.center
-        self._spawn_popup(
-            "HP FULL RECOVER" if healed > 0 else "HP SECURED",
-            px,
-            self.player.rect.top - 26,
-            color=(160, 255, 190),
-            life=2.4,
-        )
-        self.particles.spawn_glow(px, py, color=(160, 255, 190), count=28, speed=85.0)
-        self.particles.spawn_spark(px, py, color=(225, 255, 210), count=16, speed=260.0)
-        if self._companion is not None:
-            self.particles.spawn_glow(
-                self._companion.sx,
-                self._companion.sy,
-                color=(220, 255, 230),
-                count=18,
-                speed=70.0,
-            )
-        self.game.sound.play_se_alias("SE_HEAL", volume=0.8)
-
-    def _resume_final_combat(self) -> None:
-        self._final_seq = ""
-
-    def _start_final_sengen(self) -> None:
-        self._final_seq = "final_sengen"
-        self.enemy_bullets.empty()
-        self._sengen_overlay_timer = 2.0
-        self._show_final_banner("final_sengen", 2.6)
-        self._play_final_dialogue(FINAL_SEQ["final_sengen"], on_done=self._arm_final_kill)
-
-    def _arm_final_kill(self) -> None:
-        if self._boss is not None:
-            self._boss.arm_final_kill()
-        self._show_final_banner("final_chance", 2.4)
-        self._spawn_popup("NOW STRIKE", SCREEN_WIDTH // 2, 120, color=(255, 230, 150), life=2.0)
-        self._final_seq = "final_chance"
-
-    # ── 最終決戦 描画 ──────────────────────────────────────────────
-    def _draw_sengen_overlay(self, screen: pygame.Surface) -> None:
-        """Draw the final declaration overlay."""
-        pulse = 0.5 + 0.5 * math.sin(self._sengen_overlay_timer * 6.0)
-        alpha = int(120 + 80 * pulse)
-        ov = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        ov.fill((90, 0, 10, alpha))
-        screen.blit(ov, (0, 0))
-
-    def _draw_final_banner(self, screen: pygame.Surface) -> None:
-        """Draw the final system banner."""
-        if not self._final_banner_text:
-            return
-        big   = self.game.resources.pixelfont(40)
-        small = self.game.resources.pixelfont(22)
-        cx = SCREEN_WIDTH // 2
-        cy = SCREEN_HEIGHT // 2 - 120
-        alpha = 255 if self._final_banner_timer > 0.4 else int(255 * (self._final_banner_timer / 0.4))
-        for i, txt in enumerate(self._final_banner_text):
-            font = big if i == 0 else small
-            col  = (255, 80, 80) if i == 0 else (255, 210, 120)
-            surf = font.render(txt, True, col)
-            surf.set_alpha(alpha)
-            screen.blit(surf, (cx - surf.get_width() // 2, cy + i * 46))
-
-    def _draw_final_dialogue(self, screen: pygame.Surface) -> None:
-        """Draw final battle dialogue pages."""
-        if self._final_dialogue_font is None:
-            self._final_dialogue_font = self.game.resources.pixelfont(26)
-        pages = self._final_dialogue_pages
-        idx   = self._final_dialogue_idx
-        if not pages or idx >= len(pages):
-            return
-        line  = pages[idx]
-        total = len(pages)
-
-        if idx < total - 1:
-            hint = f"{idx + 1}/{total}  ENTER: 次へ"
-        else:
-            hint = "ENTER: OK"
-        draw_combat_panel(
-            screen,
-            self.game.resources,
-            line.speaker,
-            (line.text,),
-            page_index=idx,
-            total_pages=total,
-            hint_text=hint,
-            style=COMBAT_PURPLE_STYLE,
-        )
 
     def _update_bg_text(self, dt: float) -> None:
         if not self._bg_text_pool:
@@ -1690,7 +1336,7 @@ class GameScene(
         self.particles.spawn_player_hit(self.player.sx, self.player.sy)
         self.camera.shake(10.0)
         # Regenerate the final boss when the player is hit during act 1.
-        if (self._boss is not None and self._final_phase == 1
+        if (self._boss is not None and self._final.phase == 1
                 and getattr(self._boss, "_regen_enabled", False)):
             self._boss.regen(15)
         if self.player.hp <= 0:

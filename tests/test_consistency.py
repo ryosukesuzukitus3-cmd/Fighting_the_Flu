@@ -1439,18 +1439,24 @@ def test_credits_roll_fades_bgm_before_title() -> None:
 
 
 def test_final_return_spawns_karonaru_before_dialogue() -> None:
-    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
-    spawn_at = src.index("self._spawn_returning_karonaru()")
-    dialogue_at = src.index("self._play_final_dialogue(FINAL_SEQ[\"return\"]")
+    # 最終決戦の演出 SSOT は src/scenes/game/final_battle.py。
+    # GameScene はそこへ委譲するだけなので、内部挙動は director を、
+    # フェーズ検知の配線は GameScene を検査する。
+    fb = (ROOT / "src" / "scenes" / "game" / "final_battle.py").read_text(encoding="utf-8")
+    gs = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    spawn_at = fb.index("self._spawn_returning_karonaru()")
+    dialogue_at = fb.index("self._play_final_dialogue(FINAL_SEQ[\"return\"]")
     assert spawn_at < dialogue_at
-    assert "self._final_seq == \"return_join\"" in src
-    assert "_draw_karonaru_arrival_trail" in src
-    assert "SE_KARONARU_ARRIVE" in src
-    assert "start = (-48.0, arrival_y)" in src
-    assert "self._karonaru_heal_player()" in src
-    assert "self.player.hp = self.player.max_hp" in src
-    assert "final_chance" in src
-    assert "KARONARU RETURNS" not in src
+    assert "self._final.seq == \"return_join\"" in gs
+    assert "self._final.draw_arrival_trail" in gs
+    assert "def draw_arrival_trail" in fb
+    assert "SE_KARONARU_ARRIVE" in fb
+    assert "start = (-48.0, arrival_y)" in fb
+    assert "self._karonaru_heal_player()" in fb
+    assert "scene.player.hp = scene.player.max_hp" in fb
+    assert "final_chance" in fb
+    assert "KARONARU RETURNS" not in fb
+    assert "KARONARU RETURNS" not in gs
 
 
 def test_design_md_autogen_blocks_are_current() -> None:
