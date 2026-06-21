@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.core.factories import make_enemy
+from src.entities.terrain_query import iter_collidable_terrain
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -215,7 +216,7 @@ class EnemySpawner:
         if self._terrain is None:
             return []
         result = []
-        for ter in self._terrain:
+        for ter in iter_collidable_terrain(self._terrain):
             left = getattr(ter, "world_x", 0.0)
             right = left + ter.rect.width
             if left <= world_x <= right:
@@ -318,7 +319,18 @@ class EnemySpawner:
                     breakable_drop_chance=float(event.get("breakable_drop_chance", 0.0)),
                     profile=str(event.get("profile", "normal")),
                 )
-                self._terrain.add(*segments)
+                if event.get("renderer") == "stage3_composer":
+                    from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
+                    self._terrain.add(*make_stage3_composer_terrain(
+                        segments,
+                        sample_step=int(event.get("composer_sample_step", 48)),
+                        tolerance=int(event.get("composer_tolerance", 26)),
+                        collision_step=int(event.get("composer_collision_step", 8)),
+                        collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
+                        overlap=int(event.get("composer_overlap", 18)),
+                    ))
+                else:
+                    self._terrain.add(*segments)
             return True
 
         return False

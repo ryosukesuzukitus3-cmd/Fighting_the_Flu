@@ -10,6 +10,7 @@ import random
 from typing import Callable, TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.entities.terrain_query import terrain_collideany
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -193,11 +194,11 @@ class Karonaru(pygame.sprite.Sprite):
             return
         # X 軸: 横移動だけ試し、壁にめり込むなら据え置き
         self.rect.center = (int(new_x), int(self.sy))
-        if pygame.sprite.spritecollideany(self, terrain):
+        if terrain_collideany(self, terrain):
             new_x = self.sx
         # Y 軸: 縦移動だけ試し、壁にめり込むなら据え置き
         self.rect.center = (int(new_x), int(new_y))
-        if pygame.sprite.spritecollideany(self, terrain):
+        if terrain_collideany(self, terrain):
             new_y = self.sy
         self.sx, self.sy = new_x, new_y
         self.rect.center = (int(self.sx), int(self.sy))

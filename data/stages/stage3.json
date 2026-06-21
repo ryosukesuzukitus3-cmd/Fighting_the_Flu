@@ -7,6 +7,7 @@
     {
       "type": "TerrainStrip",
       "theme": "fortress",
+      "renderer": "stage3_composer",
       "profile": "mountain",
       "length": 12000,
       "segment_w": 48,
@@ -28,6 +29,7 @@
     {
       "type": "TerrainStrip",
       "theme": "fortress",
+      "renderer": "stage3_composer",
       "profile": "normal",
       "length": 1700,
       "segment_w": 48,

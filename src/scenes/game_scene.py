@@ -12,6 +12,7 @@ from src.entities.background import ScrollingBackground
 from src.entities.player import Player
 from src.entities.hud import HUD
 from src.entities.laser_beam import LaserBeam
+from src.entities.terrain_query import iter_collidable_terrain, terrain_collideany
 from src.stages.stage import Stage
 from src.stages.spawner import EnemySpawner
 from src.entities.particle import ParticleSystem
@@ -780,7 +781,7 @@ class GameScene(
 
         for _ in range(4):
             hit = self.player.hit_rect
-            blockers = [ter for ter in self.terrain if hit.colliderect(ter.rect)]
+            blockers = [ter for ter in iter_collidable_terrain(self.terrain) if hit.colliderect(ter.rect)]
             if not blockers:
                 break
 
@@ -831,7 +832,7 @@ class GameScene(
         for bullet in list(self.player_bullets):
             if getattr(bullet, "_terrain_bounced", False):
                 continue
-            ter = pygame.sprite.spritecollideany(bullet, self.terrain)
+            ter = terrain_collideany(bullet, self.terrain)
             if ter is None:
                 continue
             sx, sy = bullet.rect.center
@@ -847,7 +848,7 @@ class GameScene(
                     or getattr(bullet, "terrain_passthrough", False)
                     or getattr(bullet, "warning_only", False)):
                 continue
-            ter = pygame.sprite.spritecollideany(bullet, self.terrain)
+            ter = terrain_collideany(bullet, self.terrain)
             if ter is None:
                 continue
             sx, sy = bullet.rect.center
@@ -1016,7 +1017,7 @@ class GameScene(
                 return True
 
         # Damage player on terrain contact.
-        if pygame.sprite.spritecollideany(self.player, self.terrain, _hit_rect_collide):
+        if terrain_collideany(self.player, self.terrain, _hit_rect_collide):
             self._damage_player(PLAYER_DMG_TERRAIN)
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True

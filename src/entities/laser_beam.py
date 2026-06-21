@@ -8,6 +8,7 @@ import math
 import random
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.entities.terrain_query import iter_collidable_terrain
 
 # ─── アニメーション共通 ──────────────────────────────────────────
 _START_DURATION = 0.15  # ビーム展開エフェクト（秒）
@@ -246,7 +247,7 @@ class LaserBeam:
         nearest_x = beam_right
         y0 = muzzle_sy - half_w
         y1 = muzzle_sy + half_w
-        for ter in terrain:
+        for ter in iter_collidable_terrain(terrain):
             rect = ter.rect
             if rect.right < muzzle_sx or rect.left > beam_right:
                 continue
