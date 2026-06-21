@@ -4,6 +4,9 @@
 本物のプレイ画面・UI・ボス演出・弾幕がそのまま撮れる。生成した PNG は
 そのまま画像として確認できる（Claude が開発中に見た目を自己検証する用途）。
 
+シーンの構築・1フレーム進行・ボス戦への早送りは tools/headless.py に集約
+（capture / gameplay_clip / スモークテストで共有する SSOT）。
+
 使い方:
   # ステージ1 を 90 フレーム進めて1枚
   python tools/capture.py --stage 1 --frames 90
@@ -24,35 +27,26 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
-# pygame import より前にヘッドレス設定を済ませる
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
-os.environ.setdefault("PYTHONUTF8", "1")
-
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+# ヘッドレス設定（SDL ダミー）は headless の import 時に済む。
+from tools.headless import (  # noqa: E402
+    apply_weapon,
+    build_game_scene,
+    hold_keys_from_names,
+    skip_to_fight,
+    step_frame,
+)
 
 import pygame  # noqa: E402
 
 from src.core.game import Game  # noqa: E402
 from src.core.registries import stage_ids  # noqa: E402
-from src.scenes.game_scene import GameScene  # noqa: E402
-
-# --hold の名前 → pygame キー定数
-_HOLD_KEYS = {
-    "fire":  pygame.K_z,
-    "laser": pygame.K_SPACE,
-    "up":    pygame.K_UP,
-    "down":  pygame.K_DOWN,
-    "left":  pygame.K_LEFT,
-    "right": pygame.K_RIGHT,
-}
-
-_MAX_INTRO_FRAMES = 3000   # ボス演出スキップの安全上限
 
 # --cutscene の名前 → (script.py の定数名, テーマ)
 _CUTSCENES = {
@@ -90,65 +84,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--page", type=int, default=0, help="--cutscene 時に表示するページ番号（既定0）")
     p.add_argument("--out", default="captures/shot", help="出力先プレフィックス（既定 captures/shot）")
     return p.parse_args(argv)
-
-
-def _apply_weapon(scene: GameScene, args: argparse.Namespace) -> None:
-    w = scene.player.weapon
-    w.main_level   = max(0, min(args.main, len(w._MAIN_LEVELS) - 1))
-    w.laser_level  = max(0, min(args.laser, 6))
-    w.homing_level = max(0, min(args.homing, 7))
-    w.speed_level  = max(0, min(args.speed, 5))
-    w.magnet_level = max(0, min(args.magnet, 3))
-    w.has_barrier  = args.barrier
-
-
-def _hold_keys(names: str) -> list[int]:
-    keys: list[int] = []
-    for name in (n.strip() for n in names.split(",") if n.strip()):
-        if name not in _HOLD_KEYS:
-            raise SystemExit(f"unknown hold key: {name!r} (choices: {', '.join(_HOLD_KEYS)})")
-        keys.append(_HOLD_KEYS[name])
-    return keys
-
-
-def _step(scene: GameScene, args: argparse.Namespace, hold: list[int]) -> None:
-    """Game.run() の1フレーム分を最小構成で再現する。"""
-    inp = scene.game.input
-    inp.pre_update()
-    for key in hold:
-        inp._pressed.add(key)
-    # ボス会話は RETURN 待ちなので、撮影では毎フレーム送って読み飛ばす。
-    # is_held_with_repeat は _pressed も参照するため両方に入れる（_just_pressed だけだと進まない）。
-    if getattr(scene, "_boss_intro_state", "") == "boss_dialogue":
-        inp._pressed.add(pygame.K_RETURN)
-        inp._just_pressed.add(pygame.K_RETURN)
-    inp.update(args.dt)
-
-    if args.invincible:
-        scene.player.hp = scene.player.max_hp
-        scene.player._invincible_timer = 0.0
-        scene.player._blink_visible = True
-
-    scene.update(args.dt)
-    scene.draw(scene.game.screen)
-
-
-def _skip_to_fight(scene: GameScene, args: argparse.Namespace, hold: list[int]) -> None:
-    """ボス演出（alert→入場→セリフ→バナー）を進めて fighting 状態まで早送りする。"""
-    scene._queue_boss_spawn(args.stage)
-    for _ in range(_MAX_INTRO_FRAMES):
-        if scene._boss_intro_state == "fighting":
-            break
-        _step(scene, args, hold)
-    else:
-        print("warning: boss intro did not reach 'fighting' within frame cap", file=sys.stderr)
-
-    # フォーム変形（ステージ4のみ意味を持つ）
-    boss = scene._boss
-    if boss is not None and args.form >= 2 and hasattr(boss, "_transform_form2"):
-        boss._transform_form2()
-    if boss is not None and args.form >= 3 and hasattr(boss, "_transform_form3"):
-        boss._transform_form3()
 
 
 def _capture_cutscene(args: argparse.Namespace) -> int:
@@ -199,20 +134,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown stage {args.stage} (available: {sorted(valid)})", file=sys.stderr)
         return 2
 
-    hold = _hold_keys(args.hold)
+    hold = hold_keys_from_names(args.hold)
 
-    game = Game()
-    scene = GameScene(game, stage_id=args.stage)
-    game._scene = scene
-    scene.on_enter()
-    _apply_weapon(scene, args)
+    game, scene = build_game_scene(args.stage)
+    apply_weapon(scene, main=args.main, laser=args.laser, homing=args.homing,
+                 speed=args.speed, magnet=args.magnet, barrier=args.barrier)
 
     if args.boss:
-        _skip_to_fight(scene, args, hold)
+        if not skip_to_fight(scene, args.stage, form=args.form, dt=args.dt,
+                             hold=hold, invincible=args.invincible):
+            print("warning: boss intro did not reach 'fighting' within frame cap", file=sys.stderr)
 
     # 最初の撮影まで warmup
     for _ in range(max(0, args.frames)):
-        _step(scene, args, hold)
+        step_frame(scene, dt=args.dt, hold=hold, invincible=args.invincible)
 
     out_prefix = Path(args.out)
     if not out_prefix.is_absolute():
@@ -223,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     for i in range(max(1, args.shots)):
         if i > 0:
             for _ in range(max(1, args.interval)):
-                _step(scene, args, hold)
+                step_frame(scene, dt=args.dt, hold=hold, invincible=args.invincible)
         if args.shots == 1:
             out = out_prefix.with_suffix(".png")
         else:
