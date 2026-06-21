@@ -23,7 +23,7 @@ _BLINK_INTERVAL   = 0.1
 _RETURN_TIME      = 24.0  # 撤退後復帰までの時間（秒・従来の3倍）
 _SHOOT_COOLDOWN   = 0.5   # ショットクールダウン（秒）
 _FOLLOW_OFFSET_X  = 44.0  # 澤口の左にどれだけ離れて位置取りするか
-_FOLLOW_OFFSET_Y  = 30.0  # 澤口の下にどれだけ離れて位置取りするか
+_FOLLOW_Y_DEADZONE = 20.0 # 澤口とのy差がこの値未満なら y 追従しない（被弾率低減）
 _FOLLOW_LERP      = 7.5    # 追従の基本追従率（澤口の speed_multiplier で増減）
 
 # ── 支援ツリー（主人公とは別毛色＝支援重視。各系統を個別に振り分け強化）──
@@ -146,14 +146,19 @@ class Karonaru(pygame.sprite.Sprite):
                 self._revive(player)
             return
 
-        # 澤口の左下に位置取りする（軌跡なぞりは廃止。被弾しやすい正面/直線上を外す）。
+        # 澤口の左に位置取りする（軌跡なぞりは廃止。被弾しやすい正面/直線上を外す）。
         # 速度は澤口の速度（weapon.speed_multiplier）に連動して上がる。
         mult = getattr(getattr(player, "weapon", None), "speed_multiplier", 1.0)
         target_x = float(player.rect.centerx) - _FOLLOW_OFFSET_X
-        target_y = float(player.rect.centery) + _FOLLOW_OFFSET_Y
         k = min(1.0, _FOLLOW_LERP * mult * dt)
         new_x = self.sx + (target_x - self.sx) * k
-        new_y = self.sy + (target_y - self.sy) * k
+        # y は固定offsetを廃止。澤口とのy差がデッドゾーン以上のときだけ澤口のyへ追従し、
+        # 以内なら据え置く（細かな上下追従での被弾を減らす）。x は従来通り固定offset。
+        player_cy = float(player.rect.centery)
+        if abs(player_cy - self.sy) >= _FOLLOW_Y_DEADZONE:
+            new_y = self.sy + (player_cy - self.sy) * k
+        else:
+            new_y = self.sy
 
         # 画面端クランプ
         hw = self.rect.width  // 2
@@ -273,10 +278,10 @@ class Karonaru(pygame.sprite.Sprite):
                 pass
 
     def reseed_trail(self, player, *, snap: bool = True) -> None:
-        """復帰/合流時に澤口の左下へ位置を合わせる（旧・軌跡シード互換のAPI名）。"""
+        """復帰/合流時に澤口の左（同じ高さ）へ位置を合わせる（旧・軌跡シード互換のAPI名）。"""
         if snap:
             self.sx = float(player.rect.centerx) - _FOLLOW_OFFSET_X
-            self.sy = float(player.rect.centery) + _FOLLOW_OFFSET_Y
+            self.sy = float(player.rect.centery)
             self.rect.center = (int(self.sx), int(self.sy))
 
     def _fire(self, player_bullets: pygame.sprite.Group, camera: "Camera") -> None:
