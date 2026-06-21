@@ -2,7 +2,8 @@
 
 This is intentionally a preview tool, not the in-game renderer. It uses the
 current Stage3 collision strip as a guide, then lays atlas pieces at their
-native sizes so we can tune the visual composition before wiring it into play.
+native sizes. Debug output compares the current strip collision with a coarse
+collision surface derived from the actually placed atlas caps.
 
 Examples:
   python tools/stage3_terrain_composer_preview.py
@@ -32,6 +33,7 @@ DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
 DEFAULT_OUT = ROOT / "captures" / "stage3_terrain_composer"
 DEFAULT_VIEW_X = (0, 2200, 4400, 6600, 8800, 10800)
 BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
+ALPHA_SOLID_THRESHOLD = 24
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,24 @@ class Piece:
 
 @dataclass(frozen=True)
 class SurfaceRun:
+    x0: int
+    x1: int
+    y: int
+    side: str
+
+
+@dataclass(frozen=True)
+class PlacedPiece:
+    image: pygame.Surface
+    x: int
+    y: int
+    clip: pygame.Rect
+    side: str
+    role: str
+
+
+@dataclass(frozen=True)
+class CollisionSurfaceRun:
     x0: int
     x1: int
     y: int
@@ -248,14 +268,17 @@ def _clip_blit(
     pos: tuple[int, int],
     *,
     clip: pygame.Rect | None = None,
-) -> None:
+) -> pygame.Rect | None:
     if clip is None:
-        target.blit(image, pos)
-        return
+        return target.blit(image, pos)
+    clipped = clip.clip(target.get_rect())
+    if clipped.width <= 0 or clipped.height <= 0:
+        return None
     old_clip = target.get_clip()
-    target.set_clip(clip.clip(target.get_rect()))
-    target.blit(image, pos)
+    target.set_clip(clipped)
+    drawn = target.blit(image, pos)
     target.set_clip(old_clip)
+    return drawn.clip(clipped)
 
 
 def _draw_body_fill(
@@ -306,6 +329,7 @@ def _draw_cap(
     height: int,
     rng: random.Random,
     overlap: int,
+    placements: list[PlacedPiece] | None = None,
 ) -> None:
     caps = pieces.get("strip_top") or pieces.get("block_wide") or pieces.get("block_square")
     if not caps:
@@ -321,7 +345,9 @@ def _draw_cap(
         else:
             image = pygame.transform.flip(image, False, True)
             y = run.y - image.get_height() + 2
-        _clip_blit(target, image, (x, y), clip=clip)
+        drawn = _clip_blit(target, image, (x, y), clip=clip)
+        if placements is not None and drawn is not None and drawn.width > 0 and drawn.height > 0:
+            placements.append(PlacedPiece(image, x, y, drawn, run.side, "cap"))
         x += max(40, image.get_width() - overlap)
 
 
@@ -380,25 +406,177 @@ def _draw_props(
         target.blit(piece.image, (x, y))
 
 
+def _solid_edge_local_y(image: pygame.Surface, local_x: int, side: str) -> int | None:
+    if local_x < 0 or local_x >= image.get_width():
+        return None
+    h = image.get_height()
+    ys = range(h) if side == "bottom" else range(h - 1, -1, -1)
+    for local_y in ys:
+        if image.get_at((local_x, local_y)).a >= ALPHA_SOLID_THRESHOLD:
+            return local_y
+    return None
+
+
+def _composer_surface_y_at(placements: list[PlacedPiece], screen_x: int, side: str) -> int | None:
+    candidates: list[int] = []
+    for placement in placements:
+        if placement.side != side or placement.role != "cap":
+            continue
+        if not (placement.clip.left <= screen_x < placement.clip.right):
+            continue
+        local_x = screen_x - placement.x
+        local_y = _solid_edge_local_y(placement.image, local_x, side)
+        if local_y is None:
+            continue
+        y = placement.y + local_y
+        if placement.clip.top <= y < placement.clip.bottom:
+            candidates.append(y)
+    if not candidates:
+        return None
+    return min(candidates) if side == "bottom" else max(candidates)
+
+
+def _split_samples(samples: list[tuple[int, int | None]]) -> list[list[tuple[int, int]]]:
+    groups: list[list[tuple[int, int]]] = []
+    current: list[tuple[int, int]] = []
+    for x, y in samples:
+        if y is None:
+            if current:
+                groups.append(current)
+                current = []
+        else:
+            current.append((x, y))
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _median_smoothed_samples(points: list[tuple[int, int]], radius: int = 2) -> list[tuple[int, int]]:
+    smoothed: list[tuple[int, int]] = []
+    for i, (x, _y) in enumerate(points):
+        nearby = [y for _x, y in points[max(0, i - radius): i + radius + 1]]
+        nearby.sort()
+        smoothed.append((x, nearby[len(nearby) // 2]))
+    return smoothed
+
+
+def _composer_collision_runs(
+    placements: list[PlacedPiece],
+    *,
+    width: int,
+    side: str,
+    sample_step: int,
+    tolerance: int,
+) -> list[CollisionSurfaceRun]:
+    raw_samples = [
+        (x, _composer_surface_y_at(placements, x, side))
+        for x in range(0, width + 1, sample_step)
+    ]
+    runs: list[CollisionSurfaceRun] = []
+    for group in _split_samples(raw_samples):
+        samples = _median_smoothed_samples(group)
+        if not samples:
+            continue
+        run_x0, run_y = samples[0]
+        run_x1 = run_x0 + sample_step
+        ys = [run_y]
+        previous_x = run_x0
+        for x, y in samples[1:]:
+            average_y = int(round(sum(ys) / len(ys)))
+            if abs(y - average_y) <= tolerance and x <= previous_x + sample_step * 2:
+                run_x1 = x + sample_step
+                ys.append(y)
+            else:
+                runs.append(CollisionSurfaceRun(
+                    max(0, run_x0),
+                    min(width, run_x1),
+                    int(round(sum(ys) / len(ys))),
+                    side,
+                ))
+                run_x0 = x
+                run_x1 = x + sample_step
+                ys = [y]
+            previous_x = x
+        runs.append(CollisionSurfaceRun(
+            max(0, run_x0),
+            min(width, run_x1),
+            int(round(sum(ys) / len(ys))),
+            side,
+        ))
+    return [run for run in runs if run.x1 > run.x0]
+
+
+def _draw_sampled_line(
+    target: pygame.Surface,
+    *,
+    width: int,
+    sample_step: int,
+    color: tuple[int, int, int],
+    line_width: int,
+    y_at: Any,
+) -> None:
+    points: list[tuple[int, int]] = []
+    for x in range(0, width + 1, sample_step):
+        y = y_at(x)
+        if y is None:
+            if len(points) > 1:
+                pygame.draw.lines(target, color, False, points, line_width)
+            points = []
+        else:
+            points.append((x, int(y)))
+    if len(points) > 1:
+        pygame.draw.lines(target, color, False, points, line_width)
+
+
+def _draw_debug_legend(target: pygame.Surface) -> None:
+    font = pygame.font.SysFont("consolas", 14) or pygame.font.Font(None, 14)
+    labels = [
+        ("thin: current strip", (210, 190, 168)),
+        ("thick: composer cap edge", (120, 255, 186)),
+    ]
+    x, y = 18, 45
+    box = pygame.Rect(x - 6, y - 5, 236, 43)
+    fill = pygame.Surface(box.size, pygame.SRCALPHA)
+    fill.fill((0, 8, 10, 150))
+    target.blit(fill, box.topleft)
+    for i, (text, color) in enumerate(labels):
+        yy = y + i * 18
+        pygame.draw.line(target, color, (x, yy + 7), (x + 30, yy + 7), 1 + i * 2)
+        label = font.render(text, True, (224, 236, 232))
+        target.blit(label, (x + 38, yy))
+
+
 def _draw_collision_lines(
     target: pygame.Surface,
     segments: list[Any],
+    placements: list[PlacedPiece],
     *,
     camera_x: float,
     width: int,
+    sample_step: int,
+    tolerance: int,
 ) -> None:
     for side, color in (("top", (255, 130, 92)), ("bottom", (92, 220, 255))):
-        points: list[tuple[int, int]] = []
-        for x in range(0, width + 1, 8):
-            y = _surface_y_at(segments, camera_x + x, side)
-            if y is None:
-                if len(points) > 1:
-                    pygame.draw.lines(target, color, False, points, 2)
-                points = []
-            else:
-                points.append((x, y))
-        if len(points) > 1:
-            pygame.draw.lines(target, color, False, points, 2)
+        _draw_sampled_line(
+            target,
+            width=width,
+            sample_step=sample_step,
+            color=color,
+            line_width=1,
+            y_at=lambda x, side=side: _surface_y_at(segments, camera_x + x, side),
+        )
+
+    for side, color in (("top", (255, 228, 86)), ("bottom", (92, 255, 176))):
+        runs = _composer_collision_runs(
+            placements,
+            width=width,
+            side=side,
+            sample_step=sample_step,
+            tolerance=tolerance,
+        )
+        for run in runs:
+            pygame.draw.line(target, color, (run.x0, run.y), (run.x1, run.y), 3)
+    _draw_debug_legend(target)
 
 
 def _draw_frame_label(target: pygame.Surface, text: str) -> None:
@@ -420,11 +598,14 @@ def _render_view(
     height: int,
     sample_step: int,
     tolerance: int,
+    collision_step: int,
+    collision_tolerance: int,
     overlap: int,
     debug_lines: bool,
 ) -> pygame.Surface:
     surface = _load_backdrop(width, height)
     surface_depth = _surface_band_depth(pieces)
+    placements: list[PlacedPiece] = []
 
     for side in ("top", "bottom"):
         runs = _surface_runs(
@@ -449,11 +630,27 @@ def _render_view(
             )
         for run in runs:
             rng = random.Random(_stable_seed(int(camera_x), run.x0, run.x1, run.y, 11 if side == "top" else 12))
-            _draw_cap(surface, pieces, run, height=height, rng=rng, overlap=overlap)
+            _draw_cap(
+                surface,
+                pieces,
+                run,
+                height=height,
+                rng=rng,
+                overlap=overlap,
+                placements=placements,
+            )
             _draw_props(surface, pieces, run, rng=rng, height=height)
 
     if debug_lines:
-        _draw_collision_lines(surface, segments, camera_x=camera_x, width=width)
+        _draw_collision_lines(
+            surface,
+            segments,
+            placements,
+            camera_x=camera_x,
+            width=width,
+            sample_step=collision_step,
+            tolerance=collision_tolerance,
+        )
     _draw_frame_label(surface, f"stage3 composer preview  x={int(camera_x)}")
     return surface
 
@@ -536,8 +733,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=600, help="Preview height")
     parser.add_argument("--sample-step", type=int, default=48, help="Collision surface sample step")
     parser.add_argument("--tolerance", type=int, default=26, help="Y tolerance for merging visual runs")
+    parser.add_argument("--collision-step", type=int, default=8, help="Sample step for composer-derived collision runs")
+    parser.add_argument("--collision-tolerance", type=int, default=10, help="Y tolerance for composer-derived collision runs")
     parser.add_argument("--overlap", type=int, default=18, help="Atlas piece overlap to hide seams")
-    parser.add_argument("--debug-lines", action="store_true", help="Draw collision surface guide lines")
+    parser.add_argument("--debug-lines", action="store_true", help="Compare current strip lines and composer-derived cap edge runs")
     parser.add_argument("--open", action="store_true", help="Open generated HTML preview")
     parser.add_argument("--no-open", action="store_true", help="Do not open generated HTML preview")
     return parser.parse_args(argv)
@@ -571,6 +770,8 @@ def main(argv: list[str] | None = None) -> int:
                 height=max(240, args.height),
                 sample_step=max(8, args.sample_step),
                 tolerance=max(0, args.tolerance),
+                collision_step=max(2, args.collision_step),
+                collision_tolerance=max(0, args.collision_tolerance),
                 overlap=max(0, args.overlap),
                 debug_lines=args.debug_lines,
             )
