@@ -1285,6 +1285,7 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     src = (ROOT / "tools" / "run.py").read_text(encoding="utf-8")
     assert "PYTHONIOENCODING" in src
     assert ".venv" in src
+    assert "stage3-composer-report" in src
 
 
 def test_settings_manager_ignores_wrong_json_shapes(tmp_path, monkeypatch) -> None:
