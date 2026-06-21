@@ -261,25 +261,15 @@ def _place_piece(
     clip: pygame.Rect,
     side: str,
     role: str,
+    allow_partial: bool = True,
 ) -> None:
     image_rect = pygame.Rect(x, y, image.get_width(), image.get_height())
+    if not allow_partial and not clip.contains(image_rect):
+        return
     clipped = image_rect.clip(clip)
     if clipped.width <= 0 or clipped.height <= 0:
         return
     placements.append(Stage3PlacedPiece(image, x, y, clipped, side, role))
-
-
-def _interior_piece_image(piece: Stage3ComposerPiece) -> pygame.Surface:
-    image = piece.image
-    w, h = image.get_size()
-    if h <= 26:
-        return image
-    trim_top = max(8, min(28, int(h * 0.14)))
-    trim_bottom = max(4, min(14, int(h * 0.07)))
-    trim_h = h - trim_top - trim_bottom
-    if trim_h < 16:
-        return image
-    return image.subsurface(pygame.Rect(0, trim_top, w, trim_h)).copy()
 
 
 def _surface_band_depth(pieces: dict[str, list[Stage3ComposerPiece]]) -> int:
@@ -301,26 +291,26 @@ def _add_body_fill(
     overlap: int,
     surface_depth: int,
 ) -> None:
-    body_pieces = pieces.get("block_square") or pieces.get("block_tall")
+    square_pieces = pieces.get("block_square") or []
+    body_pieces = [piece for piece in square_pieces if piece.image.get_width() <= 130]
+    body_pieces = body_pieces or square_pieces or pieces.get("block_tall")
     if not body_pieces:
         return
 
-    clip = pygame.Rect(run.x0, 0, run.x1 - run.x0, height)
+    clip = pygame.Rect(run.x0, -height, run.x1 - run.x0, height * 3)
     y = run.y + surface_depth if run.side == "bottom" else run.y - surface_depth
     while (run.side == "bottom" and y < height) or (run.side == "top" and y > 0):
+        piece = _choice(rng, body_pieces)
+        image = piece.image
+        if run.side == "top":
+            image = pygame.transform.flip(image, False, True)
+        iw, ih = image.get_size()
         x = run.x0
-        max_row_h = 24
         while x < run.x1:
-            piece = _choice(rng, body_pieces)
-            image = _interior_piece_image(piece)
-            if run.side == "top":
-                image = pygame.transform.flip(image, False, True)
-            iw, ih = image.get_size()
-            max_row_h = max(max_row_h, ih)
             py = y if run.side == "bottom" else y - ih
-            _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body")
+            _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body", allow_partial=False)
             x += max(32, iw - max(0, overlap))
-        step = max(32, max_row_h - max(0, overlap))
+        step = max(32, ih - max(0, overlap))
         y = y + step if run.side == "bottom" else y - step
 
 

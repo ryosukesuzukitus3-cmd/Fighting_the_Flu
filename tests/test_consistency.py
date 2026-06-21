@@ -863,6 +863,54 @@ def test_stage3_composer_floor_props_are_collidable() -> None:
     assert all(block.rect.width > 0 and block.rect.height > 0 for block in prop_blocks)
 
 
+def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
+    from src.entities.stage3_composer_terrain import build_stage3_composer_layout, load_stage3_composer_pieces
+    from src.entities.terrain import make_terrain_strip
+
+    pieces = load_stage3_composer_pieces()
+    source_sizes = {
+        piece.image.get_size()
+        for piece in pieces.get("block_square", [])
+        if piece.image.get_width() <= 130
+    }
+    source_sizes = source_sizes or {piece.image.get_size() for piece in pieces.get("block_square", [])}
+    assert source_sizes
+
+    segments = make_terrain_strip(
+        -100,
+        length=1200,
+        theme="fortress",
+        profile="mountain",
+        segment_w=48,
+        seed=303,
+        gap_min=292,
+        gap_max=390,
+        center_y=292,
+        center_wave=118,
+        top_min=28,
+        bottom_min=34,
+        irregularity=58,
+    )
+    layout = build_stage3_composer_layout(segments, pieces, start_x=0, end_x=1000)
+    body = [placement for placement in layout.placements if placement.role == "body"]
+
+    assert body
+    assert all(placement.image.get_size() in source_sizes for placement in body)
+    assert all(placement.clip.size == placement.image.get_size() for placement in body)
+
+
+def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
+    from src.entities.terrain import Terrain
+
+    floor_block = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=3)
+    ceiling_block = Terrain(0, 0, 126, 168, "fortress_block", destructible=True, hp=3)
+
+    assert floor_block._surface_anchor == "floor"
+    assert ceiling_block._surface_anchor == "ceiling"
+    assert floor_block.take_damage(1) is False
+    assert floor_block._surface_anchor == "floor"
+
+
 def test_spawner_surface_ignores_visual_only_terrain() -> None:
     from src.stages.spawner import EnemySpawner
 
