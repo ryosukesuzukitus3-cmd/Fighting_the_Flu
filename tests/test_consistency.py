@@ -446,6 +446,7 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "fortress"
+    assert layout["renderer"] == "stage3_composer"
     assert layout["profile"] == "mountain"
     assert layout["length"] >= boss_x + 800
     assert layout["breakable_drop_chance"] <= 0.05
@@ -784,6 +785,79 @@ def test_terrain_strip_can_spawn_breakable_segments() -> None:
     assert target.take_damage(1) is False
     assert target.hp == 1
     assert target.take_damage(1) is True
+
+
+def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
+    from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
+    from src.entities.terrain import make_terrain_strip
+
+    segments = make_terrain_strip(
+        -100,
+        length=640,
+        theme="fortress",
+        profile="mountain",
+        segment_w=48,
+        seed=303,
+        gap_min=292,
+        gap_max=390,
+        center_y=292,
+        center_wave=118,
+        top_min=28,
+        bottom_min=34,
+        irregularity=58,
+    )
+    sprites = make_stage3_composer_terrain(segments)
+    visuals = [sprite for sprite in sprites if getattr(sprite, "terrain_visual_only", False)]
+    collisions = [sprite for sprite in sprites if not getattr(sprite, "terrain_visual_only", False)]
+
+    assert len(visuals) == 1
+    assert collisions
+    assert {getattr(sprite, "side", "") for sprite in collisions} >= {"top", "bottom"}
+    assert all(getattr(sprite, "surface_y", None) is not None for sprite in collisions)
+
+
+def test_spawner_surface_ignores_visual_only_terrain() -> None:
+    from src.stages.spawner import EnemySpawner
+
+    class VisualOnly(pygame.sprite.Sprite):
+        terrain_visual_only = True
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.world_x = 0.0
+            self.y = 0.0
+            self.side = "bottom"
+            self.image = pygame.Surface((100, 600), pygame.SRCALPHA)
+            self.rect = self.image.get_rect(topleft=(0, 0))
+
+        @property
+        def surface_y(self) -> float:
+            return 0.0
+
+    class Collision(pygame.sprite.Sprite):
+        def __init__(self) -> None:
+            super().__init__()
+            self.world_x = 0.0
+            self.y = 420.0
+            self.side = "bottom"
+            self.image = pygame.Surface((100, 180), pygame.SRCALPHA)
+            self.rect = self.image.get_rect(topleft=(0, 420))
+
+        @property
+        def surface_y(self) -> float:
+            return 420.0
+
+    terrain = pygame.sprite.Group(VisualOnly(), Collision())
+    spawner = EnemySpawner(
+        game=None,
+        enemies=pygame.sprite.Group(),
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        player=object(),
+        terrain=terrain,
+    )
+
+    assert spawner._surface_y_at(50, "bottom") == 420.0
 
 
 def test_destructible_terrain_gate_takes_damage() -> None:

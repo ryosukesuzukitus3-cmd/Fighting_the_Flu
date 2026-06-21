@@ -5,6 +5,7 @@ import pygame
 from src.core.constants import SCREEN_HEIGHT
 from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
+from src.entities.terrain_query import iter_collidable_terrain
 
 if TYPE_CHECKING:
     from src.core.camera import Camera
@@ -80,7 +81,7 @@ class EnemyCrawler(Enemy):
         if self._terrain is None:
             return None
         candidates: list[float] = []
-        for ter in self._terrain:
+        for ter in iter_collidable_terrain(self._terrain):
             side = getattr(ter, "side", "")
             if not side:
                 continue
@@ -109,7 +110,7 @@ class EnemyCrawler(Enemy):
         if wall is None:
             return None
         best = wall
-        for ter in self._terrain:
+        for ter in iter_collidable_terrain(self._terrain):
             if getattr(ter, "side", ""):     # レール（strip）は除外
                 continue
             left = float(getattr(ter, "world_x", 0.0))
