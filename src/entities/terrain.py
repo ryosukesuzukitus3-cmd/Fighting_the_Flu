@@ -78,6 +78,73 @@ def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.
     return surf
 
 
+def _surface_opaque_bounds(image: pygame.Surface) -> pygame.Rect:
+    w, h = image.get_size()
+    min_x, min_y = w, h
+    max_x, max_y = -1, -1
+    for y in range(h):
+        for x in range(w):
+            if image.get_at((x, y)).a >= 24:
+                min_x = min(min_x, x)
+                min_y = min(min_y, y)
+                max_x = max(max_x, x)
+                max_y = max(max_y, y)
+    if max_x < min_x or max_y < min_y:
+        return pygame.Rect(0, 0, w, h)
+    return pygame.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+
+
+def _stage3_rect_material_surface(w: int, h: int, *, seed: int) -> pygame.Surface | None:
+    try:
+        from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+    except Exception:
+        return None
+    try:
+        pieces_by_group = load_stage3_composer_pieces()
+    except Exception:
+        return None
+
+    aspect = w / max(1, h)
+    if h > w * 1.35:
+        groups = ("block_tall", "block_square")
+    elif w > h * 1.55:
+        groups = ("block_wide", "block_square")
+    else:
+        groups = ("block_square", "block_tall", "block_wide")
+    candidates = [
+        piece
+        for group in groups
+        for piece in pieces_by_group.get(group, [])
+    ]
+    if not candidates:
+        return None
+
+    ranked = sorted(
+        candidates,
+        key=lambda piece: (
+            abs((piece.image.get_width() / max(1, piece.image.get_height())) - aspect),
+            abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
+        ),
+    )
+    piece = ranked[seed % min(4, len(ranked))]
+    source = piece.image
+    opaque = _surface_opaque_bounds(source)
+    source = source.subsurface(opaque).copy()
+    sw, sh = source.get_size()
+    if sw <= 0 or sh <= 0:
+        return None
+
+    scale = max(w / sw, h / sh)
+    scaled_size = (max(w, int(sw * scale)), max(h, int(sh * scale)))
+    scaled = pygame.transform.smoothscale(source, scaled_size)
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    surf.blit(scaled, ((w - scaled.get_width()) // 2, (h - scaled.get_height()) // 2))
+    veil = pygame.Surface((w, h), pygame.SRCALPHA)
+    veil.fill((0, 0, 0, 24))
+    surf.blit(veil, (0, 0))
+    return surf
+
+
 class Terrain(pygame.sprite.Sprite):
     """スクロールする地形ブロック（ワールド座標 world_x / 画面 y 固定）。"""
 
@@ -182,7 +249,9 @@ class Terrain(pygame.sprite.Sprite):
     ) -> pygame.Surface:
         seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
         rng = random.Random(seed)
-        surf = _stage3_material_surface(w, h, seed=seed, role="block")
+        surf = _stage3_rect_material_surface(w, h, seed=seed) or _stage3_material_surface(
+            w, h, seed=seed, role="block",
+        )
 
         light_count = max(1, (w * h) // 8200)
         for _ in range(light_count):

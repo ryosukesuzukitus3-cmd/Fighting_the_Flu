@@ -327,7 +327,7 @@ class EnemySpawner:
                         tolerance=int(event.get("composer_tolerance", 26)),
                         collision_step=int(event.get("composer_collision_step", 8)),
                         collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
-                        overlap=int(event.get("composer_overlap", 18)),
+                        overlap=int(event.get("composer_overlap", 0)),
                     ))
                 else:
                     self._terrain.add(*segments)

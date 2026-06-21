@@ -813,7 +813,54 @@ def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
     assert len(visuals) == 1
     assert collisions
     assert {getattr(sprite, "side", "") for sprite in collisions} >= {"top", "bottom"}
-    assert all(getattr(sprite, "surface_y", None) is not None for sprite in collisions)
+    assert all(
+        getattr(sprite, "surface_y", None) is not None
+        for sprite in collisions
+        if getattr(sprite, "side", "") in {"top", "bottom"}
+    )
+
+
+def test_stage3_composer_floor_props_are_collidable() -> None:
+    from src.entities.stage3_composer_terrain import (
+        build_stage3_composer_layout,
+        load_stage3_composer_pieces,
+        make_stage3_composer_terrain,
+    )
+    from src.entities.terrain import make_terrain_strip
+
+    stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    layout = stage3["terrain_layout"][0]
+    segments = make_terrain_strip(
+        float(layout.get("start_offset", 0)),
+        length=int(layout["length"]),
+        theme=str(layout["theme"]),
+        profile=str(layout["profile"]),
+        segment_w=int(layout["segment_w"]),
+        seed=int(layout["seed"]),
+        gap_min=int(layout["gap_min"]),
+        gap_max=int(layout["gap_max"]),
+        center_y=int(layout["center_y"]),
+        center_wave=int(layout["center_wave"]),
+        top_min=int(layout["top_min"]),
+        bottom_min=int(layout["bottom_min"]),
+        irregularity=int(layout["irregularity"]),
+        breakable_chance=float(layout["breakable_chance"]),
+        breakable_hp=int(layout["breakable_hp"]),
+        breakable_drop_chance=float(layout["breakable_drop_chance"]),
+    )
+    composer_layout = build_stage3_composer_layout(segments, load_stage3_composer_pieces())
+    sprites = make_stage3_composer_terrain(segments)
+    prop_blocks = [
+        sprite
+        for sprite in sprites
+        if not getattr(sprite, "terrain_visual_only", False)
+        and getattr(sprite, "side", "") == ""
+    ]
+
+    assert any(placement.role == "prop" for placement in composer_layout.placements)
+    assert composer_layout.collision_rects
+    assert prop_blocks
+    assert all(block.rect.width > 0 and block.rect.height > 0 for block in prop_blocks)
 
 
 def test_spawner_surface_ignores_visual_only_terrain() -> None:
