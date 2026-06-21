@@ -1403,6 +1403,20 @@ def test_stage3_composer_report_opens_preview_by_default() -> None:
     assert stage3_composer_report._parse_args(["--no-open"]).open_preview is False
 
 
+def test_stage3_composer_report_uses_stage_composer_options() -> None:
+    from tools import stage3_composer_report
+
+    stage_path = ROOT / "data" / "stages" / "stage3.json"
+    stage3 = json.loads(stage_path.read_text(encoding="utf-8"))
+    layout = stage3["terrain_layout"][0]
+    options = stage3_composer_report._composer_options(stage_path)
+
+    assert options["sample_step"] == layout["composer_sample_step"]
+    assert options["tolerance"] == layout["composer_tolerance"]
+    assert options["collision_step"] == int(layout.get("composer_collision_step", 8))
+    assert options["collision_tolerance"] == int(layout.get("composer_collision_tolerance", 10))
+
+
 def test_settings_manager_ignores_wrong_json_shapes(tmp_path, monkeypatch) -> None:
     from src.managers import settings as settings_mod
 

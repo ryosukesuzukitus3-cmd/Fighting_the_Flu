@@ -51,9 +51,7 @@ def _resolve(path: str | Path, *, base: Path = ROOT) -> Path:
     return p if p.is_absolute() else base / p
 
 
-def _stage3_segments(stage_path: Path) -> list[Any]:
-    from src.entities.terrain import make_terrain_strip
-
+def _stage3_layout(stage_path: Path) -> dict[str, Any]:
     data = json.loads(stage_path.read_text(encoding="utf-8"))
     layouts = data.get("terrain_layout", [])
     if not layouts:
@@ -61,6 +59,13 @@ def _stage3_segments(stage_path: Path) -> list[Any]:
     layout = layouts[0]
     if layout.get("type") != "TerrainStrip":
         raise ValueError("Stage3 composer report expects first layout to be TerrainStrip")
+    return layout
+
+
+def _stage3_segments(stage_path: Path) -> list[Any]:
+    from src.entities.terrain import make_terrain_strip
+
+    layout = _stage3_layout(stage_path)
     start_x = float(layout.get("start_offset", 0))
     kwargs = {
         "length": int(layout.get("length", 12000)),
@@ -80,6 +85,17 @@ def _stage3_segments(stage_path: Path) -> list[Any]:
         "profile": str(layout.get("profile", "normal")),
     }
     return make_terrain_strip(start_x, **kwargs)
+
+
+def _composer_options(stage_path: Path) -> dict[str, int]:
+    layout = _stage3_layout(stage_path)
+    return {
+        "sample_step": int(layout.get("composer_sample_step", 48)),
+        "tolerance": int(layout.get("composer_tolerance", 26)),
+        "collision_step": int(layout.get("composer_collision_step", 8)),
+        "collision_tolerance": int(layout.get("composer_collision_tolerance", 10)),
+        "overlap": int(layout.get("composer_overlap", 0)),
+    }
 
 
 def _load_backdrop(width: int, height: int) -> pygame.Surface:
@@ -183,11 +199,19 @@ def _composer_captures(
     mask_dir: Path,
 ) -> dict[float, Path]:
     segments = _stage3_segments(stage_path)
+    composer_options = _composer_options(stage_path)
     pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
     captures: dict[float, Path] = {}
     for camera_x in sorted(camera_xs):
         surface = _load_backdrop(SCREEN_WIDTH, SCREEN_HEIGHT)
-        render_stage3_composer_surface(surface, segments, pieces, camera_x=camera_x, debug_lines=True)
+        render_stage3_composer_surface(
+            surface,
+            segments,
+            pieces,
+            camera_x=camera_x,
+            debug_lines=True,
+            **composer_options,
+        )
         _draw_label(surface, f"composer preview  x={int(camera_x)}")
         path = out_dir / f"x{int(camera_x):05d}_composer.png"
         pygame.image.save(surface, str(path))
