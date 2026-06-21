@@ -34,7 +34,10 @@ from src.entities.stage3_composer_terrain import (  # noqa: E402
 )
 from src.entities.terrain_query import iter_collidable_terrain  # noqa: E402
 from src.scenes.game_scene import GameScene  # noqa: E402
-from stage3_alpha_mask_common import DEFAULT_MASK_DIR  # noqa: E402
+try:  # noqa: E402
+    from stage3_alpha_mask_common import DEFAULT_MASK_DIR
+except ModuleNotFoundError:  # noqa: E402
+    from tools.stage3_alpha_mask_common import DEFAULT_MASK_DIR
 
 DEFAULT_STAGE = ROOT / "data" / "stages" / "stage3.json"
 DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
@@ -280,16 +283,18 @@ def _write_index(
     return index
 
 
-def _open_file(path: Path) -> None:
+def _open_file(path: Path) -> bool:
     try:
         if os.name == "nt":
-            os.startfile(path)  # type: ignore[attr-defined]
+            os.startfile(str(path))  # type: ignore[attr-defined]
         elif sys.platform == "darwin":
             subprocess.Popen(["open", str(path)])
         else:
             subprocess.Popen(["xdg-open", str(path)])
     except OSError as exc:
         print(f"[stage3-composer-report] open failed: {exc}")
+        return False
+    return True
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -300,8 +305,20 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="Output directory")
     parser.add_argument("--x", type=float, action="append", default=[], help="Camera X to capture; can be repeated")
     parser.add_argument("--embed-images", action="store_true", help="Embed PNGs into the generated HTML")
-    parser.add_argument("--open", action="store_true", help="Open generated HTML preview")
-    parser.add_argument("--no-open", action="store_true", help="Do not open generated HTML preview")
+    open_group = parser.add_mutually_exclusive_group()
+    open_group.add_argument(
+        "--open",
+        dest="open_preview",
+        action="store_true",
+        default=True,
+        help="Open generated HTML preview (default)",
+    )
+    open_group.add_argument(
+        "--no-open",
+        dest="open_preview",
+        action="store_false",
+        help="Do not open generated HTML preview",
+    )
     return parser.parse_args(argv)
 
 
@@ -328,8 +345,8 @@ def main(argv: list[str] | None = None) -> int:
             print(collision)
             print(composer[camera_x])
         print(index)
-        if args.open and not args.no_open:
-            _open_file(index)
+        if args.open_preview and _open_file(index):
+            print(f"opened: {index}")
         return 0
     except Exception as exc:
         print(f"[stage3-composer-report] error: {exc}", file=sys.stderr)

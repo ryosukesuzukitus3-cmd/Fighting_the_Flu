@@ -1288,6 +1288,13 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     assert "stage3-composer-report" in src
 
 
+def test_stage3_composer_report_opens_preview_by_default() -> None:
+    from tools import stage3_composer_report
+
+    assert stage3_composer_report._parse_args([]).open_preview is True
+    assert stage3_composer_report._parse_args(["--no-open"]).open_preview is False
+
+
 def test_settings_manager_ignores_wrong_json_shapes(tmp_path, monkeypatch) -> None:
     from src.managers import settings as settings_mod
 
