@@ -64,7 +64,9 @@ class StageIntroScene(Scene):
         self._tick_type_sound(dt, previous_chars)
 
         inp = self.game.input
-        advance = inp.is_just_pressed(pygame.K_SPACE) or inp.is_just_pressed(pygame.K_RETURN)
+        # ENTER/SPACE は長押しで連続送り（他の会話シーンと挙動を揃える）
+        advance = (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
+                   or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12))
         if advance:
             if not self._is_text_complete():
                 self._chars = float(self._total_chars() + 1)

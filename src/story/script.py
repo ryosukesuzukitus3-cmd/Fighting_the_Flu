@@ -75,12 +75,13 @@ STAGE_INTRO: dict[int, list[Page]] = {
         page(S, "反撃って、何にだよ。"),
         page(K, "あれ全部にだにょ。", last=True),
     ],
-    2: [
-        page(S, "体が弱ると、心の守りも薄くなる。"),
-        page(S, "どうでもいい言葉ほど、こういう時に刺さる。"),
-        page(K, "体調悪い時のSNSは毒だにょ。"),
+    2: [   # INTERLUDE_STAGE1_CLEAR の「次は何だ。」から地続きに再生される
+        page(K, "体調悪い時に見る、SNSだにょ。",
+                "ついでに言うと、毒だにょ。"),
+        page(S, "体が弱ると、心の守りも薄くなる。",
+                "どうでもいい言葉ほど、こういう時に刺さる。"),
         page(S, "お前、薬だろ。解毒しろよ。"),
-        page(K, "俺は解熱鎮痛剤だにょ。",
+        page(K, "あいにく、こっちは熱専門だにょ。",
                 "情報リテラシーは、管理外だにょ。", last=True),
     ],
     3: [
@@ -362,6 +363,9 @@ BOSS_DEFEAT: dict[int, list[Line]] = {
 
 # ════════════════════════════════════════════════════════════════════
 # SCENE 030  Stage1 クリア幕間 — 弱い相棒
+#   StageClearScene から STAGE_INTRO[2] と連結し、黒フェードを挟まず
+#   1つの会話として再生される（PROLOGUE + STAGE_INTRO[1] と同じ手法）。
+#   澤口の「次は何だ。」を受けて STAGE_INTRO[2] の SNS 提示へ地続きに繋ぐ。
 # ════════════════════════════════════════════════════════════════════
 INTERLUDE_STAGE1_CLEAR: list[Page] = [
     page(S, "お前、態度のわりに弱いな。"),
@@ -375,8 +379,6 @@ INTERLUDE_STAGE1_CLEAR: list[Page] = [
     page(S, "それは見れば分かる。"),
     page(K, "来るにょ。", fx=("glitch",)),
     page(S, "次は何だ。"),
-    page(K, "体調悪い時に見る、SNSだにょ。"),
-    page(S, "最悪だ。", last=True),
 ]
 
 

@@ -35,15 +35,27 @@ class StageClearScene(Scene):
         """クリアしたステージに応じて、幕間カットシーンを挟んで次へ。"""
         from src.scenes.stage_intro_scene import StageIntroScene
         from src.scenes.cutscene_scene import CutsceneScene
-        from src.story.script import INTERLUDE_STAGE1_CLEAR, INTERLUDE_STAGE3_BLACKHOLE
+        from src.story.script import (
+            INTERLUDE_STAGE1_CLEAR, INTERLUDE_STAGE3_BLACKHOLE, STAGE_INTRO,
+        )
 
         def _to_next() -> None:
             self.game.change_scene(StageIntroScene(self.game, stage_id=self._next_stage_id))
 
         if self._cleared_stage == 1:
+            # Stage1 幕間と Stage2 開始前会話を地続きの1シーンに統合する。
+            # 別シーンに分けず連結することで、間の黒フェードの切れ目を無くす
+            # （PROLOGUE + STAGE_INTRO[1] と同じ手法）。完了で直接ゲーム本編へ。
+            from src.scenes.game_scene import GameScene
+
+            def _to_stage2() -> None:
+                self.game.change_scene(GameScene(self.game, stage_id=self._next_stage_id))
+
+            pages = list(INTERLUDE_STAGE1_CLEAR) + list(STAGE_INTRO[self._next_stage_id])
             self.game.change_scene(CutsceneScene(
-                self.game, INTERLUDE_STAGE1_CLEAR, _to_next, theme="dark",
-                bgm_alias="music/bgm/Death_by_Glamour.mp3"))
+                self.game, pages, _to_stage2, theme="dark",
+                bgm_alias="music/bgm/Death_by_Glamour.mp3",
+                fade_out_on_finish=False))
         elif self._cleared_stage == 3:
             # 承認欲求ブラックホール（相棒の自己犠牲）。カットシーン完了でフラグ更新。
             def _blackhole_done() -> None:
