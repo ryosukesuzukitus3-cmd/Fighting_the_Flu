@@ -346,6 +346,13 @@ class ScrollingBackground:
             if alpha:
                 pygame.draw.line(veil, (0, 0, 0, alpha), (0, y), (SCREEN_WIDTH, y), 1)
         screen.blit(veil, (0, 0))
+        depth_haze = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for y in range(150, min(SCREEN_HEIGHT, 520), 2):
+            center_dist = abs(y - 336) / 186
+            alpha = max(0, int(22 * (1.0 - min(1.0, center_dist))))
+            if alpha:
+                pygame.draw.line(depth_haze, (126, 154, 148, alpha), (0, y), (SCREEN_WIDTH, y), 2)
+        screen.blit(depth_haze, (0, 0))
 
     def _load_stage3_backdrop(self) -> pygame.Surface | None:
         if self._stage3_bg is not None:

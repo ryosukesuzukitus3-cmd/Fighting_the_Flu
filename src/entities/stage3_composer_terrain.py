@@ -300,19 +300,20 @@ def _add_body_fill(
 
     clip = pygame.Rect(run.x0, -height, run.x1 - run.x0, height * 3)
     y = run.y + surface_depth if run.side == "bottom" else run.y - surface_depth
+    row_heights = sorted(piece.image.get_height() for piece in body_pieces)
+    row_step = max(32, row_heights[len(row_heights) // 2] - max(0, overlap))
     while (run.side == "bottom" and y < height) or (run.side == "top" and y > 0):
-        piece = _choice(rng, body_pieces)
-        image = piece.image
-        if run.side == "top":
-            image = pygame.transform.flip(image, False, True)
-        iw, ih = image.get_size()
         x = run.x0
         while x < run.x1:
+            piece = _choice(rng, body_pieces)
+            image = piece.image
+            if run.side == "top":
+                image = pygame.transform.flip(image, False, True)
+            iw, ih = image.get_size()
             py = y if run.side == "bottom" else y - ih
             _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body", allow_partial=False)
             x += max(32, iw - max(0, overlap))
-        step = max(32, ih - max(0, overlap))
-        y = y + step if run.side == "bottom" else y - step
+        y = y + row_step if run.side == "bottom" else y - row_step
 
 
 def _add_cap(
