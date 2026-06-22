@@ -608,9 +608,9 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | ○ | ステージ開始からの経過秒数（出現タイミング） |
-| `type` | ○ | 敵の種別（EnemyVirus / EnemyTakeshi / EnemyBroly / EnemyPachemon / EnemyBilly / EnemyTurret / EnemyCrawler / EnemyDebrisLarge / EnemyDebrisShard / Boss / **Terrain** / **TerrainStrip**） |
-| `count` | △ | 出現数（Terrain / TerrainStrip では不要） |
-| `formation` | △ | 編隊の並び方（`line` / `v_shape` / `random` / `single`）。`y` / `surface` 指定時・Terrain / TerrainStrip では不要 |
+| `type` | ○ | 敵の種別（EnemyVirus / EnemyTakeshi / EnemyBroly / EnemyPachemon / EnemyBilly / EnemyTurret / EnemyCrawler / EnemyDebrisLarge / EnemyDebrisShard / Boss / **Terrain** / **AuthoredTerrain** / **TerrainStrip**） |
+| `count` | △ | 出現数（Terrain / AuthoredTerrain / TerrainStrip では不要） |
+| `formation` | △ | 編隊の並び方（`line` / `v_shape` / `random` / `single`）。`y` / `surface` 指定時・Terrain / AuthoredTerrain / TerrainStrip では不要 |
 | `y` | — | 出現Y座標を固定（指定時は formation 省略可） |
 | `surface` | — | 地形表面に吸着して出現（`top` / `bottom`）。砲台などの足場配置に使う |
 | `surface_offset` / `surface_step` | — | `surface` 指定時の表面からの中心オフセット・複数出現時の横間隔 |
@@ -629,7 +629,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `count` | — | 出現数（既定1） |
 | `formation` | △ | `line` / `v_shape` / `random`。`y` / `surface` 指定時は省略可 |
 | `y` | — | 配置Y座標を固定 |
-| `surface` | — | `top` / `bottom`。TerrainStrip や固定地形ブロックの表面に吸着する |
+| `surface` | — | `top` / `bottom`。AuthoredTerrain / TerrainStrip や固定地形ブロックの表面に吸着する |
 | `preload` / `spawn_margin` | — | 画面右端から何px手前で生成するか（既定80px） |
 | `fixed_drop` | — | 撃破時に必ず出すアイテム名。中ボスなど、ご褒美配置の確定報酬に使う |
 
@@ -638,7 +638,8 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 `terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
 固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `weapon_gate` / `turret_mount` を使える。`gate` / `breakable_gate` / `weapon_gate` は既定で破壊可能になる。
 `weapon_gate` は報酬用の血栓ゲートで、未指定でも `fixed_drop: "WeaponItem"` として扱われ、内部に青白い報酬コアを描く。
-連続地形は `TerrainStrip` のほか、`cave_section` / `corridor` を別名として使える。
+連続地形の新規作成は `AuthoredTerrain` を優先する。`AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する形式で、ステージ設計の主導権を乱数から手書きデータへ戻すための正式ルートとする。
+`TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
 #### 地形イベント（`type: "Terrain"`）
 
@@ -659,7 +660,24 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
 | `fixed_drop` | — | 破壊時に必ず出すアイテム名。血栓ゲートなど、ご褒美配置の確定報酬に使う |
 
-#### 連続地形イベント（`type: "TerrainStrip"`）
+#### 手書き連続地形イベント（`type: "AuthoredTerrain"`）
+
+上下境界を明示して、通路幅・圧迫地点・戦闘エリアの広さを直接設計する。`top` は上側地形の下端Y、`bottom` は下側地形の上端Yを表す。プレイヤーが動ける領域は `top` と `bottom` の間になる。
+
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
+| `type` | ○ | `"AuthoredTerrain"` |
+| `theme` | ○ | 見た目テーマ（`fever_cave` / `debris` / `meme_static` / `fortress` / `shogi_void`） |
+| `top` | ○ | `[[x, y], ...]`。上側地形の下端Y制御点 |
+| `bottom` | ○ | `[[x, y], ...]`。下側地形の上端Y制御点 |
+| `length` | — | 生成する横幅（省略時は制御点の最大X） |
+| `segment_w` | — | 1セグメントの横幅（既定64px） |
+| `min_gap` | — | 上下境界の最低通路幅（既定160px） |
+| `curve` | — | `"smooth"` / `"linear"`。省略時は `"smooth"` |
+| `renderer` | — | Stage3 では `"stage3_composer"` を指定して素材composer描画を使う |
+
+#### 旧連続地形イベント（`type: "TerrainStrip"`）
 
 グラディウス風の上下壁・洞窟・要塞回廊をセグメント列として生成する。接触判定は矩形セグメントごとに行い、
 見た目はテーマ別の手続き描画で表現する。Stage1 では `fever_cave` を使い、発熱回廊の上下壁を構成する。

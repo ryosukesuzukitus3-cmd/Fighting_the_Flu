@@ -57,34 +57,17 @@ def _stage3_layout(stage_path: Path) -> dict[str, Any]:
     if not layouts:
         raise ValueError(f"{stage_path} does not contain terrain_layout")
     layout = layouts[0]
-    if layout.get("type") != "TerrainStrip":
-        raise ValueError("Stage3 composer report expects first layout to be TerrainStrip")
+    if layout.get("type") not in {"AuthoredTerrain", "TerrainPath", "TerrainStrip"}:
+        raise ValueError("Stage3 composer report expects continuous terrain layout")
     return layout
 
 
 def _stage3_segments(stage_path: Path) -> list[Any]:
-    from src.entities.terrain import make_terrain_strip
+    from src.entities.terrain import make_terrain_segments_from_event
 
     layout = _stage3_layout(stage_path)
     start_x = float(layout.get("start_offset", 0))
-    kwargs = {
-        "length": int(layout.get("length", 12000)),
-        "theme": str(layout.get("theme", "fortress")),
-        "segment_w": int(layout.get("segment_w", 48)),
-        "seed": int(layout.get("seed", 303)),
-        "gap_min": int(layout.get("gap_min", 292)),
-        "gap_max": int(layout.get("gap_max", 390)),
-        "center_y": int(layout.get("center_y", 292)),
-        "center_wave": int(layout.get("center_wave", 118)),
-        "top_min": int(layout.get("top_min", 28)),
-        "bottom_min": int(layout.get("bottom_min", 34)),
-        "irregularity": int(layout.get("irregularity", 58)),
-        "breakable_chance": float(layout.get("breakable_chance", 0.0)),
-        "breakable_hp": int(layout.get("breakable_hp", 5)),
-        "breakable_drop_chance": float(layout.get("breakable_drop_chance", 0.0)),
-        "profile": str(layout.get("profile", "normal")),
-    }
-    return make_terrain_strip(start_x, **kwargs)
+    return make_terrain_segments_from_event(layout, start_x, default_seed=303)
 
 
 def _composer_options(stage_path: Path) -> dict[str, int]:

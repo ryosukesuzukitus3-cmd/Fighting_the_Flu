@@ -297,27 +297,14 @@ class EnemySpawner:
                 ))
             return True
 
-        if enemy_type in {"TerrainStrip", "cave_section", "corridor"}:
+        if enemy_type in {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "cave_section", "corridor"}:
             if self._terrain is not None:
-                from src.entities.terrain import make_terrain_strip
+                from src.entities.terrain import make_terrain_segments_from_event
                 start_x = self._terrain_start_x(event, camera)
-                segments = make_terrain_strip(
+                segments = make_terrain_segments_from_event(
+                    event,
                     start_x,
-                    length=int(event.get("length", 3600)),
-                    theme=event.get("theme", "fever_cave"),
-                    segment_w=int(event.get("segment_w", 64)),
-                    seed=int(event.get("seed", self._stage_id)),
-                    gap_min=int(event.get("gap_min", 270)),
-                    gap_max=int(event.get("gap_max", 380)),
-                    center_y=int(event.get("center_y", SCREEN_HEIGHT // 2)),
-                    center_wave=int(event.get("center_wave", 42)),
-                    top_min=int(event.get("top_min", 38)),
-                    bottom_min=int(event.get("bottom_min", 42)),
-                    irregularity=int(event.get("irregularity", 36)),
-                    breakable_chance=float(event.get("breakable_chance", 0.0)),
-                    breakable_hp=int(event.get("breakable_hp", 3)),
-                    breakable_drop_chance=float(event.get("breakable_drop_chance", 0.0)),
-                    profile=str(event.get("profile", "normal")),
+                    default_seed=self._stage_id,
                 )
                 if event.get("renderer") == "stage3_composer":
                     from src.entities.stage3_composer_terrain import make_stage3_composer_terrain

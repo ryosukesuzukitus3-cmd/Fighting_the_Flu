@@ -55,6 +55,7 @@ def test_stage_json_enemy_types_in_registry() -> None:
     terrain_types = {
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
         "weapon_gate", "turret_mount", "cave_section", "corridor",
+        "AuthoredTerrain", "TerrainPath",
     }
     valid = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
@@ -157,13 +158,14 @@ def test_stage_json_required_fields() -> None:
     valid_terrain_kinds = {"wall", "rock", "debris", "data_block", "fortress_block", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
+    authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
     from src.core.registries import ITEM_NAMES
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
 
     def assert_terrain_event(section: str, i: int, ev: dict) -> None:
-        assert ev.get("type") in rect_terrain_types | strip_terrain_types, (
-            f"{section}[{i}]: terrain section only allows Terrain/TerrainStrip"
+        assert ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types, (
+            f"{section}[{i}]: terrain section only allows terrain aliases"
         )
         if "fixed_drop" in ev:
             assert ev["fixed_drop"] in ITEM_NAMES, (
@@ -176,11 +178,18 @@ def test_stage_json_required_fields() -> None:
                 f"{section}[{i}](Terrain): unknown kind '{ev.get('kind', 'wall')}'"
             )
         else:
-            for field in ("length",):
-                assert field in ev, f"{section}[{i}](TerrainStrip): missing '{field}'"
+            required = ("top", "bottom") if ev.get("type") in authored_terrain_types else ("length",)
+            for field in required:
+                assert field in ev, f"{section}[{i}]({ev.get('type')}): missing '{field}'"
             assert ev.get("theme", "fever_cave") in valid_strip_themes, (
-                f"{section}[{i}](TerrainStrip): unknown theme '{ev.get('theme', 'fever_cave')}'"
+                f"{section}[{i}]({ev.get('type')}): unknown theme '{ev.get('theme', 'fever_cave')}'"
             )
+            if ev.get("type") in authored_terrain_types:
+                for boundary in ("top", "bottom"):
+                    points = ev.get(boundary)
+                    assert isinstance(points, list) and len(points) >= 2, (
+                        f"{section}[{i}]({ev.get('type')}): '{boundary}' requires at least two points"
+                    )
 
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
@@ -213,11 +222,12 @@ def test_stage_json_required_fields() -> None:
                 assert ev["kind"] in valid_terrain_kinds, (
                     f"{p.name} events[{i}](Terrain): 未知の kind '{ev['kind']}'"
                 )
-            elif ev.get("type") == "TerrainStrip":
-                for field in ("theme", "length"):
-                    assert field in ev, f"{p.name} events[{i}](TerrainStrip): 必須フィールド '{field}' が欠如"
+            elif ev.get("type") in strip_terrain_types | authored_terrain_types:
+                required = ("theme", "top", "bottom") if ev.get("type") in authored_terrain_types else ("theme", "length")
+                for field in required:
+                    assert field in ev, f"{p.name} events[{i}]({ev.get('type')}): 必須フィールド '{field}' が欠如"
                 assert ev["theme"] in valid_strip_themes, (
-                    f"{p.name} events[{i}](TerrainStrip): 未知の theme '{ev['theme']}'"
+                    f"{p.name} events[{i}]({ev.get('type')}): 未知の theme '{ev['theme']}'"
                 )
             else:
                 assert "count" in ev, f"{p.name} events[{i}]: 必須フィールド 'count' が欠如"
@@ -275,6 +285,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage2.random_drop_scale < 1.0
     assert stage3.initial_terrain == []
     assert stage3.terrain_layout
+    assert stage3.terrain_layout[0]["type"] == "AuthoredTerrain"
     assert stage3.random_drop_scale < 1.0
     assert stage4.initial_terrain == []
     assert stage4.terrain_layout
@@ -444,12 +455,13 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert data["events"] == []
     assert data["boss_terrain_mode"] == "preplaced"
     assert 0.0 < data["random_drop_scale"] < 1.0
-    assert layout["type"] == "TerrainStrip"
+    assert layout["type"] == "AuthoredTerrain"
     assert layout["theme"] == "fortress"
     assert layout["renderer"] == "stage3_composer"
-    assert layout["profile"] == "mountain"
+    assert len(layout["top"]) >= 6
+    assert len(layout["bottom"]) >= 6
+    assert layout["min_gap"] >= 240
     assert layout["length"] >= boss_x + 800
-    assert layout["breakable_drop_chance"] <= 0.05
     assert len(world_events) >= 40
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 10
     assert len(mounts) >= 3
@@ -834,6 +846,27 @@ def test_terrain_strip_can_spawn_breakable_segments() -> None:
     assert target.take_damage(1) is True
 
 
+def test_authored_terrain_points_generate_corridor_segments() -> None:
+    from src.entities.terrain import make_terrain_segments_from_event
+
+    event = {
+        "type": "AuthoredTerrain",
+        "theme": "fortress",
+        "segment_w": 100,
+        "min_gap": 220,
+        "top": [[0, 40], [500, 100], [1000, 60]],
+        "bottom": [[0, 520], [500, 440], [1000, 500]],
+    }
+    segments = make_terrain_segments_from_event(event, 0, default_seed=3)
+    top = [s for s in segments if s.side == "top"]
+    bottom = [s for s in segments if s.side == "bottom"]
+
+    assert top
+    assert bottom
+    assert len({s.world_x for s in top}) == len({s.world_x for s in bottom})
+    assert min(s.y for s in bottom) - max(s.rect.height for s in top) >= 220
+
+
 def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
     from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
     from src.entities.terrain import make_terrain_strip
@@ -873,27 +906,14 @@ def test_stage3_composer_floor_props_are_collidable() -> None:
         load_stage3_composer_pieces,
         make_stage3_composer_terrain,
     )
-    from src.entities.terrain import make_terrain_strip
+    from src.entities.terrain import make_terrain_segments_from_event
 
     stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
     layout = stage3["terrain_layout"][0]
-    segments = make_terrain_strip(
+    segments = make_terrain_segments_from_event(
+        layout,
         float(layout.get("start_offset", 0)),
-        length=int(layout["length"]),
-        theme=str(layout["theme"]),
-        profile=str(layout["profile"]),
-        segment_w=int(layout["segment_w"]),
-        seed=int(layout["seed"]),
-        gap_min=int(layout["gap_min"]),
-        gap_max=int(layout["gap_max"]),
-        center_y=int(layout["center_y"]),
-        center_wave=int(layout["center_wave"]),
-        top_min=int(layout["top_min"]),
-        bottom_min=int(layout["bottom_min"]),
-        irregularity=int(layout["irregularity"]),
-        breakable_chance=float(layout["breakable_chance"]),
-        breakable_hp=int(layout["breakable_hp"]),
-        breakable_drop_chance=float(layout["breakable_drop_chance"]),
+        default_seed=3,
     )
     composer_layout = build_stage3_composer_layout(segments, load_stage3_composer_pieces())
     sprites = make_stage3_composer_terrain(segments)
