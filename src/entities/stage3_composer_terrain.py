@@ -21,6 +21,9 @@ DEFAULT_COLLISION_STEP = 8
 DEFAULT_COLLISION_TOLERANCE = 10
 DEFAULT_OVERLAP = 0
 SURFACE_CAP_OVERHANG = 2
+MAX_AUTO_PROP_OPAQUE_HEIGHT = 108
+PROP_SPAWN_CHANCE = 0.46
+SUBSURFACE_FADE_MARGIN = 56
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,7 @@ class Stage3ComposerLayout:
 
 
 _PIECE_CACHE: dict[tuple[str, str], dict[str, list[Stage3ComposerPiece]]] = {}
+_FADE_CACHE: dict[tuple[int, int, str], pygame.Surface] = {}
 
 
 def _resolve(path: str | Path, *, base: Path = ROOT) -> Path:
@@ -351,10 +355,15 @@ def _add_props(
     rng: random.Random,
     height: int,
 ) -> None:
-    props = pieces.get("floor_props", [])
-    if run.side != "bottom" or not props or run.x1 - run.x0 < 180:
+    raw_props = pieces.get("floor_props", [])
+    if run.side != "bottom" or not raw_props or run.x1 - run.x0 < 180:
         return
-    if rng.random() > 0.46:
+    props = [
+        piece
+        for piece in raw_props
+        if _opaque_bounds(piece.image).height <= MAX_AUTO_PROP_OPAQUE_HEIGHT
+    ] or raw_props
+    if rng.random() > PROP_SPAWN_CHANCE:
         return
     piece = _choice(rng, props)
     opaque = _opaque_bounds(piece.image)
@@ -577,6 +586,47 @@ def _blit_with_world_clip(
     target.set_clip(old_clip)
 
 
+def _draw_subsurface_fade(
+    target: pygame.Surface,
+    layout: Stage3ComposerLayout,
+    *,
+    camera_x: float,
+) -> None:
+    target_rect = target.get_rect()
+    for run in layout.surface_runs:
+        sx = int(round(run.x0 - camera_x))
+        ex = int(round(run.x1 - camera_x))
+        if ex < 0 or sx > target_rect.width:
+            continue
+        width = max(1, ex - sx)
+        if run.side == "bottom":
+            y0 = max(0, run.y + layout.surface_depth + SUBSURFACE_FADE_MARGIN)
+            y1 = target_rect.height
+        else:
+            y0 = 0
+            y1 = max(0, run.y - layout.surface_depth - SUBSURFACE_FADE_MARGIN)
+        if y1 <= y0:
+            continue
+
+        target.blit(_subsurface_fade_surface(width, y1 - y0, run.side), (sx, y0))
+
+
+def _subsurface_fade_surface(width: int, height: int, side: str) -> pygame.Surface:
+    key = (max(1, int(width)), max(1, int(height)), side)
+    cached = _FADE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    fade = pygame.Surface((key[0], key[1]), pygame.SRCALPHA)
+    for y in range(key[1]):
+        t = y / max(1, key[1] - 1)
+        if side == "top":
+            t = 1.0 - t
+        alpha = int(18 + 54 * t)
+        pygame.draw.line(fade, (0, 0, 0, alpha), (0, y), (key[0] - 1, y), 1)
+    _FADE_CACHE[key] = fade
+    return fade
+
+
 def draw_stage3_composer_layout(
     target: pygame.Surface,
     layout: Stage3ComposerLayout,
@@ -610,6 +660,8 @@ def draw_stage3_composer_layout(
             camera_x=camera_x,
             clip=placement.clip,
         )
+
+    _draw_subsurface_fade(target, layout, camera_x=camera_x)
 
     if debug_lines:
         _draw_collision_debug(target, layout, camera_x=camera_x)
