@@ -108,6 +108,7 @@ def check_enemies() -> None:
     terrain_types = {
         "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
         "weapon_gate", "turret_mount", "cave_section", "corridor",
+        "AuthoredTerrain", "TerrainPath",
     }
     valid_types = set(ENEMY_NAMES) | {"Boss", "BossGate"} | terrain_types
     for p in sorted((ROOT / "data" / "stages").glob("stage*.json")):
@@ -184,6 +185,7 @@ def check_stages() -> None:
     valid_terrain_kinds = {"wall", "rock", "debris", "data_block", "fortress_block", "clot"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
+    authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
 
@@ -194,6 +196,15 @@ def check_stages() -> None:
                     _fail(f"{label}(Terrain): 必須フィールド '{field}' が欠如")
             if ev.get("kind", "wall") not in valid_terrain_kinds:
                 _fail(f"{label}(Terrain): 未知の kind '{ev.get('kind')}'")
+        elif ev.get("type") in authored_terrain_types:
+            for field in ("top", "bottom"):
+                if field not in ev:
+                    _fail(f"{label}({ev.get('type')}): missing '{field}'")
+                points = ev.get(field)
+                if not isinstance(points, list) or len(points) < 2:
+                    _fail(f"{label}({ev.get('type')}): '{field}' requires at least two points")
+            if ev.get("theme", "fever_cave") not in valid_strip_themes:
+                _fail(f"{label}({ev.get('type')}): unknown theme '{ev.get('theme')}'")
         elif ev.get("type") in strip_terrain_types:
             for field in ("length",):
                 if field not in ev:
@@ -237,6 +248,12 @@ def check_stages() -> None:
                         _fail(f"{p.name} events[{i}](Terrain): 必須フィールド '{field}' が欠如")
                 if ev.get("kind") not in valid_terrain_kinds:
                     _fail(f"{p.name} events[{i}](Terrain): 未知の kind '{ev.get('kind')}'")
+            elif ev.get("type") in authored_terrain_types:
+                for field in ("theme", "top", "bottom"):
+                    if field not in ev:
+                        _fail(f"{p.name} events[{i}]({ev.get('type')}): missing '{field}'")
+                if ev.get("theme") not in valid_strip_themes:
+                    _fail(f"{p.name} events[{i}]({ev.get('type')}): unknown theme '{ev.get('theme')}'")
             elif ev.get("type") == "TerrainStrip":
                 for field in ("theme", "length"):
                     if field not in ev:

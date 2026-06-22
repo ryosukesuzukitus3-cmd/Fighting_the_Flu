@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import pygame
 from src.core.constants import SCREEN_HEIGHT
 
@@ -575,6 +575,9 @@ _STRIP_THEMES: dict[str, dict] = {
     },
 }
 TERRAIN_STRIP_THEMES: tuple[str, ...] = tuple(_STRIP_THEMES.keys())
+AUTHORED_TERRAIN_TYPES: frozenset[str] = frozenset({"AuthoredTerrain", "TerrainPath"})
+RANDOM_TERRAIN_TYPES: frozenset[str] = frozenset({"TerrainStrip", "cave_section", "corridor"})
+CONTINUOUS_TERRAIN_TYPES: frozenset[str] = AUTHORED_TERRAIN_TYPES | RANDOM_TERRAIN_TYPES
 
 
 class TerrainStripSegment(pygame.sprite.Sprite):
@@ -1012,3 +1015,158 @@ def make_terrain_strip(
                     side="bottom", theme=theme, seed=seed, index=i * 2,
                 ))
     return segments
+
+
+def make_terrain_segments_from_event(
+    event: dict[str, Any],
+    start_x: float,
+    *,
+    default_seed: int = 1,
+) -> list[TerrainStripSegment]:
+    terrain_type = str(event.get("type", ""))
+    if terrain_type in AUTHORED_TERRAIN_TYPES:
+        return make_authored_terrain(
+            start_x,
+            top=event.get("top", []),
+            bottom=event.get("bottom", []),
+            length=int(event["length"]) if "length" in event else None,
+            theme=str(event.get("theme", "fever_cave")),
+            segment_w=int(event.get("segment_w", 64)),
+            seed=int(event.get("seed", default_seed)),
+            min_gap=int(event.get("min_gap", 160)),
+            curve=str(event.get("curve", "smooth")),
+        )
+    if terrain_type in RANDOM_TERRAIN_TYPES:
+        return make_terrain_strip(
+            start_x,
+            length=int(event.get("length", 3600)),
+            theme=event.get("theme", "fever_cave"),
+            segment_w=int(event.get("segment_w", 64)),
+            seed=int(event.get("seed", default_seed)),
+            gap_min=int(event.get("gap_min", 270)),
+            gap_max=int(event.get("gap_max", 380)),
+            center_y=int(event.get("center_y", SCREEN_HEIGHT // 2)),
+            center_wave=int(event.get("center_wave", 42)),
+            top_min=int(event.get("top_min", 38)),
+            bottom_min=int(event.get("bottom_min", 42)),
+            irregularity=int(event.get("irregularity", 36)),
+            breakable_chance=float(event.get("breakable_chance", 0.0)),
+            breakable_hp=int(event.get("breakable_hp", 3)),
+            breakable_drop_chance=float(event.get("breakable_drop_chance", 0.0)),
+            profile=str(event.get("profile", "normal")),
+        )
+    raise ValueError(f"unsupported continuous terrain type: {terrain_type}")
+
+
+def make_authored_terrain(
+    start_x: float,
+    *,
+    top: Any,
+    bottom: Any,
+    length: int | None = None,
+    theme: str = "fever_cave",
+    segment_w: int = 64,
+    seed: int = 1,
+    min_gap: int = 160,
+    curve: str = "smooth",
+    height: int = SCREEN_HEIGHT,
+) -> list[TerrainStripSegment]:
+    top_points = _terrain_control_points(top, label="top")
+    bottom_points = _terrain_control_points(bottom, label="bottom")
+    end_x = max(top_points[-1][0], bottom_points[-1][0])
+    total_length = max(1, int(length if length is not None else end_x))
+    segment_width = max(1, int(segment_w))
+    count = max(1, math.ceil(total_length / segment_width))
+    segments: list[TerrainStripSegment] = []
+
+    for i in range(count):
+        local_x = i * segment_width
+        width = min(segment_width, total_length - local_x)
+        if width <= 0:
+            continue
+        sample_x = min(total_length, local_x + width * 0.5)
+        top_y = int(round(_sample_terrain_boundary(top_points, sample_x, curve=curve)))
+        bottom_y = int(round(_sample_terrain_boundary(bottom_points, sample_x, curve=curve)))
+        top_y, bottom_y = _clamp_authored_corridor(top_y, bottom_y, min_gap=min_gap, height=height)
+        world_x = start_x + local_x
+
+        if top_y > 0:
+            segments.append(TerrainStripSegment(
+                world_x,
+                0,
+                width,
+                top_y,
+                side="top",
+                theme=theme,
+                seed=seed,
+                index=i * 2,
+            ))
+        if bottom_y < height:
+            segments.append(TerrainStripSegment(
+                world_x,
+                bottom_y,
+                width,
+                height - bottom_y,
+                side="bottom",
+                theme=theme,
+                seed=seed,
+                index=i * 2 + 1,
+            ))
+    return segments
+
+
+def _terrain_control_points(raw: Any, *, label: str) -> list[tuple[float, float]]:
+    if not isinstance(raw, list) or len(raw) < 2:
+        raise ValueError(f"AuthoredTerrain.{label} requires at least two control points")
+    points: list[tuple[float, float]] = []
+    for i, item in enumerate(raw):
+        if isinstance(item, dict):
+            if "x" not in item or "y" not in item:
+                raise ValueError(f"AuthoredTerrain.{label}[{i}] requires x and y")
+            x = float(item["x"])
+            y = float(item["y"])
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            x = float(item[0])
+            y = float(item[1])
+        else:
+            raise ValueError(f"AuthoredTerrain.{label}[{i}] must be [x, y] or {{x, y}}")
+        points.append((x, y))
+    points.sort(key=lambda p: p[0])
+    for prev, cur in zip(points, points[1:]):
+        if cur[0] <= prev[0]:
+            raise ValueError(f"AuthoredTerrain.{label} control point x values must be unique")
+    return points
+
+
+def _sample_terrain_boundary(points: list[tuple[float, float]], x: float, *, curve: str) -> float:
+    if x <= points[0][0]:
+        return points[0][1]
+    if x >= points[-1][0]:
+        return points[-1][1]
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        if x0 <= x <= x1:
+            t = (x - x0) / max(1.0, x1 - x0)
+            if curve != "linear":
+                t = t * t * (3.0 - 2.0 * t)
+            return y0 * (1.0 - t) + y1 * t
+    return points[-1][1]
+
+
+def _clamp_authored_corridor(
+    top_y: int,
+    bottom_y: int,
+    *,
+    min_gap: int,
+    height: int,
+) -> tuple[int, int]:
+    top_y = max(0, min(height, top_y))
+    bottom_y = max(0, min(height, bottom_y))
+    gap = max(1, int(min_gap))
+    if bottom_y - top_y >= gap:
+        return top_y, bottom_y
+    center = (top_y + bottom_y) // 2
+    top_y = max(0, center - gap // 2)
+    bottom_y = min(height, top_y + gap)
+    if bottom_y - top_y < gap:
+        top_y = max(0, bottom_y - gap)
+    return top_y, bottom_y
