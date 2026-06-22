@@ -7,6 +7,10 @@
     {
       "type": "TerrainStrip",
       "theme": "fever_cave",
+      "renderer": "composer",
+      "composer_rects": "tools/stage1_terrain_rects.json",
+      "composer_sample_step": 32,
+      "composer_tolerance": 18,
       "length": 11200,
       "segment_w": 32,
       "seed": 101,
@@ -27,6 +31,10 @@
     {
       "type": "TerrainStrip",
       "theme": "fever_cave",
+      "renderer": "composer",
+      "composer_rects": "tools/stage1_terrain_rects.json",
+      "composer_sample_step": 32,
+      "composer_tolerance": 18,
       "length": 1500,
       "segment_w": 32,
       "seed": 1111,

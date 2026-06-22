@@ -862,13 +862,15 @@ class Stage3ComposerCollisionRectBlock(pygame.sprite.Sprite):
 def make_stage3_composer_terrain(
     segments: list[Any],
     *,
+    rects_path: str | Path = DEFAULT_RECTS_PATH,
+    mask_dir: str | Path = DEFAULT_MASK_DIR,
     sample_step: int = DEFAULT_SAMPLE_STEP,
     tolerance: int = DEFAULT_TOLERANCE,
     collision_step: int = DEFAULT_COLLISION_STEP,
     collision_tolerance: int = DEFAULT_COLLISION_TOLERANCE,
     overlap: int = DEFAULT_OVERLAP,
 ) -> list[pygame.sprite.Sprite]:
-    pieces = load_stage3_composer_pieces()
+    pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
     layout = build_stage3_composer_layout(
         segments,
         pieces,
