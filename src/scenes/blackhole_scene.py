@@ -35,7 +35,9 @@ class BlackholeScene(Scene):
         self._on_complete = on_complete
 
     def on_enter(self) -> None:
-        self._bg = ScrollingBackground(3)
+        # 承認欲求ブラックホールは宇宙空間の演出。ステージ3（労働要塞）の
+        # 街並み背景ではなく、テーマ無しの星空下地（宇宙）を使う。
+        self._bg = ScrollingBackground(0)
         self._player = Player(self.game)
         self._player.sx = 150.0
         self._player.sy = 300.0
