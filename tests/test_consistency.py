@@ -479,6 +479,50 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert stage.boss_terrain_mode == "preplaced"
 
 
+def test_stage3_authored_route_has_deliberate_chokes_and_arenas() -> None:
+    data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    layout = data["terrain_layout"][0]
+
+    def sample(points: list[list[int]], x: float) -> float:
+        if x <= points[0][0]:
+            return float(points[0][1])
+        if x >= points[-1][0]:
+            return float(points[-1][1])
+        for (x0, y0), (x1, y1) in zip(points, points[1:]):
+            if x0 <= x <= x1:
+                t = (x - x0) / max(1.0, x1 - x0)
+                t = t * t * (3.0 - 2.0 * t)
+                return float(y0) * (1.0 - t) + float(y1) * t
+        return float(points[-1][1])
+
+    def gap_at(x: float) -> float:
+        return sample(layout["bottom"], x) - sample(layout["top"], x)
+
+    assert gap_at(1200) >= 400
+    assert gap_at(3300) <= 310
+    assert gap_at(6100) >= 460
+    assert gap_at(7300) <= 340
+    assert gap_at(9900) >= 440
+
+
+def test_stage3_ceiling_attackers_keep_clearance_from_hud() -> None:
+    data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    world_events = data["world_events"]
+    ceiling_fliers = [
+        ev for ev in world_events
+        if ev["type"] == "EnemyPachemon" and ev.get("surface") == "top"
+    ]
+    final_takeshi = [
+        ev for ev in world_events
+        if ev["type"] == "EnemyTakeshi" and ev.get("x", 0) >= 9000
+    ]
+
+    assert ceiling_fliers
+    assert all(ev.get("surface_offset", 0) >= 130 for ev in ceiling_fliers)
+    assert final_takeshi
+    assert all(ev.get("y", 0) >= 180 for ev in final_takeshi)
+
+
 def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     from src.core.constants import SCREEN_WIDTH
     from src.stages.stage import Stage
