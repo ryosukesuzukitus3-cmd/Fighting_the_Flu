@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         "game":       ([py, "main.py", *argv], False),
         "capture":    ([py, "tools/capture.py", *argv], True),
         "clip":       ([py, "tools/gameplay_clip.py", *argv], True),
+        "visual-regress": ([py, "tools/visual_regression.py", *argv], True),
         "preview-boss": ([py, "tools/preview_boss.py", *argv], False),
         "stage3-rect-preview": ([py, "tools/stage3_rect_preview.py", *argv], True),
         "stage3-rect-editor": ([py, "tools/stage3_rect_editor.py", *argv], False),
