@@ -14,7 +14,7 @@
 """
 from __future__ import annotations
 
-from src.story.lines import Line, Page, page
+from src.story.lines import Line, Page, StoryBeat, page
 from src.story.speakers import (
     SAWAGUCHI as S, KARONARU as K, KARONARU_MAX as KM,
     NARRATION as N, UNKNOWN as Q, SYSTEM as SYS,
@@ -65,43 +65,17 @@ PROLOGUE: list[Page] = [
 
 
 # ════════════════════════════════════════════════════════════════════
-# SCENE 020/040/050/070  各ステージ開始前（StageIntroScene）
+# SCENE 020  ステージ1開始前ブリーフィング
+#   プロローグ（発熱夢）と地続きの後半。STORY_BEATS の "prologue" ビートが
+#   PROLOGUE と連結して 1 シーンとして再生する。
 # ════════════════════════════════════════════════════════════════════
-STAGE_INTRO: dict[int, list[Page]] = {
-    1: [
-        page(K, "いいか澤口。",
-                "インフルは根性で倒すなにょ。",
-                "水分、睡眠、それと、適度な反撃だにょ。"),
-        page(S, "反撃って、何にだよ。"),
-        page(K, "あれ全部にだにょ。", last=True),
-    ],
-    2: [
-        page(S, "体が弱ると、心の守りも薄くなる。"),
-        page(S, "どうでもいい言葉ほど、こういう時に刺さる。"),
-        page(K, "体調悪い時のSNSは毒だにょ。"),
-        page(S, "お前、薬だろ。解毒しろよ。"),
-        page(K, "俺は解熱鎮痛剤だにょ。",
-                "情報リテラシーは、管理外だにょ。", last=True),
-    ],
-    3: [
-        page(S, "ちゃんとやってる。仕事も、婚活も。"),
-        page(S, "その「ちゃんと」が、何も保証してくれないだけで。"),
-        page(K, "保証が欲しいなら家電量販店へ行けにょ。",
-                "人間関係に5年保証はつかないにょ。"),
-        page(S, "うるさい。"),
-        page(K, "ちなみに、婚活の戦績は？"),
-        page(S, "……31年、無敗だ。一度も勝負してない。"),
-        page(K, "それを世間では、童貞と言うにょ。"),
-        page(S, "黙れ。", last=True),
-    ],
-    4: [
-        page(S, "将棋だけは、盤面が正直だと思っていた。"),
-        page(S, "読めた者が勝ち、読めない者が負ける。それだけだと。"),
-        page(S, "……おい、先輩。次は、何が来る。"),
-        page(N, "返事はない。"),
-        page(S, "……そうだったな。", last=True),
-    ],
-}
+_BRIEF_STAGE1: list[Page] = [
+    page(K, "いいか澤口。",
+            "インフルは根性で倒すなにょ。",
+            "水分、睡眠、それと、適度な反撃だにょ。"),
+    page(S, "反撃って、何にだよ。"),
+    page(K, "あれ全部にだにょ。", last=True),
+]
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -361,9 +335,14 @@ BOSS_DEFEAT: dict[int, list[Line]] = {
 
 
 # ════════════════════════════════════════════════════════════════════
-# SCENE 030  Stage1 クリア幕間 — 弱い相棒
+# ステージ間の会話（物語タイムラインの遷移ビート本文）
+#   ステージに束縛しない。STORY_BEATS が "1->2" / "2->3" / "3->4_void"
+#   として並びに組み込む。1境界＝1シーンで地続きに再生される。
+# ────────────────────────────────────────────────────────────────────
+# Stage1→2: 弱い相棒（旧クリア幕間）→ SNS（毒/解毒）。旧 幕間＋導入を
+#   1本の会話に圧縮。前半は振り返り、後半は次ステージ（SNS）の主題提示。
 # ════════════════════════════════════════════════════════════════════
-INTERLUDE_STAGE1_CLEAR: list[Page] = [
+_TALK_1_2: list[Page] = [
     page(S, "お前、態度のわりに弱いな。"),
     page(K, "失礼なやつだにょ。",
             "俺は解熱鎮痛剤だにょ。戦闘機じゃないにょ。"),
@@ -375,16 +354,35 @@ INTERLUDE_STAGE1_CLEAR: list[Page] = [
     page(S, "それは見れば分かる。"),
     page(K, "来るにょ。", fx=("glitch",)),
     page(S, "次は何だ。"),
-    page(K, "体調悪い時に見る、SNSだにょ。"),
-    page(S, "最悪だ。", last=True),
+    page(K, "体調悪い時に見る、SNSだにょ。",
+            "ついでに言うと、毒だにょ。"),
+    page(S, "体が弱ると、心の守りも薄くなる。",
+            "どうでもいい言葉ほど、こういう時に刺さる。"),
+    page(S, "お前、薬だろ。解毒しろよ。"),
+    page(K, "あいにく、こっちは熱専門だにょ。",
+            "情報リテラシーは、管理外だにょ。", last=True),
+]
+
+# Stage2→3: 仕事・婚活。他人の採点で自分を測る不安へ。
+_TALK_2_3: list[Page] = [
+    page(S, "ちゃんとやってる。仕事も、婚活も。"),
+    page(S, "その「ちゃんと」が、何も保証してくれないだけで。"),
+    page(K, "保証が欲しいなら家電量販店へ行けにょ。",
+            "人間関係に5年保証はつかないにょ。"),
+    page(S, "うるさい。"),
+    page(K, "ちなみに、婚活の戦績は？"),
+    page(S, "……31年、無敗だ。一度も勝負してない。"),
+    page(K, "それを世間では、童貞と言うにょ。"),
+    page(S, "黙れ。", last=True),
 ]
 
 
 # ════════════════════════════════════════════════════════════════════
-# SCENE 060  Stage3 後 — 承認欲求ブラックホール（相棒の自己犠牲）
+# Stage3→4: 承認欲求ブラックホール（相棒の自己犠牲）。専用 BlackholeScene
+#   で再生し、完了で karonaru_lost フラグを立てる（STORY_BEATS "3->4"）。
 #   バディものの「喪失」。先輩が朝を待たず、先に溶けて澤口を押し出す。
 # ════════════════════════════════════════════════════════════════════
-INTERLUDE_STAGE3_BLACKHOLE: list[Page] = [
+_BLACKHOLE: list[Page] = [
     page(S, "何だ、あれ。", se="SE_BLACKHOLE", fx=("blackhole",)),
     page(K, "残骸が、中心に落ちてるにょ。"),
     page(S, "重力レンズ……いや、違う。",
@@ -428,6 +426,15 @@ INTERLUDE_STAGE3_BLACKHOLE: list[Page] = [
     page(N, "うるさい薬が、消えた。",
             "世界は、急に静かになった。"),
     page(N, "静かになると、自分の声だけが、よく聞こえる。", last=True),
+]
+
+# Stage3→4: 先輩不在。将棋＝盤上の正直さへ。返事のない孤独。
+_TALK_3_4: list[Page] = [
+    page(S, "将棋だけは、盤面が正直だと思っていた。"),
+    page(S, "読めた者が勝ち、読めない者が負ける。それだけだと。"),
+    page(S, "……おい、先輩。次は、何が来る。"),
+    page(N, "返事はない。"),
+    page(S, "……そうだったな。", last=True),
 ]
 
 
@@ -525,6 +532,43 @@ POSTCREDIT: list[Page] = [
     page(N, "なお、人生の用法・用量は、現在も研究中です。"),
     page(SYS, "■ THE END", last=True),
 ]
+
+
+# ════════════════════════════════════════════════════════════════════
+# 物語タイムライン — ゲームプレイの合間に挟まる全画面会話シーンを「並び」
+#   として一元管理する。会話はステージの属性ではなく遷移であり、
+#   before_stage は『この後に始まるゲームプレイのステージ』を指す。
+#   再生は src/scenes/story_flow.py が駆動し、各シーンクラスから
+#   カットシーン分岐ロジックを排除する。
+#   ※戦闘中セリフ（BOSS_INTRO/MID/DEFEAT/FINAL_SEQ）は HP閾値・フォーム
+#     遷移で発火する別レイヤーなので、ここには含めない。
+# ════════════════════════════════════════════════════════════════════
+STORY_BEATS: tuple[StoryBeat, ...] = (
+    StoryBeat("prologue", (*PROLOGUE, *_BRIEF_STAGE1), before_stage=1,
+              stop_bgm=True, fade_out_on_finish=False),
+    StoryBeat("1->2", tuple(_TALK_1_2), before_stage=2,
+              bgm="music/bgm/Death_by_Glamour.mp3", fade_out_on_finish=False),
+    StoryBeat("2->3", tuple(_TALK_2_3), before_stage=3,
+              fade_out_on_finish=False),
+    StoryBeat("3->4", tuple(_BLACKHOLE), before_stage=4,
+              theme="blackhole", scene="blackhole", on_finish="karonaru_lost"),
+    StoryBeat("3->4_void", tuple(_TALK_3_4), before_stage=4,
+              fade_out_on_finish=False),
+    StoryBeat("epilogue", tuple(EPILOGUE), theme="window", stop_bgm=True),
+    StoryBeat("credits", (*CREDITS, *POSTCREDIT), scene="credits"),
+)
+
+_BEAT_BY_KEY: dict[str, StoryBeat] = {b.key: b for b in STORY_BEATS}
+
+
+def story_beat(key: str) -> StoryBeat:
+    """キーで StoryBeat を取得する。"""
+    return _BEAT_BY_KEY[key]
+
+
+def intro_beats(stage_id: int) -> list[StoryBeat]:
+    """指定ステージの直前に再生する遷移ビート群（STORY_BEATS の並び順）。"""
+    return [b for b in STORY_BEATS if b.before_stage == stage_id]
 
 
 # ════════════════════════════════════════════════════════════════════

@@ -98,9 +98,9 @@ class TitleScene(Scene):
     def _debug_jump_credits(self) -> None:
         """スタッフロール（エンドロール）へ直行。確認用。"""
         from src.scenes.credits_roll import CreditsRollScene
-        from src.story.script import CREDITS, POSTCREDIT
+        from src.scenes.story_flow import credits_pages
         self.game.change_scene(CreditsRollScene(
-            self.game, CREDITS + POSTCREDIT,
+            self.game, credits_pages(),
             lambda: self.game.change_scene(TitleScene(self.game)),
         ))
 

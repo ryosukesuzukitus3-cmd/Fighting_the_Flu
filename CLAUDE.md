@@ -19,6 +19,7 @@
 | 難易度スケール | `src/core/balance.py` |
 | ステージ名・ボス名 | `src/scenes/game/config.py` |
 | セリフ・ナレーション・カットシーン | `src/story/script.py` |
+| ステージ間会話・カットシーンの並び（物語タイムライン） | `src/story/script.py` > `STORY_BEATS`（再生は `src/scenes/story_flow.py`） |
 | 最終決戦セリフ（投了王サワグチ） | `src/story/script.py` > `BOSS_FORM3_INTRO`・`FINAL_SEQ`・`FINAL_BANNERS` |
 | 話者（表示名・色） | `src/story/speakers.py` |
 | BGM/SE エイリアス | `src/story/aliases.py` |
@@ -39,7 +40,7 @@
 
 1. `data/stages/stage{N}.json` を作成（`stage_id`・`bgm`・`terrain_layout`・`events` / `world_events` を記述）
 2. `src/scenes/game/config.py` > `STAGE_NAMES`・`BOSS_NAMES` に追加
-3. `src/story/script.py` > `STAGE_INTRO`・`BOSS_INTRO`・`BOSS_MID`・`BOSS_DEFEAT` にセリフを追加
+3. `src/story/script.py` > `STORY_BEATS`（ステージ間会話。`before_stage={N}` の遷移ビートを追加）・`BOSS_INTRO`・`BOSS_MID`・`BOSS_DEFEAT` にセリフを追加
 4. `src/entities/enemies/boss.py` > `_BOSS_CONFIG`・`_PHASE_CONFIGS` に追加
 5. `python tools/check_consistency.py` で確認
 
