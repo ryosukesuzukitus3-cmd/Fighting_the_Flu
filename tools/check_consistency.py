@@ -299,15 +299,21 @@ def check_story() -> None:
 
     ids = set(stage_ids())
 
-    # 全ステージに intro/defeat ボスセリフ・ステージ前セリフが存在するか
+    # 全ステージに intro/defeat ボスセリフが存在するか
     for name, table in (("BOSS_INTRO", script.BOSS_INTRO),
-                        ("BOSS_DEFEAT", script.BOSS_DEFEAT),
-                        ("STAGE_INTRO", script.STAGE_INTRO)):
+                        ("BOSS_DEFEAT", script.BOSS_DEFEAT)):
         missing = ids - set(table.keys())
         if missing:
             _fail(f"{name} に未定義のステージ: {sorted(missing)}")
         else:
             _ok(f"{name}: 全ステージ {sorted(ids)} を網羅")
+
+    # 物語タイムライン: 各ステージに「直前ビート」が存在するか
+    intro_missing = sorted(sid for sid in ids if not script.intro_beats(sid))
+    if intro_missing:
+        _fail(f"STORY_BEATS に直前ビートが無いステージ: {intro_missing}")
+    else:
+        _ok(f"STORY_BEATS: 全ステージ {sorted(ids)} に直前ビートあり")
 
     # script が参照する全 speaker が SPEAKERS に登録されているか
     used: set[str] = set()
@@ -317,11 +323,10 @@ def check_story() -> None:
     for grp in line_groups:
         for ln in grp:
             used.add(ln.speaker)
-    page_groups = ([script.PROLOGUE, script.EPILOGUE, script.CREDITS, script.POSTCREDIT,
-                    script.INTERLUDE_STAGE1_CLEAR, script.INTERLUDE_STAGE3_BLACKHOLE]
-                   + list(script.STAGE_INTRO.values()))
-    for grp in page_groups:
-        for pg in grp:
+    # 全画面会話の話者は STORY_BEATS のページから収集（プロローグ/ステージ間
+    # 遷移/エピローグ/エンドロールを網羅）。
+    for beat in script.STORY_BEATS:
+        for pg in beat.pages:
             used.add(pg.speaker)
     unknown = used - set(SPEAKERS.keys())
     if unknown:

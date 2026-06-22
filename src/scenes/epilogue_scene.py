@@ -10,17 +10,13 @@ from src.core.scene import Scene
 
 class EpilogueScene(Scene):
     def on_enter(self) -> None:
-        from src.scenes.cutscene_scene import CutsceneScene
-        from src.story.script import EPILOGUE
+        from src.scenes.story_flow import play_epilogue
 
         def _go_clear() -> None:
             from src.scenes.gameclear import GameClearScene
             self.game.change_scene(GameClearScene(self.game))
 
-        self.game.change_scene(CutsceneScene(
-            self.game, EPILOGUE, _go_clear,
-            theme="window", stop_bgm=True,
-        ))
+        play_epilogue(self.game, _go_clear)
 
     def handle_event(self, event: pygame.event.Event) -> None:
         pass

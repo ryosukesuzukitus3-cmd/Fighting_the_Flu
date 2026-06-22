@@ -32,31 +32,13 @@ class StageClearScene(Scene):
                 self._advance()
 
     def _advance(self) -> None:
-        """クリアしたステージに応じて、幕間カットシーンを挟んで次へ。"""
-        from src.scenes.stage_intro_scene import StageIntroScene
-        from src.scenes.cutscene_scene import CutsceneScene
-        from src.story.script import INTERLUDE_STAGE1_CLEAR, INTERLUDE_STAGE3_BLACKHOLE
+        """次ステージの直前ビート（幕間／導入／ブラックホール）を再生して本編へ。
 
-        def _to_next() -> None:
-            self.game.change_scene(StageIntroScene(self.game, stage_id=self._next_stage_id))
-
-        if self._cleared_stage == 1:
-            self.game.change_scene(CutsceneScene(
-                self.game, INTERLUDE_STAGE1_CLEAR, _to_next, theme="dark",
-                bgm_alias="music/bgm/Death_by_Glamour.mp3"))
-        elif self._cleared_stage == 3:
-            # 承認欲求ブラックホール（相棒の自己犠牲）。カットシーン完了でフラグ更新。
-            def _blackhole_done() -> None:
-                self.game.story.karonaru_available = False
-                self.game.story.karonaru_lost       = True
-                self.game.story.blackhole_event_done = True
-                _to_next()
-
-            from src.scenes.blackhole_scene import BlackholeScene
-            self.game.change_scene(BlackholeScene(
-                self.game, INTERLUDE_STAGE3_BLACKHOLE, _blackhole_done))
-        else:
-            _to_next()
+        どの幕間を挟むか・フラグ更新は物語タイムライン（STORY_BEATS）が持つので、
+        ここはステージ番号を渡して story_flow に委譲するだけでよい。
+        """
+        from src.scenes.story_flow import start_stage
+        start_stage(self.game, self._next_stage_id)
 
     def draw(self, screen: pygame.Surface) -> None:
         screen.fill((10, 20, 35))

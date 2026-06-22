@@ -48,12 +48,12 @@ import pygame  # noqa: E402
 from src.core.game import Game  # noqa: E402
 from src.core.registries import stage_ids  # noqa: E402
 
-# --cutscene の名前 → (script.py の定数名, テーマ)
+# --cutscene の名前 → STORY_BEATS のキー（テーマ・本文はビートから引く）
 _CUTSCENES = {
-    "prologue":   ("PROLOGUE",                   "dark"),
-    "interlude1": ("INTERLUDE_STAGE1_CLEAR",     "dark"),
-    "blackhole":  ("INTERLUDE_STAGE3_BLACKHOLE", "blackhole"),
-    "epilogue":   ("EPILOGUE",                   "window"),
+    "prologue":   "prologue",
+    "interlude1": "1->2",
+    "blackhole":  "3->4",
+    "epilogue":   "epilogue",
 }
 
 
@@ -91,8 +91,9 @@ def _capture_cutscene(args: argparse.Namespace) -> int:
     from src.scenes.cutscene_scene import CutsceneScene
     import src.story.script as script
 
-    const, theme = _CUTSCENES[args.cutscene]
-    pages = getattr(script, const)
+    beat = script.story_beat(_CUTSCENES[args.cutscene])
+    pages = list(beat.pages)
+    theme = beat.theme
 
     game = Game()
     scene = CutsceneScene(game, pages, on_complete=lambda: None, theme=theme)

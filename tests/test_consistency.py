@@ -713,9 +713,11 @@ def test_story_tables_cover_all_stages() -> None:
     from src.story import script
     ids = set(stage_ids())
     for name, table in (("BOSS_INTRO", script.BOSS_INTRO),
-                        ("BOSS_DEFEAT", script.BOSS_DEFEAT),
-                        ("STAGE_INTRO", script.STAGE_INTRO)):
+                        ("BOSS_DEFEAT", script.BOSS_DEFEAT)):
         assert ids <= set(table.keys()), f"{name} に未定義のステージ: {ids - set(table.keys())}"
+    # 物語タイムライン: 各ステージに直前ビートがあること
+    missing = {sid for sid in ids if not script.intro_beats(sid)}
+    assert not missing, f"STORY_BEATS に直前ビートが無いステージ: {sorted(missing)}"
 
 
 def test_story_speakers_are_registered() -> None:
@@ -726,13 +728,58 @@ def test_story_speakers_are_registered() -> None:
                 + list(script.BOSS_DEFEAT.values())
                 + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())):
         used.update(ln.speaker for ln in grp)
-    page_groups = ([script.PROLOGUE, script.EPILOGUE, script.CREDITS, script.POSTCREDIT,
-                    script.INTERLUDE_STAGE1_CLEAR, script.INTERLUDE_STAGE3_BLACKHOLE]
-                   + list(script.STAGE_INTRO.values()))
-    for grp in page_groups:
-        used.update(pg.speaker for pg in grp)
+    # 全画面会話の話者は STORY_BEATS のページから収集する。
+    for beat in script.STORY_BEATS:
+        used.update(pg.speaker for pg in beat.pages)
     unknown = used - set(SPEAKERS.keys())
     assert not unknown, f"SPEAKERS に未登録の話者: {sorted(unknown)}"
+
+
+def test_story_flow_resolves_scene_types() -> None:
+    """ビート種別 → 再生シーンの対応（cutscene=CutsceneScene / blackhole=BlackholeScene）。"""
+    from src.scenes.story_flow import _scene_for_beat
+    from src.scenes.cutscene_scene import CutsceneScene
+    from src.scenes.blackhole_scene import BlackholeScene
+    from src.story.script import story_beat
+    cb = lambda: None  # noqa: E731
+    assert isinstance(_scene_for_beat(None, story_beat("1->2"), cb), CutsceneScene)
+    assert isinstance(_scene_for_beat(None, story_beat("3->4"), cb), BlackholeScene)
+
+
+def test_story_flow_chains_beats_and_runs_finish_hook(monkeypatch) -> None:
+    """play_beats が複数ビートを順に再生し、on_finish フック（karonaru_lost）を
+    適用してから最後に on_done を呼ぶ（ステージ4直前: ブラックホール→将棋導入）。"""
+    from src.scenes import story_flow
+    from src.story.script import intro_beats
+
+    class _FakeStory:
+        karonaru_available = True
+        karonaru_lost = False
+        blackhole_event_done = False
+
+    class _FakeGame:
+        def __init__(self) -> None:
+            self.story = _FakeStory()
+            self.played: list[str] = []
+
+        def change_scene(self, scene) -> None:
+            key, on_complete = scene
+            self.played.append(key)
+            on_complete()  # 即完了して次のビートへ
+
+    # 実シーン生成を「(キー, 完了コールバック) を返す」スタブに差し替える。
+    monkeypatch.setattr(story_flow, "_scene_for_beat",
+                        lambda game, beat, on_complete: (beat.key, on_complete))
+
+    game = _FakeGame()
+    done: list[str] = []
+    story_flow.play_beats(game, intro_beats(4), lambda: done.append("launch"))
+
+    assert game.played == ["3->4", "3->4_void"]
+    assert done == ["launch"]
+    assert game.story.karonaru_lost is True
+    assert game.story.karonaru_available is False
+    assert game.story.blackhole_event_done is True
 
 
 def test_story_aliases_resolve_to_existing_files() -> None:
@@ -1627,8 +1674,13 @@ def test_final_boss_post_defeat_does_not_require_extra_dialogue_wait() -> None:
 
 
 def test_stage3_blackhole_uses_actor_scene() -> None:
-    src = (ROOT / "src" / "scenes" / "stageclear.py").read_text(encoding="utf-8")
-    assert "BlackholeScene" in src
+    # 承認欲求ブラックホールは専用の俳優シーン（BlackholeScene）で再生する。
+    # 物語タイムラインの "3->4" ビートが scene="blackhole" を持ち、story_flow が
+    # それを BlackholeScene に解決する。
+    from src.story import script
+    assert script.story_beat("3->4").scene == "blackhole"
+    flow_src = (ROOT / "src" / "scenes" / "story_flow.py").read_text(encoding="utf-8")
+    assert "BlackholeScene" in flow_src
     scene_src = (ROOT / "src" / "scenes" / "blackhole_scene.py").read_text(encoding="utf-8")
     assert "Player(self.game)" in scene_src
     assert "Karonaru(self.game)" in scene_src
