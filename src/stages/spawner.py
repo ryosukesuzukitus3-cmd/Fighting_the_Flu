@@ -306,16 +306,20 @@ class EnemySpawner:
                     start_x,
                     default_seed=self._stage_id,
                 )
-                if event.get("renderer") == "stage3_composer":
+                if event.get("renderer") in ("composer", "stage3_composer"):
                     from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
-                    self._terrain.add(*make_stage3_composer_terrain(
-                        segments,
-                        sample_step=int(event.get("composer_sample_step", 48)),
-                        tolerance=int(event.get("composer_tolerance", 26)),
-                        collision_step=int(event.get("composer_collision_step", 8)),
-                        collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
-                        overlap=int(event.get("composer_overlap", 0)),
-                    ))
+                    composer_kwargs: dict = {
+                        "sample_step": int(event.get("composer_sample_step", 48)),
+                        "tolerance": int(event.get("composer_tolerance", 26)),
+                        "collision_step": int(event.get("composer_collision_step", 8)),
+                        "collision_tolerance": int(event.get("composer_collision_tolerance", 10)),
+                        "overlap": int(event.get("composer_overlap", 0)),
+                    }
+                    if "composer_rects" in event:
+                        composer_kwargs["rects_path"] = event["composer_rects"]
+                    if "composer_mask_dir" in event:
+                        composer_kwargs["mask_dir"] = event["composer_mask_dir"]
+                    self._terrain.add(*make_stage3_composer_terrain(segments, **composer_kwargs))
                 else:
                     self._terrain.add(*segments)
             return True

@@ -278,7 +278,7 @@ def test_stage_supports_world_layout_fields() -> None:
 
     assert stage.initial_terrain == []
     assert stage.terrain_layout
-    assert stage.terrain_layout[0]["type"] == "TerrainStrip"
+    assert stage.terrain_layout[0]["type"] == "AuthoredTerrain"
     assert stage.random_drop_scale == stage1_data["random_drop_scale"]
     assert stage2.initial_terrain == []
     assert stage2.terrain_layout
@@ -322,12 +322,14 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
         if ev.get("type") in {"EnemyCoughSprayer", "EnemySporeSplitter"}
     ]
 
-    assert layout["type"] == "TerrainStrip"
+    assert layout["type"] == "AuthoredTerrain"
     assert layout["theme"] == "fever_cave"
+    assert layout["renderer"] == "composer"
+    assert layout["composer_rects"].endswith("stage1_terrain_rects.json")
     assert layout["length"] >= 11000
-    assert layout["center_wave"] >= 80
-    assert 0.0 < layout["breakable_chance"] <= 0.03
-    assert layout["breakable_drop_chance"] <= 0.05
+    assert len(layout["top"]) >= 6
+    assert len(layout["bottom"]) >= 6
+    assert layout["min_gap"] >= 300
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert "weapon_drop_limit" not in data
     assert first_enemy_x >= 900
@@ -348,6 +350,33 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert data["events"] == []
+
+
+def test_stage1_authored_route_has_deliberate_chokes_and_arenas() -> None:
+    data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
+    layout = data["terrain_layout"][0]
+
+    def sample(points: list[list[int]], x: float) -> float:
+        if x <= points[0][0]:
+            return float(points[0][1])
+        if x >= points[-1][0]:
+            return float(points[-1][1])
+        for (x0, y0), (x1, y1) in zip(points, points[1:]):
+            if x0 <= x <= x1:
+                t = (x - x0) / max(1.0, x1 - x0)
+                t = t * t * (3.0 - 2.0 * t)
+                return float(y0) * (1.0 - t) + float(y1) * t
+        return float(points[-1][1])
+
+    def gap_at(x: float) -> float:
+        return sample(layout["bottom"], x) - sample(layout["top"], x)
+
+    # 導入ステージらしく入口は開け、敵塊の手前で締める緩急を持たせる。
+    assert gap_at(700) >= 440      # 開けた導入アリーナ
+    assert gap_at(1900) <= 320     # 天井砲台のチョーク
+    assert gap_at(2920) >= 440     # ビリー戦の広間
+    assert gap_at(6780) <= 330     # 天井クロットのチョーク
+    assert gap_at(8000) >= 440     # ボス前アプローチの開け
 
 
 def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
