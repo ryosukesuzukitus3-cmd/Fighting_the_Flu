@@ -95,6 +95,8 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 
 素材分類を形状だけでなく用途ベースへ整理する。
 
+`tools/stage3_terrain_rects.json` は、画像上の切り出し単位である `groups` と、ゲーム内用途を表す `roles` の二層で管理する。composerや固定地形描画は `floor_surface` / `body_fill` などの role を参照し、`strip_top` / `block_square` などの形状グループ名へ直接依存しない。
+
 候補:
 
 - `floor_surface`: 床側の移動可能領域に接する表面

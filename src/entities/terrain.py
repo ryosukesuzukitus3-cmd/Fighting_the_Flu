@@ -101,17 +101,17 @@ def _stage3_rect_material_surface(w: int, h: int, *, seed: int, require_top: boo
     aspect = w / max(1, h)
     if require_top:
         if h > w * 1.35:
-            groups = ("block_tall", "block_square", "block_wide")
+            groups = ("exposed_column", "body_fill", "block_tall", "block_square", "block_wide")
         elif w > h * 1.55:
-            groups = ("block_wide", "strip_top", "block_square")
+            groups = ("turret_mount", "floor_surface", "block_wide", "strip_top", "block_square")
         else:
-            groups = ("block_square", "block_wide", "block_tall")
+            groups = ("breakable_block", "turret_mount", "exposed_column", "block_square", "block_wide", "block_tall")
     elif h > w * 1.35:
-        groups = ("block_tall", "block_square")
+        groups = ("exposed_column", "body_fill", "block_tall", "block_square")
     elif w > h * 1.55:
-        groups = ("block_wide", "block_square")
+        groups = ("turret_mount", "body_fill", "block_wide", "block_square")
     else:
-        groups = ("block_square", "block_tall", "block_wide")
+        groups = ("body_fill", "exposed_column", "breakable_block", "block_square", "block_tall", "block_wide")
     candidates = [
         piece
         for group in groups
@@ -130,7 +130,12 @@ def _stage3_rect_material_surface(w: int, h: int, *, seed: int, require_top: boo
     piece = ranked[seed % min(4, len(ranked))]
     surf = _stage3_piece_fill(piece.image, w, h)
     if require_top:
-        top_candidates = pieces_by_group.get("block_wide", []) or pieces_by_group.get("strip_top", [])
+        top_candidates = (
+            pieces_by_group.get("floor_surface", [])
+            or pieces_by_group.get("turret_mount", [])
+            or pieces_by_group.get("block_wide", [])
+            or pieces_by_group.get("strip_top", [])
+        )
         if top_candidates:
             top_piece = top_candidates[(seed >> 3) % min(4, len(top_candidates))]
             cap_h = min(h, max(34, min(92, int(h * 0.42))))
