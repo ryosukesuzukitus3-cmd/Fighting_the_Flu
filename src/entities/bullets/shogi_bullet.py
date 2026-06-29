@@ -70,8 +70,11 @@ class ShogiBullet(EnemyBullet):
         incoming_speed: float = 0.0,
         incoming_time: float = 0.55,
     ) -> None:
+        # 撃墜可能（hp）。地形はすり抜ける（上下から差す駒が天井/床で無駄にならないよう）。
         super().__init__(sx, sy, 0.0, 0.0, damage,
-                         size=base_surface.get_size(), lifetime=lifetime)
+                         size=base_surface.get_size(), lifetime=lifetime,
+                         terrain_passthrough=True,
+                         hp=hp if hp is not None else PIECE_HP.get(kind, 3))
         self.kind = kind
         self._piece_base = base_surface
         self._target = target
@@ -80,10 +83,6 @@ class ShogiBullet(EnemyBullet):
         self._rot_deg: float | None = None
         self._bishop_sign = random.choice((-1.0, 1.0))
         self._snap_anim = 0.0
-
-        # 撃墜可能
-        self.destructible = True
-        self.hp = hp if hp is not None else PIECE_HP.get(kind, 3)
 
         if drop_target is not None:
             # 持ち駒打ち: まず指定マスへ飛来する。
@@ -101,11 +100,6 @@ class ShogiBullet(EnemyBullet):
             self._fwd = (forward[0] / f, forward[1] / f)
             self._update_velocity(0.0)
         self._face_velocity()
-
-    # ── 撃墜 ─────────────────────────────────────────────────────
-    def take_damage(self, amount: int) -> bool:
-        self.hp -= amount
-        return self.hp <= 0
 
     # ── 駒種ごとの速度（前進ベクトル fwd に対して定義）─────────────
     def _update_velocity(self, dt: float) -> None:
@@ -238,17 +232,11 @@ class ThrownBoardBullet(EnemyBullet):
     ) -> None:
         super().__init__(sx, sy, vx, vy, damage,
                          size=base_surface.get_size(), lifetime=lifetime,
-                         terrain_passthrough=True)
+                         terrain_passthrough=True, hp=hp)
         self._board_base = base_surface
         self._spin = spin
         self._gravity = gravity
         self._angle = 0.0
-        self.destructible = True
-        self.hp = hp
-
-    def take_damage(self, amount: int) -> bool:
-        self.hp -= amount
-        return self.hp <= 0
 
     def update(self, dt: float) -> None:
         if self.lifetime is not None:

@@ -458,6 +458,7 @@ class Boss(pygame.sprite.Sprite):
             color=(126, 102, 76),
             lifetime=3.8,
             terrain_passthrough=True,
+            hp=3,   # 撃墜可能（落石も撃ち落とせる）
         )
         bullet.image.fill((0, 0, 0, 0))
         pts = []
@@ -534,21 +535,48 @@ class Boss(pygame.sprite.Sprite):
         pygame.draw.rect(tele.image, (255, 235, 160, 200), (0, 0, size, size), 2, border_radius=4)
         return tele
 
+    def _draw_mini_piece(self, surf: pygame.Surface, cx: int, cy: int, label: str) -> None:
+        """盤上に置かれた小さな駒（盤だと一目で分かるように）。"""
+        w, h = 13, 16
+        top = cy - h // 2
+        pts = ((cx, top), (cx + w // 2, top + 4),
+               (cx + w // 2 - 1, cy + h // 2), (cx - w // 2 + 1, cy + h // 2),
+               (cx - w // 2, top + 4))
+        pygame.draw.polygon(surf, (236, 200, 132), pts)
+        pygame.draw.polygon(surf, (92, 58, 28), pts, 1)
+        txt = self._font(12).render(label, True, (66, 36, 18))
+        surf.blit(txt, (cx - txt.get_width() // 2, cy - txt.get_height() // 2))
+
     def _board_surface(self) -> pygame.Surface:
-        """投げる将棋盤（9x9 の格子）。Form3 board_throw 用。"""
+        """投げつける将棋盤。厚みのある木の盤＋9x9＋星＋盤上の駒で「盤」と分かるように。"""
         cached = self._PIECE_CACHE.get("__board__")
         if cached is not None:
             return cached
-        size = 96
-        surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (60, 30, 18, 235), (0, 0, size, size), border_radius=4)
-        pygame.draw.rect(surf, (150, 96, 40), (0, 0, size, size), 3, border_radius=4)
-        inner = 8
-        step = (size - inner * 2) / 9
+        size = 104
+        pad = 9   # 盤の厚み（側面）分の余白
+        surf = pygame.Surface((size + pad, size + pad), pygame.SRCALPHA)
+        # 厚み（側面の木口）を右下にずらして 3D の盤に見せる。
+        pygame.draw.rect(surf, (86, 52, 24, 255), (pad, pad, size, size), border_radius=6)
+        pygame.draw.rect(surf, (60, 34, 16, 255), (pad, pad, size, size), 2, border_radius=6)
+        # 盤面（榧色の明るい木目）。
+        board = pygame.Rect(0, 0, size, size)
+        pygame.draw.rect(surf, (214, 176, 112, 255), board, border_radius=6)
+        pygame.draw.rect(surf, (120, 78, 36), board, 3, border_radius=6)
+        inner = 9
+        step = (size - inner * 2) / 9.0
         for i in range(10):
             p = int(inner + i * step)
-            pygame.draw.line(surf, (120, 78, 36), (inner, p), (size - inner, p), 1)
-            pygame.draw.line(surf, (120, 78, 36), (p, inner), (p, size - inner), 1)
+            pygame.draw.line(surf, (96, 60, 28), (inner, p), (size - inner, p), 1)
+            pygame.draw.line(surf, (96, 60, 28), (p, inner), (p, size - inner), 1)
+        # 星（3・6 の交点）。
+        for gi in (3, 6):
+            for gj in (3, 6):
+                pygame.draw.circle(surf, (70, 44, 20),
+                                   (int(inner + gi * step), int(inner + gj * step)), 2)
+        # 盤上に駒を数枚並べる。
+        for label, gi, gj in (("歩", 2, 6), ("歩", 4, 6), ("飛", 1, 7), ("角", 7, 7), ("王", 4, 8)):
+            self._draw_mini_piece(surf, int(inner + (gi + 0.5) * step),
+                                  int(inner + (gj + 0.5) * step), label)
         self._PIECE_CACHE["__board__"] = surf
         return surf
 

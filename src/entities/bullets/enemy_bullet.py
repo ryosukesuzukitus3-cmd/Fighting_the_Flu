@@ -21,6 +21,7 @@ class EnemyBullet(pygame.sprite.Sprite):
         terrain_passthrough: bool = False,
         warning_only: bool = False,
         fade_shrink: bool = False,
+        hp: int | None = None,
     ) -> None:
         super().__init__()
         self.sx     = sx
@@ -33,6 +34,9 @@ class EnemyBullet(pygame.sprite.Sprite):
         self.warning_only = warning_only
         self.fade_shrink = fade_shrink
         self._max_lifetime = lifetime
+        # hp を渡すと「撃墜可能」になる（自機弾で破壊できる。将棋駒・盤・落石など）。
+        self.hp = hp
+        self.destructible = hp is not None
 
         if size is None:
             d = max(2, radius * 2)
@@ -56,6 +60,13 @@ class EnemyBullet(pygame.sprite.Sprite):
         self.sx += self.vx * dt
         self.sy += self.vy * dt
         self.rect.center = (int(self.sx), int(self.sy))
+
+    def take_damage(self, amount: int) -> bool:
+        """撃墜可能弾のみ有効。HP を削り、0 以下で True（＝破壊）を返す。"""
+        if self.hp is None:
+            return False
+        self.hp -= amount
+        return self.hp <= 0
 
     def is_off_screen(self) -> bool:
         return (self.sx < -20 or self.sx > SCREEN_WIDTH + 20

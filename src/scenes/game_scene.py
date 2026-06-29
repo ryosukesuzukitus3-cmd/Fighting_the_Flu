@@ -1089,20 +1089,25 @@ class GameScene(
         self.game.sound.play_se_alias("SE_SHOGI_PLACE", volume=0.5)
 
     def _destroy_enemy_bullet(self, eb) -> None:
-        """撃墜可能な敵弾（将棋駒・将棋盤）を破壊し、粒子・SE・スコアを与える。"""
+        """撃墜可能な敵弾（将棋駒・将棋盤・落石）を破壊し、粒子・SE・スコアを与える。"""
         sx, sy = eb.rect.center
-        is_board = type(eb).__name__ == "ThrownBoardBullet"
+        name = type(eb).__name__
         eb.kill()
-        if is_board:
+        if name == "ThrownBoardBullet":
             self.particles.spawn_explosion(sx, sy, color=(205, 145, 75), count=20)
             self.camera.shake(3.0)
             self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
             score = 80
-        else:
+        elif name == "ShogiBullet":
             self.particles.spawn_explosion(sx, sy, color=(230, 200, 130), count=10)
             self.particles.spawn_spark(sx, sy, color=(255, 220, 150), count=8, speed=260.0)
             self.game.sound.play_se("music/se/hit.wav", volume=0.3)
             score = 20
+        else:   # 落石などの撃墜可能弾は岩の砕け演出。
+            self.particles.spawn_explosion(sx, sy, color=(150, 120, 88), count=10)
+            self.particles.spawn_spark(sx, sy, color=(190, 168, 130), count=7, speed=240.0)
+            self.game.sound.play_se("music/se/hit.wav", volume=0.3)
+            score = 15
         self._combo_count += 1
         self._combo_timer = COMBO_WINDOW
         self._combo_pulse = 0.8
