@@ -74,11 +74,9 @@ def _sa(color, alpha):
 
 
 def _fit_font(resources, lines, max_width, base_size, min_size):
-    for size in range(base_size, min_size - 1, -2):
-        font = resources.pixelfont(size)
-        if all(font.size(line)[0] <= max_width for line in lines if line):
-            return font
-    return resources.pixelfont(min_size)
+    # 文字サイズは固定（自動縮小はしない＝サイズが暴れる違和感を避ける）。
+    # 長い行は台本側で1行を短く保つ（収まらなければ Line/page の行を分ける）。
+    return resources.pixelfont(base_size)
 
 
 def _visible_lines(lines, chars):
