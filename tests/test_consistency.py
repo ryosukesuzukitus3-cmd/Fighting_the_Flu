@@ -1207,14 +1207,16 @@ def test_enemy_bullet_supports_boss_special_shapes() -> None:
     assert fading.image.get_alpha() is not None and fading.image.get_alpha() < 255
 
 
-def test_broly_beam_has_warning_and_fadeout() -> None:
+def test_broly_beam_has_charge_and_taper() -> None:
     src = (ROOT / "src" / "entities" / "enemies" / "broly.py").read_text(encoding="utf-8")
 
+    # かすかな予告線 → 充電球 → 太い本体ビーム（先細りで消滅）の流れを担保する。
     assert "_fire_warning()" in src
     assert "warning_only=True" in src
     assert "_fire_charge_beam()" in src
-    assert "fade_shrink=True" in src
-    assert "_paint_charge_beam" in src
+    assert "LaserChargeOrb" in src          # 発射前のチャージ演出
+    assert "LaserBeamSprite" in src          # 自前描画の本体ビーム
+    assert "taper_time=" in src              # 発射終了後に徐々に細くなる
 
 
 def test_boss_turret_guard_blocks_core_damage() -> None:

@@ -638,6 +638,8 @@ class GameScene(
                 self._pending_boss_stage_id = None
                 # 砲台連動ギミック用の召喚コールバックを注入
                 self._boss.summon_turret_fn = self._summon_boss_turrets
+                # 巨大レーザー発射時の画面シェイク用にカメラを注入
+                self._boss.camera = self.camera
                 self._boss_intro_state = "entering"
 
         elif state == "boss_name":

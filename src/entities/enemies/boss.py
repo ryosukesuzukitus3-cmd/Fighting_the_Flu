@@ -5,8 +5,10 @@ from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.bullets.enemy_bullet import EnemyBullet
+from src.entities.bullets.laser_fx import BOSS_PALETTE, LaserBeamSprite, LaserMuzzleFlash
 
 if TYPE_CHECKING:
+    from src.core.camera import Camera
     from src.core.game import Game
     from src.entities.player import Player
 
@@ -189,6 +191,8 @@ class Boss(pygame.sprite.Sprite):
         self._stun_timer: float = 0.0
         self._shot_se_t:  float = -1.0   # 攻撃SEの再生間隔制御
         self._shoot_delay_override: float | None = None
+        # game_scene が注入。巨大レーザー発射時の画面シェイク用（None 可）。
+        self.camera: "Camera | None" = None
 
     def _load_image(self, path: str, scale: float) -> pygame.Surface:
         raw = self.game.resources.image(path)
@@ -402,30 +406,40 @@ class Boss(pygame.sprite.Sprite):
             return resources.pixelfont(size)
         return pygame.font.Font(None, size)
 
-    def _laser_bullet(self, by: float, *, warning: bool = False) -> EnemyBullet:
+    def _laser_warning(self, by: float) -> EnemyBullet:
         width = max(80, int(self.sx - 18))
-        height = 12 if warning else 46
         bullet = EnemyBullet(
             width / 2,
             by,
             0.0,
             0.0,
-            0 if warning else 18,
-            size=(width, height),
-            color=(255, 230, 80) if warning else (255, 40, 55),
-            lifetime=0.28 if warning else 0.58,
+            0,
+            size=(width, 12),
+            color=(255, 230, 80),
+            lifetime=0.28,
             terrain_passthrough=True,
-            warning_only=warning,
+            warning_only=True,
         )
         bullet.image.fill((0, 0, 0, 0))
-        if warning:
-            pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, 4, width, 4))
-            pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, 5, width, 2))
-        else:
-            pygame.draw.rect(bullet.image, (255, 35, 45, 120), (0, 0, width, height), border_radius=height // 2)
-            pygame.draw.rect(bullet.image, (255, 235, 210, 240), (0, height // 2 - 5, width, 10), border_radius=5)
-            pygame.draw.rect(bullet.image, (255, 100, 80, 190), (0, height // 2 - 15, width, 30), 2, border_radius=15)
+        pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, 4, width, 4))
+        pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, 5, width, 2))
         return bullet
+
+    def _mega_beam(self, by: float) -> LaserBeamSprite:
+        # 極太・凶悪な本体レーザー。放電アークをまとい、発射中ずっと描き直す。
+        width = max(80, int(self.sx - 18))
+        return LaserBeamSprite(
+            width / 2,
+            by,
+            width,
+            68,
+            palette=BOSS_PALETTE,
+            lifetime=0.62,
+            damage=18,
+            warning_only=False,
+            discharge=True,
+            taper_time=0.16,
+        )
 
     def _rock_bullet(self, sx: float, vy: float, vx: float = 0.0) -> EnemyBullet:
         radius = random.randint(10, 17)
@@ -629,12 +643,17 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
         elif pattern == "mega_laser":
             if variant % 2 == 0:
-                enemy_bullets.add(self._laser_bullet(by, warning=True))
+                enemy_bullets.add(self._laser_warning(by))
                 for off in (-56, 56):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
                 self._shoot_delay_override = 0.62
             else:
-                enemy_bullets.add(self._laser_bullet(by))
+                enemy_bullets.add(self._mega_beam(by))
+                # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク。
+                enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.28, by,
+                                                   BOSS_PALETTE, max_radius=104, spikes=10))
+                if self.camera is not None:
+                    self.camera.shake(8.0)
                 for off in (-88, 88):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -330.0, off * 0.15, 12, radius=7, color=(255, 120, 70)))
                 if self._current_gimmick() == "weakpoint":
