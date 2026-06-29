@@ -24,6 +24,19 @@ SURFACE_CAP_OVERHANG = 2
 MAX_AUTO_PROP_OPAQUE_HEIGHT = 108
 PROP_SPAWN_CHANCE = 0.46
 SUBSURFACE_FADE_MARGIN = 56
+ROLE_FALLBACK_GROUPS: dict[str, tuple[str, ...]] = {
+    "floor_surface": ("strip_top", "block_wide", "block_square"),
+    "ceiling_surface": ("strip_top", "block_wide", "block_square"),
+    "body_fill": ("block_square", "block_tall"),
+    "exposed_column": ("block_tall", "block_square"),
+    "floor_prop": ("floor_props",),
+    "decor_prop": ("floor_props",),
+    "turret_mount": ("block_wide", "strip_top", "block_square"),
+    "breakable_block": ("block_wide", "block_square", "block_tall"),
+}
+SURFACE_ROLE_BY_SIDE = {"bottom": "floor_surface", "top": "ceiling_surface"}
+SURFACE_PLACEMENT_ROLES = frozenset({"floor_surface", "ceiling_surface", "cap"})
+PROP_PLACEMENT_ROLES = frozenset({"floor_prop", "prop"})
 
 
 @dataclass(frozen=True)
@@ -171,6 +184,23 @@ def load_stage3_composer_pieces(
             image = manual if manual is not None else source
             group_pieces.append(Stage3ComposerPiece(group, i, image, rect, label or f"{group}:{i + 1}"))
         pieces[group] = group_pieces
+
+    roles_raw = data.get("roles", {})
+    if roles_raw is not None and not isinstance(roles_raw, dict):
+        raise ValueError("rect config roles must be an object")
+    for role, sources_raw in (roles_raw or {}).items():
+        if isinstance(sources_raw, str):
+            sources = [sources_raw]
+        elif isinstance(sources_raw, list):
+            sources = [str(source) for source in sources_raw]
+        else:
+            raise ValueError(f"roles.{role} must be a string or list of strings")
+        role_pieces: list[Stage3ComposerPiece] = []
+        for source in sources:
+            if source not in pieces:
+                raise ValueError(f"roles.{role} references unknown group: {source}")
+            role_pieces.extend(pieces[source])
+        pieces[str(role)] = role_pieces
     _PIECE_CACHE[cache_key] = pieces
     return pieces
 
@@ -241,6 +271,20 @@ def _choice(rng: random.Random, pieces: list[Stage3ComposerPiece]) -> Stage3Comp
     return pieces[rng.randrange(len(pieces))]
 
 
+def _pieces_for_role(
+    pieces: dict[str, list[Stage3ComposerPiece]],
+    role: str,
+    *fallback_groups: str,
+) -> list[Stage3ComposerPiece]:
+    role_pieces = pieces.get(role)
+    if role_pieces:
+        return role_pieces
+    result: list[Stage3ComposerPiece] = []
+    for group in fallback_groups or ROLE_FALLBACK_GROUPS.get(role, ()):
+        result.extend(pieces.get(group, []))
+    return result
+
+
 def _opaque_bounds(image: pygame.Surface) -> pygame.Rect:
     w, h = image.get_size()
     min_x, min_y = w, h
@@ -278,7 +322,7 @@ def _place_piece(
 
 
 def _surface_band_depth(pieces: dict[str, list[Stage3ComposerPiece]]) -> int:
-    caps = pieces.get("strip_top", [])
+    caps = _pieces_for_role(pieces, "floor_surface")
     if not caps:
         return 96
     heights = sorted(piece.image.get_height() for piece in caps)
@@ -296,9 +340,9 @@ def _add_body_fill(
     overlap: int,
     surface_depth: int,
 ) -> None:
-    square_pieces = pieces.get("block_square") or []
-    body_pieces = [piece for piece in square_pieces if piece.image.get_width() <= 130]
-    body_pieces = body_pieces or square_pieces or pieces.get("block_tall")
+    raw_body_pieces = _pieces_for_role(pieces, "body_fill")
+    body_pieces = [piece for piece in raw_body_pieces if piece.image.get_width() <= 130]
+    body_pieces = body_pieces or raw_body_pieces
     if not body_pieces:
         return
 
@@ -315,7 +359,7 @@ def _add_body_fill(
                 image = pygame.transform.flip(image, False, True)
             iw, ih = image.get_size()
             py = y if run.side == "bottom" else y - ih
-            _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body", allow_partial=False)
+            _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body_fill", allow_partial=False)
             x += max(32, iw - max(0, overlap))
         y = y + row_step if run.side == "bottom" else y - row_step
 
@@ -329,7 +373,8 @@ def _add_cap(
     rng: random.Random,
     overlap: int,
 ) -> None:
-    caps = pieces.get("strip_top") or pieces.get("block_wide") or pieces.get("block_square")
+    surface_role = SURFACE_ROLE_BY_SIDE.get(run.side, "floor_surface")
+    caps = _pieces_for_role(pieces, surface_role)
     if not caps:
         return
 
@@ -343,7 +388,7 @@ def _add_cap(
         else:
             image = pygame.transform.flip(image, False, True)
             y = run.y - image.get_height() + SURFACE_CAP_OVERHANG
-        _place_piece(placements, image, x, y, clip=clip, side=run.side, role="cap")
+        _place_piece(placements, image, x, y, clip=clip, side=run.side, role=surface_role)
         x += max(40, image.get_width() - max(0, overlap))
 
 
@@ -355,7 +400,7 @@ def _add_props(
     rng: random.Random,
     height: int,
 ) -> None:
-    raw_props = pieces.get("floor_props", [])
+    raw_props = _pieces_for_role(pieces, "floor_prop")
     if run.side != "bottom" or not raw_props or run.x1 - run.x0 < 180:
         return
     props = [
@@ -371,13 +416,13 @@ def _add_props(
     y = run.y - opaque.bottom + 6
     if -piece.image.get_height() < y < height:
         clip = pygame.Rect(x, y, piece.image.get_width(), piece.image.get_height())
-        _place_piece(placements, piece.image, x, y, clip=clip, side=run.side, role="prop")
+        _place_piece(placements, piece.image, x, y, clip=clip, side=run.side, role="floor_prop")
 
 
 def _prop_collision_rects(placements: list[Stage3PlacedPiece]) -> list[Stage3CollisionRect]:
     rects: list[Stage3CollisionRect] = []
     for placement in placements:
-        if placement.role != "prop":
+        if placement.role not in PROP_PLACEMENT_ROLES:
             continue
         opaque = _opaque_bounds(placement.image)
         world = pygame.Rect(
@@ -409,7 +454,7 @@ def _solid_edge_local_y(image: pygame.Surface, local_x: int, side: str) -> int |
 def _composer_surface_y_at(placements: list[Stage3PlacedPiece], world_x: int, side: str) -> int | None:
     candidates: list[int] = []
     for placement in placements:
-        if placement.side != side or placement.role != "cap":
+        if placement.side != side or placement.role not in SURFACE_PLACEMENT_ROLES:
             continue
         if not (placement.clip.left <= world_x < placement.clip.right):
             continue

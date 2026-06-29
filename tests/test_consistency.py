@@ -968,7 +968,7 @@ def test_stage3_composer_floor_props_are_collidable() -> None:
         and getattr(sprite, "side", "") == ""
     ]
 
-    assert any(placement.role == "prop" for placement in composer_layout.placements)
+    assert any(placement.role == "floor_prop" for placement in composer_layout.placements)
     assert composer_layout.collision_rects
     assert prop_blocks
     assert all(block.rect.width > 0 and block.rect.height > 0 for block in prop_blocks)
@@ -981,10 +981,10 @@ def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
     pieces = load_stage3_composer_pieces()
     source_sizes = {
         piece.image.get_size()
-        for piece in pieces.get("block_square", [])
+        for piece in pieces.get("body_fill", [])
         if piece.image.get_width() <= 130
     }
-    source_sizes = source_sizes or {piece.image.get_size() for piece in pieces.get("block_square", [])}
+    source_sizes = source_sizes or {piece.image.get_size() for piece in pieces.get("body_fill", [])}
     assert source_sizes
 
     segments = make_terrain_strip(
@@ -1003,7 +1003,7 @@ def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
         irregularity=58,
     )
     layout = build_stage3_composer_layout(segments, pieces, start_x=0, end_x=1000)
-    body = [placement for placement in layout.placements if placement.role == "body"]
+    body = [placement for placement in layout.placements if placement.role == "body_fill"]
 
     assert body
     assert all(placement.image.get_size() in source_sizes for placement in body)
@@ -1018,9 +1018,28 @@ def test_stage3_composer_body_fill_touches_surface_caps() -> None:
     )
 
     pieces = load_stage3_composer_pieces()
-    cap_heights = sorted(piece.image.get_height() for piece in pieces["strip_top"])
+    cap_heights = sorted(piece.image.get_height() for piece in pieces["floor_surface"])
 
     assert _surface_band_depth(pieces) == cap_heights[len(cap_heights) // 2] - SURFACE_CAP_OVERHANG
+
+
+def test_stage3_composer_rect_roles_are_available() -> None:
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+
+    pieces = load_stage3_composer_pieces()
+    expected_roles = {
+        "floor_surface",
+        "ceiling_surface",
+        "body_fill",
+        "exposed_column",
+        "floor_prop",
+        "decor_prop",
+        "turret_mount",
+        "breakable_block",
+    }
+
+    assert expected_roles <= set(pieces)
+    assert all(pieces[role] for role in expected_roles)
 
 
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
