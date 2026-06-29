@@ -891,6 +891,28 @@ def test_stage_backgrounds_draw_all_stages() -> None:
 
 # ── docs ─────────────────────────────────────────────────────────────
 
+def test_stage3_background_loop_uses_fade_in_tile_edge() -> None:
+    from src.entities.background import ScrollingBackground
+
+    bg = ScrollingBackground(3)
+    source = pygame.Surface((16, 4), pygame.SRCALPHA)
+    source.fill((120, 140, 150, 255))
+    strip = bg._stage3_backdrop_blend_strip(source, 12)
+
+    assert strip.get_at((0, 0)).a == 0
+    assert strip.get_at((11, 0)).a >= 250
+
+
+def test_stage3_composer_contact_shadow_fades_from_surface() -> None:
+    from src.entities.stage3_composer_terrain import _surface_contact_shadow_surface
+
+    bottom = _surface_contact_shadow_surface(16, 16, "bottom")
+    top = _surface_contact_shadow_surface(16, 16, "top")
+
+    assert bottom.get_at((0, 15)).a > bottom.get_at((0, 0)).a
+    assert top.get_at((0, 0)).a > top.get_at((0, 15)).a
+
+
 def test_terrain_strip_can_spawn_breakable_segments() -> None:
     from src.core.constants import SCREEN_HEIGHT
     from src.entities.terrain import make_terrain_strip
