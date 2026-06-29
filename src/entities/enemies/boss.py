@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.bullets.enemy_bullet import EnemyBullet
+from src.entities.bullets.shogi_bullet import ShogiBullet, ThrownBoardBullet
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -33,9 +34,15 @@ if TYPE_CHECKING:
 #   mega_laser  : 太い横レーザー＋弱点露出の後隙
 #   drone_cross : 子機/砲台と噛み合う交差狙撃
 #   rock_fall   : 上方から落石
-#   shogi_file  : 将棋駒の列弾
+#   shogi_file  : 将棋駒の隊列弾（Form1）。歩の隊列が主、たまに香/桂/銀/金が混じる
+#   shogi_storm : 将棋駒の猛攻（Form2）。角/飛/龍が解禁され隊列に混ざる
+#   shogi_drop  : 持ち駒打ち（Form2/3）。任意マスへ上/左/右/斜めから差し着駒して攻める
+#   board_throw : 将棋盤を回転させて投げつける（Form3「ちゃぶ台返し」）
+#   mega_beam   : 巨大破壊光線（チャージ警告→極太レーザー、Form3）
+#   void_break  : 時空破壊。外周から収縮する弾＋内側から拡散する弾（Form3）
 #   dash_knives : 高速移動と噛み合う刺し込み弾
 #   curtain     : 画面を広く埋める終盤弾幕
+# 将棋駒の駒種別の軌道は src/entities/bullets/shogi_bullet.py に定義（歩=直進ほか）
 _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
     1: [   # 悪寒大王インフルX（ステージ1 入門ボス）
         (1.00, "fan5",        1.7),
@@ -64,18 +71,21 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.32, "aimring8",   0.58),
         (0.15, "vortex2",    0.28),
     ],
-    "4f2": [  # 藤井竜王 Form2（激難）
-        (1.00, "dash_knives", 0.55),
-        (0.72, "vortex3",     0.36),
-        (0.48, "ring16",      0.42),
-        (0.25, "chaos",       0.20),
+    "4f2": [  # 藤井竜王 Form2（激難・角/飛/龍 解禁。将棋攻撃を主軸に）
+        (1.00, "shogi_storm", 0.78),
+        (0.80, "shogi_drop",  1.05),
+        (0.62, "dash_knives", 0.55),
+        (0.46, "shogi_storm", 0.72),
+        (0.30, "vortex3",     0.36),
+        (0.16, "shogi_drop",  0.95),
     ],
-    "4f3": [  # 投了王サワグチ Form3（最終形態・赤黒弾幕）
-        (1.00, "curtain",   0.52),
-        (0.78, "ring16",    0.38),
-        (0.58, "chaos",     0.22),
-        (0.42, "rock_fall", 0.45),
-        (0.30, "vortex3",   0.18),
+    "4f3": [  # 投了王サワグチ Form3（最終形態・盤面崩壊の大技）
+        (1.00, "board_throw", 1.35),
+        (0.82, "shogi_drop",  0.95),
+        (0.64, "mega_beam",   1.90),
+        (0.48, "void_break",  0.80),
+        (0.30, "chaos",       0.22),
+        (0.16, "vortex3",     0.18),
     ],
 }
 
@@ -402,16 +412,17 @@ class Boss(pygame.sprite.Sprite):
             return resources.pixelfont(size)
         return pygame.font.Font(None, size)
 
-    def _laser_bullet(self, by: float, *, warning: bool = False) -> EnemyBullet:
+    def _laser_bullet(self, by: float, *, warning: bool = False, height: int = 46,
+                      warn_height: int = 12, damage: int = 18) -> EnemyBullet:
         width = max(80, int(self.sx - 18))
-        height = 12 if warning else 46
+        h = warn_height if warning else height
         bullet = EnemyBullet(
             width / 2,
             by,
             0.0,
             0.0,
-            0 if warning else 18,
-            size=(width, height),
+            0 if warning else damage,
+            size=(width, h),
             color=(255, 230, 80) if warning else (255, 40, 55),
             lifetime=0.28 if warning else 0.58,
             terrain_passthrough=True,
@@ -419,13 +430,21 @@ class Boss(pygame.sprite.Sprite):
         )
         bullet.image.fill((0, 0, 0, 0))
         if warning:
-            pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, 4, width, 4))
-            pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, 5, width, 2))
+            if h > 24:   # 極太ビームの予告は本体の太さを薄く示す（回避用）
+                pygame.draw.rect(bullet.image, (255, 110, 60, 46), (0, 0, width, h), border_radius=h // 2)
+            pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, h // 2 - 2, width, 4))
+            pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, h // 2 - 1, width, 2))
         else:
-            pygame.draw.rect(bullet.image, (255, 35, 45, 120), (0, 0, width, height), border_radius=height // 2)
-            pygame.draw.rect(bullet.image, (255, 235, 210, 240), (0, height // 2 - 5, width, 10), border_radius=5)
-            pygame.draw.rect(bullet.image, (255, 100, 80, 190), (0, height // 2 - 15, width, 30), 2, border_radius=15)
+            pygame.draw.rect(bullet.image, (255, 35, 45, 120), (0, 0, width, h), border_radius=h // 2)
+            pygame.draw.rect(bullet.image, (255, 235, 210, 240), (0, h // 2 - 5, width, 10), border_radius=5)
+            pygame.draw.rect(bullet.image, (255, 100, 80, 190), (0, h // 2 - 15, width, 30), 2, border_radius=15)
         return bullet
+
+    def _forward_aim(self, sx: float, sy: float, player: "Player", tilt: float) -> tuple[float, float]:
+        """右端から左へ進む駒に、プレイヤー方向へ控えめな上下の傾きを与える。"""
+        fy = max(-tilt, min(tilt, (player.sy - sy) / 300.0))
+        d = math.hypot(-1.0, fy) or 1.0
+        return -1.0 / d, fy / d
 
     def _rock_bullet(self, sx: float, vy: float, vx: float = 0.0) -> EnemyBullet:
         radius = random.randint(10, 17)
@@ -439,6 +458,7 @@ class Boss(pygame.sprite.Sprite):
             color=(126, 102, 76),
             lifetime=3.8,
             terrain_passthrough=True,
+            hp=3,   # 撃墜可能（落石も撃ち落とせる）
         )
         bullet.image.fill((0, 0, 0, 0))
         pts = []
@@ -450,25 +470,115 @@ class Boss(pygame.sprite.Sprite):
         pygame.draw.polygon(bullet.image, (190, 170, 132), pts, 2)
         return bullet
 
-    def _shogi_bullet(self, sx: float, sy: float, vx: float, vy: float, label: str) -> EnemyBullet:
-        w, h = 30, 38
-        bullet = EnemyBullet(
-            sx,
-            sy,
-            vx,
-            vy,
-            14,
-            size=(w, h),
-            color=(214, 180, 118),
-            lifetime=3.5,
-        )
-        bullet.image.fill((0, 0, 0, 0))
-        pts = ((w // 2, 1), (w - 2, 10), (w - 5, h - 2), (5, h - 2), (2, 10))
-        pygame.draw.polygon(bullet.image, (222, 188, 120), pts)
-        pygame.draw.polygon(bullet.image, (78, 50, 26), pts, 2)
-        txt = self._font(18).render(label, True, (48, 24, 18))
-        bullet.image.blit(txt, ((w - txt.get_width()) // 2, (h - txt.get_height()) // 2 + 1))
-        return bullet
+    # ── 将棋駒（Form1/2）─────────────────────────────────────────
+    # 駒種 → (表示文字, 五角形塗り, 縁取り色, 文字色, 大きめか)
+    _PIECE_DEFS: dict[str, tuple] = {
+        "pawn":   ("歩", (222, 188, 120), (78, 50, 26),  (48, 24, 18), False),
+        "lance":  ("香", (224, 196, 132), (120, 70, 24), (60, 32, 18), False),
+        "knight": ("桂", (224, 196, 132), (120, 70, 24), (60, 32, 18), False),
+        "silver": ("銀", (228, 204, 150), (96, 96, 110), (52, 52, 70), False),
+        "gold":   ("金", (236, 212, 140), (150, 120, 40), (90, 66, 18), True),
+        "bishop": ("角", (226, 200, 150), (54, 86, 150),  (34, 48, 96), False),
+        "rook":   ("飛", (232, 200, 140), (150, 92, 30),  (74, 40, 18), True),
+        "dragon": ("龍", (244, 206, 120), (188, 44, 44),  (150, 20, 20), True),
+    }
+    _PIECE_CACHE: dict[str, pygame.Surface] = {}
+
+    def _piece_surface(self, kind: str) -> pygame.Surface:
+        """上向きに描いた将棋駒のサーフェス（駒種ごとにキャッシュ）。"""
+        cached = self._PIECE_CACHE.get(kind)
+        if cached is not None:
+            return cached
+        label, fill, border, text_col, big = self._PIECE_DEFS.get(kind, self._PIECE_DEFS["pawn"])
+        w, h = (36, 46) if big else (28, 35)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pts = ((w // 2, 1), (w - 2, int(h * 0.26)), (w - 4, h - 2), (4, h - 2), (2, int(h * 0.26)))
+        pygame.draw.polygon(surf, fill, pts)
+        pygame.draw.polygon(surf, border, pts, 2)
+        txt = self._font(22 if big else 18).render(label, True, text_col)
+        surf.blit(txt, ((w - txt.get_width()) // 2, (h - txt.get_height()) // 2 + 1))
+        self._PIECE_CACHE[kind] = surf
+        return surf
+
+    def _spawn_piece(self, enemy_bullets: pygame.sprite.Group, sx: float, sy: float,
+                     kind: str, *, speed: float, forward: tuple[float, float] = (-1.0, 0.0),
+                     target=None, drop_target: tuple[float, float] | None = None,
+                     incoming_speed: float = 0.0, incoming_time: float = 0.55) -> None:
+        damage = 18 if kind in ("rook", "dragon", "gold") else 14
+        enemy_bullets.add(ShogiBullet(
+            sx, sy, self._piece_surface(kind),
+            kind=kind, speed=speed, forward=forward, damage=damage, target=target,
+            drop_target=drop_target, incoming_speed=incoming_speed, incoming_time=incoming_time,
+        ))
+
+    # 持ち駒打ちの飛来開始位置（指定マスへ「上/左/右/斜め」から差してくる）。
+    def _drop_spawn(self, edge: str, tx: float, ty: float) -> tuple[float, float]:
+        if edge == "top":
+            return tx, -30.0
+        if edge == "left":
+            return -30.0, ty
+        if edge == "right":
+            return SCREEN_WIDTH + 30.0, ty
+        if edge == "topleft":
+            return tx - 220.0, -30.0
+        if edge == "topright":
+            return tx + 220.0, -30.0
+        return SCREEN_WIDTH + 30.0, ty
+
+    def _drop_telegraph(self, tx: float, ty: float, lifetime: float) -> EnemyBullet:
+        """着駒予告のマス枠（warning_only＝無害・衝突対象外）。"""
+        size = 44
+        tele = EnemyBullet(tx, ty, 0.0, 0.0, 0, size=(size, size),
+                           lifetime=lifetime, terrain_passthrough=True, warning_only=True)
+        tele.image.fill((0, 0, 0, 0))
+        pygame.draw.rect(tele.image, (255, 210, 120, 70), (0, 0, size, size), border_radius=4)
+        pygame.draw.rect(tele.image, (255, 235, 160, 200), (0, 0, size, size), 2, border_radius=4)
+        return tele
+
+    def _draw_mini_piece(self, surf: pygame.Surface, cx: int, cy: int, label: str) -> None:
+        """盤上に置かれた小さな駒（盤だと一目で分かるように）。"""
+        w, h = 13, 16
+        top = cy - h // 2
+        pts = ((cx, top), (cx + w // 2, top + 4),
+               (cx + w // 2 - 1, cy + h // 2), (cx - w // 2 + 1, cy + h // 2),
+               (cx - w // 2, top + 4))
+        pygame.draw.polygon(surf, (236, 200, 132), pts)
+        pygame.draw.polygon(surf, (92, 58, 28), pts, 1)
+        txt = self._font(12).render(label, True, (66, 36, 18))
+        surf.blit(txt, (cx - txt.get_width() // 2, cy - txt.get_height() // 2))
+
+    def _board_surface(self) -> pygame.Surface:
+        """投げつける将棋盤。厚みのある木の盤＋9x9＋星＋盤上の駒で「盤」と分かるように。"""
+        cached = self._PIECE_CACHE.get("__board__")
+        if cached is not None:
+            return cached
+        size = 104
+        pad = 9   # 盤の厚み（側面）分の余白
+        surf = pygame.Surface((size + pad, size + pad), pygame.SRCALPHA)
+        # 厚み（側面の木口）を右下にずらして 3D の盤に見せる。
+        pygame.draw.rect(surf, (86, 52, 24, 255), (pad, pad, size, size), border_radius=6)
+        pygame.draw.rect(surf, (60, 34, 16, 255), (pad, pad, size, size), 2, border_radius=6)
+        # 盤面（榧色の明るい木目）。
+        board = pygame.Rect(0, 0, size, size)
+        pygame.draw.rect(surf, (214, 176, 112, 255), board, border_radius=6)
+        pygame.draw.rect(surf, (120, 78, 36), board, 3, border_radius=6)
+        inner = 9
+        step = (size - inner * 2) / 9.0
+        for i in range(10):
+            p = int(inner + i * step)
+            pygame.draw.line(surf, (96, 60, 28), (inner, p), (size - inner, p), 1)
+            pygame.draw.line(surf, (96, 60, 28), (p, inner), (p, size - inner), 1)
+        # 星（3・6 の交点）。
+        for gi in (3, 6):
+            for gj in (3, 6):
+                pygame.draw.circle(surf, (70, 44, 20),
+                                   (int(inner + gi * step), int(inner + gj * step)), 2)
+        # 盤上に駒を数枚並べる。
+        for label, gi, gj in (("歩", 2, 6), ("歩", 4, 6), ("飛", 1, 7), ("角", 7, 7), ("王", 4, 8)):
+            self._draw_mini_piece(surf, int(inner + (gi + 0.5) * step),
+                                  int(inner + (gj + 0.5) * step), label)
+        self._PIECE_CACHE["__board__"] = surf
+        return surf
 
     def _shoot(self, enemy_bullets: pygame.sprite.Group, player: "Player") -> None:
         nx, ny  = self._aimed_dir(player)
@@ -669,17 +779,108 @@ class Boss(pygame.sprite.Sprite):
             if variant % 2 == 0:
                 enemy_bullets.add(EnemyBullet(bx, by, nx * 360, ny * 360, radius=7, color=(205, 150, 95)))
 
-        # ── Stage4 Form1: 将棋駒の列弾。毎回違う筋に逃げ道を残す。
+        # ── Stage4 Form1: 将棋駒の隊列。歩が並んで直進し、たまに special が混じる。
         elif pattern == "shogi_file":
-            labels = ("歩", "香", "桂", "銀", "金", "角", "飛")
-            gap = variant % 5
-            for i, sy in enumerate((90.0, 190.0, 290.0, 390.0, 490.0)):
+            rows = (90.0, 190.0, 290.0, 390.0, 490.0)
+            gap = variant % len(rows)
+            spd = 250.0
+            # 特殊駒は最大1行だけ（無しの確率も高め＝歩の隊列が主役）。
+            special_kind = None
+            special_row = -1
+            if random.random() < 0.55:
+                special_kind = random.choices(
+                    ("lance", "knight", "silver", "gold"), weights=(4, 4, 2, 2))[0]
+                special_row = random.choice([i for i in range(len(rows)) if i != gap])
+            for i, sy in enumerate(rows):
                 if i == gap:
                     continue
-                label = labels[(variant + i) % len(labels)]
-                enemy_bullets.add(self._shogi_bullet(SCREEN_WIDTH + 18.0, sy, -245.0, (player.sy - sy) * 0.08, label))
-            if variant % 3 == 1:
-                enemy_bullets.add(self._shogi_bullet(bx, by, nx * 390, ny * 390, "王"))
+                kind = special_kind if i == special_row and special_kind else "pawn"
+                fwd = self._forward_aim(SCREEN_WIDTH + 18.0, sy, player, 0.5) if kind == "silver" else (-1.0, 0.0)
+                self._spawn_piece(enemy_bullets, SCREEN_WIDTH + 18.0, sy, kind,
+                                  speed=spd, forward=fwd, target=player)
+
+        # ── Stage4 Form2: 角/飛/龍 解禁。歩の隊列に大駒の猛攻が重なる。
+        elif pattern == "shogi_storm":
+            rows = (80.0, 170.0, 260.0, 350.0, 440.0, 530.0)
+            gap = variant % len(rows)
+            spd = 285.0
+            for i, sy in enumerate(rows):
+                if i == gap:
+                    continue
+                kind = random.choices(("pawn", "lance", "knight"), weights=(6, 2, 2))[0]
+                self._spawn_piece(enemy_bullets, SCREEN_WIDTH + 18.0, sy, kind,
+                                  speed=spd, forward=(-1.0, 0.0), target=player)
+            # 解禁された大駒（角=斜めジグザグ / 飛=高速直進 / 龍=追尾）を1〜2枚。
+            for kind in random.choices(("bishop", "rook", "dragon"), weights=(4, 3, 2),
+                                       k=1 + (variant % 2)):
+                sy = random.uniform(100.0, SCREEN_HEIGHT - 100.0)
+                fwd = self._forward_aim(SCREEN_WIDTH + 18.0, sy, player, 0.5) if kind == "rook" else (-1.0, 0.0)
+                self._spawn_piece(enemy_bullets, SCREEN_WIDTH + 18.0, sy, kind,
+                                  speed=spd, forward=fwd, target=player)
+
+        # ── 持ち駒打ち: 任意のマスへ上/左/右/斜めから差し、ピシッと置いて攻める。
+        elif pattern == "shogi_drop":
+            grid_x = (150.0, 250.0, 350.0, 450.0, 540.0)
+            grid_y = (130.0, 230.0, 330.0, 430.0, 500.0)
+            edges = ("top", "left", "right", "topleft", "topright")
+            pool = ("pawn", "pawn", "pawn", "lance", "knight",
+                    "silver", "gold", "bishop", "rook", "dragon")
+            incoming = 0.55
+            for _ in range(2 + (variant % 2)):
+                tx = random.choice(grid_x)
+                ty = random.choice(grid_y)
+                kind = random.choice(pool)
+                sx, sy = self._drop_spawn(random.choice(edges), tx, ty)
+                dist = math.hypot(tx - sx, ty - sy)
+                enemy_bullets.add(self._drop_telegraph(tx, ty, incoming))
+                self._spawn_piece(enemy_bullets, sx, sy, kind, speed=275.0, target=player,
+                                  drop_target=(tx, ty), incoming_speed=dist / incoming,
+                                  incoming_time=incoming)
+
+        # ── Form3: 盤面ごと投げつける（投了王の「ちゃぶ台返し」）。
+        elif pattern == "board_throw":
+            board = self._board_surface()
+            for _ in range(2 + (variant % 2)):
+                ty = random.uniform(90.0, SCREEN_HEIGHT - 90.0)
+                vx = -random.uniform(190.0, 250.0)
+                vy = (ty - by) * 0.55 + random.uniform(-40.0, 40.0)
+                enemy_bullets.add(ThrownBoardBullet(
+                    bx - 30.0, by, board, vx=vx, vy=vy,
+                    spin=random.choice((-220.0, 220.0)), damage=22))
+            # 崩れた盤から散る駒。
+            for _ in range(3):
+                sy = random.uniform(60.0, SCREEN_HEIGHT - 60.0)
+                self._spawn_piece(enemy_bullets, bx, sy, "pawn", speed=300.0,
+                                  forward=(-1.0, 0.0), target=player)
+
+        # ── Form3: 巨大破壊光線。チャージ警告 → 極太レーザー。
+        elif pattern == "mega_beam":
+            if variant % 2 == 0:
+                enemy_bullets.add(self._laser_bullet(by, warning=True, warn_height=132))
+                self._shoot_delay_override = 0.85
+            else:
+                enemy_bullets.add(self._laser_bullet(by, height=128, damage=24))
+                for off in (-120, -60, 60, 120):
+                    enemy_bullets.add(EnemyBullet(bx, by + off, -360.0, off * 0.1, 14,
+                                                  radius=6, color=(255, 90, 70)))
+                self._shoot_delay_override = 2.4
+
+        # ── Form3: 時空破壊。外周から収縮する弾＋中心から拡散する弾。
+        elif pattern == "void_break":
+            cx, cy = SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5
+            for i in range(16):
+                a = math.radians(i * 22.5 + self._spiral_angle)
+                rx = cx + math.cos(a) * 360.0
+                ry = cy + math.sin(a) * 280.0
+                dx, dy = cx - rx, cy - ry
+                d = math.hypot(dx, dy) or 1.0
+                enemy_bullets.add(EnemyBullet(rx, ry, dx / d * 185.0, dy / d * 185.0,
+                                              radius=5, color=(150, 40, 95)))
+            for i in range(12):
+                a = math.radians(i * 30 - self._spiral_angle)
+                enemy_bullets.add(EnemyBullet(cx, cy, math.cos(a) * 210.0, math.sin(a) * 210.0,
+                                              radius=5, color=(225, 60, 115)))
+            self._spiral_angle = (self._spiral_angle + spin_dir * 18) % 360
 
         # ── Stage4 Form2: ダッシュと同時に刺し込む細い高速弾。
         elif pattern == "dash_knives":

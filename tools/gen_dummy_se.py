@@ -53,6 +53,8 @@ def main() -> None:
     _write("dummy_karonaru_hit.wav", _tone(0.09, 700, 520, decay=34, vol=0.45))
     # 先輩 退場: 下降する「しゅるん」
     _write("dummy_karonaru_retire.wav", _tone(0.32, 900, 200, decay=10, vol=0.5))
+    # 持ち駒を置く「ピシッ」: 短く鋭いクリック（高音＋ノイズの立ち上がり）
+    _write("dummy_shogi_place.wav", _tone(0.06, 2200, 900, decay=60, vol=0.5, noise_mix=0.30))
 
 
 if __name__ == "__main__":
