@@ -40,6 +40,7 @@ SE: dict[str, str | None] = {
     "SE_BLACKHOLE":    None,                           # TODO(Phase4)
     "SE_HEAL":         "music/se/item_heal_pickup.wav",
     "SE_ERROR":        None,                           # TODO(Phase4)
+    "SE_SHOGI_PLACE":  "music/se/メニュー操作SE：決定.mp3",  # 持ち駒を「ピシッ」と置く音（流用）
 }
 
 

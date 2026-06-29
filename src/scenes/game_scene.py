@@ -549,6 +549,9 @@ class GameScene(
 
         for bullet in list(self.enemy_bullets):
             bullet.update(dt)
+            if getattr(bullet, "snap_event", False):
+                bullet.snap_event = False
+                self._play_shogi_snap(bullet.rect.centerx, bullet.rect.centery)
             bounce_timer = getattr(bullet, "_terrain_bounce_timer", 0.0)
             if bounce_timer > 0.0:
                 bullet._terrain_bounce_timer = bounce_timer - dt
@@ -960,6 +963,28 @@ class GameScene(
             if blocked_by_shield or not getattr(bullet, "piercing", False):
                 bullet.kill()
 
+        # 撃墜可能な敵弾（将棋駒・将棋盤）は自機弾で破壊できる。
+        destructibles = pygame.sprite.Group(*[
+            b for b in self.enemy_bullets
+            if getattr(b, "destructible", False) and not getattr(b, "warning_only", False)
+        ])
+        if destructibles:
+            dhits = pygame.sprite.groupcollide(active_player_bullets, destructibles, False, False)
+            for bullet, ebs in dhits.items():
+                if not bullet.alive() or getattr(bullet, "_terrain_bounced", False):
+                    continue
+                for eb in ebs:
+                    if not eb.alive():
+                        continue
+                    if eb.take_damage(getattr(bullet, "damage", 1)):
+                        self._destroy_enemy_bullet(eb)
+                    else:
+                        self.particles.spawn_hit(bullet.rect.centerx, bullet.rect.centery,
+                                                 color=(255, 220, 150), count=3)
+                    if not getattr(bullet, "piercing", False):
+                        bullet.kill()
+                        break
+
         if self._in_boss_fight:
             for bullet in list(self.player_bullets):
                 if getattr(bullet, "_terrain_bounced", False):
@@ -1056,6 +1081,33 @@ class GameScene(
         return False
 
     # ── イベントハンドラ ──────────────────────────────────────────
+    def _play_shogi_snap(self, x: int, y: int) -> None:
+        """持ち駒を「ピシッ」と置く演出（粒子＋微振動＋SE）。"""
+        self.particles.spawn_spark(x, y, color=(255, 235, 170), count=10, speed=240.0)
+        self.particles.spawn_hit(x, y, color=(255, 245, 200), count=3)
+        self.camera.shake(1.2)
+        self.game.sound.play_se_alias("SE_SHOGI_PLACE", volume=0.5)
+
+    def _destroy_enemy_bullet(self, eb) -> None:
+        """撃墜可能な敵弾（将棋駒・将棋盤）を破壊し、粒子・SE・スコアを与える。"""
+        sx, sy = eb.rect.center
+        is_board = type(eb).__name__ == "ThrownBoardBullet"
+        eb.kill()
+        if is_board:
+            self.particles.spawn_explosion(sx, sy, color=(205, 145, 75), count=20)
+            self.camera.shake(3.0)
+            self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
+            score = 80
+        else:
+            self.particles.spawn_explosion(sx, sy, color=(230, 200, 130), count=10)
+            self.particles.spawn_spark(sx, sy, color=(255, 220, 150), count=8, speed=260.0)
+            self.game.sound.play_se("music/se/hit.wav", volume=0.3)
+            score = 20
+        self._combo_count += 1
+        self._combo_timer = COMBO_WINDOW
+        self._combo_pulse = 0.8
+        self.game.shared.score += score * combo_multiplier(self._combo_count)
+
     def _on_enemy_killed(self, enemy) -> None:
         sx = self.camera.to_screen_x(enemy.world_x)
         self.particles.spawn_explosion(sx, enemy.world_y)

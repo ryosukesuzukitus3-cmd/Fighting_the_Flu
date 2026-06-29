@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 #   rock_fall   : 上方から落石
 #   shogi_file  : 将棋駒の隊列弾（Form1）。歩の隊列が主、たまに香/桂/銀/金が混じる
 #   shogi_storm : 将棋駒の猛攻（Form2）。角/飛/龍が解禁され隊列に混ざる
+#   shogi_drop  : 持ち駒打ち（Form2/3）。任意マスへ上/左/右/斜めから差し着駒して攻める
 #   board_throw : 将棋盤を回転させて投げつける（Form3「ちゃぶ台返し」）
 #   mega_beam   : 巨大破壊光線（チャージ警告→極太レーザー、Form3）
 #   void_break  : 時空破壊。外周から収縮する弾＋内側から拡散する弾（Form3）
@@ -70,18 +71,19 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.32, "aimring8",   0.58),
         (0.15, "vortex2",    0.28),
     ],
-    "4f2": [  # 藤井竜王 Form2（激難・角/飛/龍 解禁）
-        (1.00, "shogi_storm", 1.05),
-        (0.74, "dash_knives", 0.55),
-        (0.50, "vortex3",     0.36),
-        (0.28, "ring16",      0.42),
-        (0.12, "chaos",       0.20),
+    "4f2": [  # 藤井竜王 Form2（激難・角/飛/龍 解禁。将棋攻撃を主軸に）
+        (1.00, "shogi_storm", 0.78),
+        (0.80, "shogi_drop",  1.05),
+        (0.62, "dash_knives", 0.55),
+        (0.46, "shogi_storm", 0.72),
+        (0.30, "vortex3",     0.36),
+        (0.16, "shogi_drop",  0.95),
     ],
     "4f3": [  # 投了王サワグチ Form3（最終形態・盤面崩壊の大技）
         (1.00, "board_throw", 1.35),
-        (0.80, "curtain",     0.50),
-        (0.62, "mega_beam",   1.90),
-        (0.46, "void_break",  0.80),
+        (0.82, "shogi_drop",  0.95),
+        (0.64, "mega_beam",   1.90),
+        (0.48, "void_break",  0.80),
         (0.30, "chaos",       0.22),
         (0.16, "vortex3",     0.18),
     ],
@@ -499,12 +501,38 @@ class Boss(pygame.sprite.Sprite):
 
     def _spawn_piece(self, enemy_bullets: pygame.sprite.Group, sx: float, sy: float,
                      kind: str, *, speed: float, forward: tuple[float, float] = (-1.0, 0.0),
-                     target=None) -> None:
+                     target=None, drop_target: tuple[float, float] | None = None,
+                     incoming_speed: float = 0.0, incoming_time: float = 0.55) -> None:
         damage = 18 if kind in ("rook", "dragon", "gold") else 14
         enemy_bullets.add(ShogiBullet(
             sx, sy, self._piece_surface(kind),
             kind=kind, speed=speed, forward=forward, damage=damage, target=target,
+            drop_target=drop_target, incoming_speed=incoming_speed, incoming_time=incoming_time,
         ))
+
+    # 持ち駒打ちの飛来開始位置（指定マスへ「上/左/右/斜め」から差してくる）。
+    def _drop_spawn(self, edge: str, tx: float, ty: float) -> tuple[float, float]:
+        if edge == "top":
+            return tx, -30.0
+        if edge == "left":
+            return -30.0, ty
+        if edge == "right":
+            return SCREEN_WIDTH + 30.0, ty
+        if edge == "topleft":
+            return tx - 220.0, -30.0
+        if edge == "topright":
+            return tx + 220.0, -30.0
+        return SCREEN_WIDTH + 30.0, ty
+
+    def _drop_telegraph(self, tx: float, ty: float, lifetime: float) -> EnemyBullet:
+        """着駒予告のマス枠（warning_only＝無害・衝突対象外）。"""
+        size = 44
+        tele = EnemyBullet(tx, ty, 0.0, 0.0, 0, size=(size, size),
+                           lifetime=lifetime, terrain_passthrough=True, warning_only=True)
+        tele.image.fill((0, 0, 0, 0))
+        pygame.draw.rect(tele.image, (255, 210, 120, 70), (0, 0, size, size), border_radius=4)
+        pygame.draw.rect(tele.image, (255, 235, 160, 200), (0, 0, size, size), 2, border_radius=4)
+        return tele
 
     def _board_surface(self) -> pygame.Surface:
         """投げる将棋盤（9x9 の格子）。Form3 board_throw 用。"""
@@ -761,6 +789,25 @@ class Boss(pygame.sprite.Sprite):
                 fwd = self._forward_aim(SCREEN_WIDTH + 18.0, sy, player, 0.5) if kind == "rook" else (-1.0, 0.0)
                 self._spawn_piece(enemy_bullets, SCREEN_WIDTH + 18.0, sy, kind,
                                   speed=spd, forward=fwd, target=player)
+
+        # ── 持ち駒打ち: 任意のマスへ上/左/右/斜めから差し、ピシッと置いて攻める。
+        elif pattern == "shogi_drop":
+            grid_x = (150.0, 250.0, 350.0, 450.0, 540.0)
+            grid_y = (130.0, 230.0, 330.0, 430.0, 500.0)
+            edges = ("top", "left", "right", "topleft", "topright")
+            pool = ("pawn", "pawn", "pawn", "lance", "knight",
+                    "silver", "gold", "bishop", "rook", "dragon")
+            incoming = 0.55
+            for _ in range(2 + (variant % 2)):
+                tx = random.choice(grid_x)
+                ty = random.choice(grid_y)
+                kind = random.choice(pool)
+                sx, sy = self._drop_spawn(random.choice(edges), tx, ty)
+                dist = math.hypot(tx - sx, ty - sy)
+                enemy_bullets.add(self._drop_telegraph(tx, ty, incoming))
+                self._spawn_piece(enemy_bullets, sx, sy, kind, speed=275.0, target=player,
+                                  drop_target=(tx, ty), incoming_speed=dist / incoming,
+                                  incoming_time=incoming)
 
         # ── Form3: 盤面ごと投げつける（投了王の「ちゃぶ台返し」）。
         elif pattern == "board_throw":
