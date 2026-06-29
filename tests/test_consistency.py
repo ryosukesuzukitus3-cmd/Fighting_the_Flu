@@ -1219,6 +1219,20 @@ def test_broly_beam_has_charge_and_taper() -> None:
     assert "taper_time=" in src              # 発射終了後に徐々に細くなる
 
 
+def test_laser_beam_is_persistent_and_not_cancelled_on_contact() -> None:
+    from src.entities.bullets.laser_fx import BOSS_PALETTE, LaserBeamSprite
+
+    beam = LaserBeamSprite(300.0, 200.0, 400, 60, palette=BOSS_PALETTE,
+                           lifetime=0.6, damage=20, warning_only=False)
+    # 連続レーザーは接触で相殺・消滅しない（永続フラグ）かつ地形貫通。
+    assert beam.persistent is True
+    assert beam.terrain_passthrough is True
+
+    # game_scene の相棒（カロナール）相殺ループは persistent を除外している。
+    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    assert 'getattr(bullet, "persistent", False)' in src
+
+
 def test_boss_turret_guard_blocks_core_damage() -> None:
     from src.entities.enemies.boss import Boss
 

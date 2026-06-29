@@ -1038,8 +1038,10 @@ class GameScene(
                     break
             if self._companion.is_active:
                 for bullet in list(self.enemy_bullets):
-                    if getattr(bullet, "_terrain_bounced", False) or getattr(bullet, "warning_only", False):
-                        continue
+                    if (getattr(bullet, "_terrain_bounced", False)
+                            or getattr(bullet, "warning_only", False)
+                            or getattr(bullet, "persistent", False)):
+                        continue   # 連続レーザー（persistent）は相殺で消さない
                     if self._companion.hit_rect.colliderect(bullet.rect):
                         self._companion.take_damage()
                         bullet.kill()   # 被弾した弾は相殺

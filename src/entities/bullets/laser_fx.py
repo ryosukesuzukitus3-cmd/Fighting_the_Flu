@@ -33,7 +33,16 @@ class LaserBeamSprite(EnemyBullet):
 
     立ち上がり（fade_in）で一気に太くなり、寿命の最後（taper_time）で
     徐々に細く・薄くなって消える。`discharge=True` で周囲に放電アークを描く。
+
+    `cx,cy,width` は「銃口(右端)から画面左端まで」の見える範囲。`left_extend`
+    だけ左に画面外へ伸ばし、左端の丸キャップを画面外へ追い出す（＝画面端で
+    収束して見えないように、減衰せず画面外へ抜けていくレーザーにする）。
+
+    `persistent=True`: 連続ビームなので接触で相殺・消滅させない（game_scene 側で
+    判定）。当たり判定は残しつつ弾消し対象から除外する。
     """
+
+    persistent = True
 
     def __init__(
         self,
@@ -50,16 +59,19 @@ class LaserBeamSprite(EnemyBullet):
         fade_in: float = 0.06,
         taper_time: float = 0.32,
         pulse_freq: float = 26.0,
+        left_extend: int = 140,
     ) -> None:
+        ext = max(0, left_extend)
+        total_w = width + ext
         super().__init__(
-            cx, cy, 0.0, 0.0, damage,
-            size=(width, height),
+            cx - ext / 2.0, cy, 0.0, 0.0, damage,
+            size=(total_w, height),
             color=palette[2],
             lifetime=lifetime,
             terrain_passthrough=True,
             warning_only=warning_only,
         )
-        self._w = width
+        self._w = total_w
         self._h = height
         self._core, self._mid, self._glow = palette
         self._discharge = discharge
@@ -268,15 +280,18 @@ class LaserMuzzleFlash(pygame.sprite.Sprite):
 
 
 class LaserWarningBeam(pygame.sprite.Sprite):
-    """発射ラインを示す微かな予告線＋銃口へ吸い込まれる収束ダッシュ。
+    """発射ラインを示す微かな予告線。
 
-    銃口は常に右側（host か muzzle の x）。ビームは左端(0)から銃口まで伸び、
-    エネルギーが銃口へ流れ込む（チャージで吸引される）ように描く。
+    銃口（右側）に向けて短い破線が流れ込み、銃口寄りでは連続的・終端（左）へ
+    向かうほど断続的になる＝エネルギーが吸引・収束→放出されるイメージ。
+    全画面を貫かず銃口から `_LENGTH` だけ伸びる短い予告にする。
     host を渡すと毎フレーム銃口へ追従、muzzle 固定なら据え置き（ボス用）。
     """
 
     warning_only = True
     terrain_passthrough = True
+
+    _LENGTH = 260   # 予告線の長さ（銃口から左へ。短め）
 
     def __init__(self, palette: Palette, duration: float, *,
                  host: pygame.sprite.Sprite | None = None,
@@ -311,27 +326,28 @@ class LaserWarningBeam(pygame.sprite.Sprite):
 
     def _build(self) -> None:
         mx, my = self._muzzle_pos()
-        w = max(40, min(int(mx), SCREEN_WIDTH))
+        length = max(60, min(self._LENGTH, int(mx)))
         h = self._h
         ratio = min(1.0, self._t / self._duration)
-        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf = pygame.Surface((length, h), pygame.SRCALPHA)
         cy = h // 2
 
-        # かすかな芯線（チャージが進むほど少しだけ濃くなる）。
-        pygame.draw.line(surf, (*self._glow, int(24 + 30 * ratio)), (0, cy), (w, cy), 2)
-        pygame.draw.line(surf, (*self._core, int(34 + 46 * ratio)), (0, cy), (w, cy), 1)
-
-        # 銃口へ流れ込む収束ダッシュ（funnel 形で吸引感を出す）。
-        spacing, speed = 48, 240.0
-        n = w // spacing + 2
+        # 銃口(右端=local length)へ流れ込む破線。p=0:終端(左) p=1:銃口(右)。
+        # 銃口寄りは長く・濃く・連続、終端寄りは短く・薄く・断続（吸引→放出）。
+        n = 11
+        flow = 0.5   # 1秒あたりの流れ周回数
         for i in range(n):
-            x = (i * spacing + self._t * speed) % (w + spacing)
-            f = max(0.0, min(1.0, x / w))          # 0:左端 1:銃口
-            a = int(50 + 150 * f * (0.4 + 0.6 * ratio))
-            ln = int(6 + 16 * f)
-            yj = int((1.0 - f) * (h * 0.32))
-            pygame.draw.line(surf, (*self._mid, a), (x - ln, cy - yj), (x, cy), 2)
-            pygame.draw.line(surf, (*self._mid, a), (x - ln, cy + yj), (x, cy), 2)
+            p = ((i / n) + self._t * flow) % 1.0
+            x = int(p * length)
+            dash = int(3 + 26 * p)
+            a = int(18 + 215 * (p ** 1.7) * (0.45 + 0.55 * ratio))
+            if a <= 6:
+                continue
+            pygame.draw.line(surf, (*self._mid, a), (x - dash, cy), (x, cy),
+                             3 if p > 0.6 else 2)
+            if p > 0.5:   # 銃口寄りは白熱コアを重ねて連続的に
+                pygame.draw.line(surf, (*self._core, int(a * 0.85)),
+                                 (x - dash // 2, cy), (x, cy), 1)
 
         self.image = surf
-        self.rect = surf.get_rect(center=(int(w / 2), int(my)))
+        self.rect = surf.get_rect(center=(int(mx - length / 2), int(my)))
