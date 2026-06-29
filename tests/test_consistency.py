@@ -469,7 +469,7 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert layout["length"] >= boss_x + 800
     assert len(world_events) >= 40
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 10
-    assert len(mounts) >= 3
+    assert len(mounts) >= 5
     assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
     assert len(gates) >= 3
     assert len(reward_gates) == 1
@@ -484,6 +484,21 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
         (123, 288, 48),
     ]
     assert max(ev.get("hp", 0) for ev in gates) >= 48
+    for mount in mounts:
+        mount_center = mount["x"] + mount["w"] / 2
+        assert any(
+            abs(ev["x"] - mount_center) <= 220
+            for ev in turrets
+        ), f"turret_mount at x={mount['x']} should have nearby turrets"
+    for gate in gates:
+        assert any(
+            ev["type"] in {"EnemyTurret", "EnemyCrawler", "EnemyCoughSprayer"}
+            and gate["x"] - 300 <= ev.get("x", -9999) <= gate["x"] + 360
+            for ev in world_events
+        ), f"gate at x={gate['x']} should be part of a combat setpiece"
+    assert any(ev["type"] == "EnemyTurret" and ev.get("y", 0) >= 200 and 3140 <= ev["x"] <= 3400 for ev in turrets)
+    assert any(ev["type"] == "EnemyTurret" and ev.get("y", 0) >= 220 and 5400 <= ev["x"] <= 5650 for ev in turrets)
+    assert any(ev["type"] == "EnemyCrawler" and 7200 <= ev["x"] <= 7300 for ev in world_events)
     assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
     assert boss_gate["player_limit_x"] <= first_boss_room_x
     assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
