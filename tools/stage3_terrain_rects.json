@@ -8,7 +8,7 @@
     "floor_prop": ["floor_props"],
     "decor_prop": ["floor_props"],
     "turret_mount": ["block_wide", "strip_top"],
-    "breakable_block": ["block_wide", "block_square"]
+    "breakable_block": ["block_wide", "block_square", "block_tall"]
   },
   "groups": {
     "strip_top": {
