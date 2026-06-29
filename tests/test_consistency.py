@@ -1161,7 +1161,7 @@ def test_boss_phase_configs_reference_known_patterns() -> None:
         "fan5", "fan7", "aimed", "dbl_aimed", "ring8", "ring12", "ring16",
         "aimring6", "aimring8", "scatter", "cross", "spiral", "vortex2",
         "vortex3", "chaos", "burst3", "wall_gap", "fever_lunge",
-        "mega_laser", "drone_cross", "rock_fall", "shogi_file",
+        "mega_laser", "super_laser", "drone_cross", "rock_fall", "shogi_file",
         "dash_knives", "curtain",
     }
     used = {phase[1] for phases in _PHASE_CONFIGS.values() for phase in phases}

@@ -15,6 +15,7 @@ import random
 
 import pygame
 
+from src.core.constants import SCREEN_WIDTH
 from src.entities.bullets.enemy_bullet import EnemyBullet
 
 # パレット: (core=中心の白熱色, mid=中間色, glow=外周グロー)
@@ -264,3 +265,73 @@ class LaserMuzzleFlash(pygame.sprite.Sprite):
             pygame.draw.line(surf, (*self._core, int(220 * fade)), (c, c), (int(ex), int(ey)),
                              max(1, int(4 * fade) + 1))
         self.image = surf
+
+
+class LaserWarningBeam(pygame.sprite.Sprite):
+    """発射ラインを示す微かな予告線＋銃口へ吸い込まれる収束ダッシュ。
+
+    銃口は常に右側（host か muzzle の x）。ビームは左端(0)から銃口まで伸び、
+    エネルギーが銃口へ流れ込む（チャージで吸引される）ように描く。
+    host を渡すと毎フレーム銃口へ追従、muzzle 固定なら据え置き（ボス用）。
+    """
+
+    warning_only = True
+    terrain_passthrough = True
+
+    def __init__(self, palette: Palette, duration: float, *,
+                 host: pygame.sprite.Sprite | None = None,
+                 offset_ratio: float = -0.30,
+                 muzzle: tuple[float, float] | None = None,
+                 height: int = 40) -> None:
+        super().__init__()
+        self._core, self._mid, self._glow = palette
+        self._duration = max(0.001, duration)
+        self._host = host
+        self._offset_ratio = offset_ratio
+        self._muzzle = muzzle or (SCREEN_WIDTH, 0.0)
+        self._h = height
+        self._t = 0.0
+        self._build()
+
+    def _muzzle_pos(self) -> tuple[float, float]:
+        if self._host is not None and self._host.alive():
+            cx, cy = self._host.rect.center
+            return cx + self._offset_ratio * self._host.rect.width, cy
+        return self._muzzle
+
+    def update(self, dt: float) -> None:
+        self._t += dt
+        if self._t >= self._duration or (self._host is not None and not self._host.alive()):
+            self.kill()
+            return
+        self._build()
+
+    def is_off_screen(self) -> bool:
+        return False
+
+    def _build(self) -> None:
+        mx, my = self._muzzle_pos()
+        w = max(40, min(int(mx), SCREEN_WIDTH))
+        h = self._h
+        ratio = min(1.0, self._t / self._duration)
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        cy = h // 2
+
+        # かすかな芯線（チャージが進むほど少しだけ濃くなる）。
+        pygame.draw.line(surf, (*self._glow, int(24 + 30 * ratio)), (0, cy), (w, cy), 2)
+        pygame.draw.line(surf, (*self._core, int(34 + 46 * ratio)), (0, cy), (w, cy), 1)
+
+        # 銃口へ流れ込む収束ダッシュ（funnel 形で吸引感を出す）。
+        spacing, speed = 48, 240.0
+        n = w // spacing + 2
+        for i in range(n):
+            x = (i * spacing + self._t * speed) % (w + spacing)
+            f = max(0.0, min(1.0, x / w))          # 0:左端 1:銃口
+            a = int(50 + 150 * f * (0.4 + 0.6 * ratio))
+            ln = int(6 + 16 * f)
+            yj = int((1.0 - f) * (h * 0.32))
+            pygame.draw.line(surf, (*self._mid, a), (x - ln, cy - yj), (x, cy), 2)
+            pygame.draw.line(surf, (*self._mid, a), (x - ln, cy + yj), (x, cy), 2)
+
+        self.image = surf
+        self.rect = surf.get_rect(center=(int(w / 2), int(my)))

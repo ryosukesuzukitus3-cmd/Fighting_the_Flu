@@ -5,7 +5,16 @@ from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.bullets.enemy_bullet import EnemyBullet
-from src.entities.bullets.laser_fx import BOSS_PALETTE, LaserBeamSprite, LaserMuzzleFlash
+from src.entities.bullets.laser_fx import (
+    BOSS_PALETTE,
+    LaserBeamSprite,
+    LaserChargeOrb,
+    LaserMuzzleFlash,
+    LaserWarningBeam,
+)
+
+# 超サイヤ人化レーザー（金色）のパレット
+SSJ_PALETTE = ((255, 252, 210), (255, 216, 60), (255, 150, 20))
 
 if TYPE_CHECKING:
     from src.core.camera import Camera
@@ -52,6 +61,10 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.34, "burst3",     0.58),
         (0.16, "scatter",    0.28),
     ],
+    "2f2": [  # 超サイヤ人ブロリー（ステージ2 第二形態・極太レーザーと吸引）
+        (1.00, "super_laser", 2.8),
+        (0.45, "super_laser", 2.4),
+    ],
     3: [   # 婚活要塞マッチング・ゼロ（ステージ3 中上級ボス）
         (1.00, "drone_cross", 1.35),
         (0.72, "rock_fall",   1.10),
@@ -94,6 +107,10 @@ _FORM2_CONFIG = {
     4: ("graphic/藤井四段第二形態_もう一度.png", 0.2266, 300),
 }
 
+# 超サイヤ人ブロリー（ステージ2 第二形態）: 通常HPを削り切ると変身する最終ゲージ
+_SSJ_HP    = 170
+_SSJ_SCALE = 2.25   # 通常ブロリー(2.0)より一回り大きい
+
 # 第三形態（投了王サワグチ）: max_hp（スプライトはダミー生成）
 #   ※専用画像なし。台本「澤口の影が巨大化」に沿いプレイヤー画像を暗紫・拡大したダミー。
 _FORM3_MAX_HP   = 260   # Act1（反芻再生あり）
@@ -112,6 +129,7 @@ _BULLET_SPEED = 220.0
 _MOVE_STYLES: dict[str | int, str] = {
     1:     "fever_lunge",  # 前に出てプレイヤーを押し込む
     2:     "heavy_laser",  # 重い横移動から大技レーザー
+    "2f2": "heavy_laser",  # 超サイヤ人化後も腰を据えて極太レーザー
     3:     "fortress",     # 盤面を広く使う子機要塞
     4:     "shogi_board",  # 将棋盤の目を渡るように位置替え
     "4f2": "dash",         # 赤眼化後は急接近と離脱
@@ -193,6 +211,11 @@ class Boss(pygame.sprite.Sprite):
         self._shoot_delay_override: float | None = None
         # game_scene が注入。巨大レーザー発射時の画面シェイク用（None 可）。
         self.camera: "Camera | None" = None
+        # 超サイヤ人レーザーのチャージ中、game_scene が自機を吸い込むためのフラグ。
+        self.suction_active: bool  = False
+        self.suction_x:      float = 0.0
+        self.suction_y:      float = 0.0
+        self._suction_timer: float = 0.0
 
     def _load_image(self, path: str, scale: float) -> pygame.Surface:
         raw = self.game.resources.image(path)
@@ -247,6 +270,10 @@ class Boss(pygame.sprite.Sprite):
         self._time += dt
         if self.hit_flash_timer > 0:
             self.hit_flash_timer -= dt
+        if self._suction_timer > 0:
+            self._suction_timer -= dt
+            if self._suction_timer <= 0:
+                self.suction_active = False
         if self._state == "enter":
             self.sx -= _ENTER_SPEED * dt
             if self.sx <= _TARGET_SX:
@@ -290,6 +317,9 @@ class Boss(pygame.sprite.Sprite):
         self.sx = self._approach(self.sx, _TARGET_SX, 120.0, dt)
 
     def _update_movement(self, dt: float, player: "Player", pattern: str) -> None:
+        # 超サイヤ人レーザーのチャージ中は静止（予告線＝着弾位置を固定する）。
+        if self.suction_active:
+            return
         style = _MOVE_STYLES.get(self._form_key())
         mid_y = SCREEN_HEIGHT / 2.0
 
@@ -406,24 +436,10 @@ class Boss(pygame.sprite.Sprite):
             return resources.pixelfont(size)
         return pygame.font.Font(None, size)
 
-    def _laser_warning(self, by: float) -> EnemyBullet:
-        width = max(80, int(self.sx - 18))
-        bullet = EnemyBullet(
-            width / 2,
-            by,
-            0.0,
-            0.0,
-            0,
-            size=(width, 12),
-            color=(255, 230, 80),
-            lifetime=0.28,
-            terrain_passthrough=True,
-            warning_only=True,
-        )
-        bullet.image.fill((0, 0, 0, 0))
-        pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, 4, width, 4))
-        pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, 5, width, 2))
-        return bullet
+    def _laser_warning(self, by: float, duration: float, palette) -> LaserWarningBeam:
+        # かすかな予告線＋銃口へ吸い込まれる収束ダッシュ（ボスは据え置き）。
+        return LaserWarningBeam(palette, duration,
+                                muzzle=(self.sx - 18, by), height=46)
 
     def _mega_beam(self, by: float) -> LaserBeamSprite:
         # 極太・凶悪な本体レーザー。放電アークをまとい、発射中ずっと描き直す。
@@ -434,11 +450,29 @@ class Boss(pygame.sprite.Sprite):
             width,
             68,
             palette=BOSS_PALETTE,
-            lifetime=0.62,
-            damage=18,
+            lifetime=0.82,
+            damage=28,
             warning_only=False,
             discharge=True,
-            taper_time=0.16,
+            taper_time=0.20,
+        )
+
+    def _super_beam(self, by: float) -> LaserBeamSprite:
+        # 超サイヤ人レーザー: 桁外れに極太・高威力・金色の放電。
+        width = max(80, int(self.sx - 18))
+        return LaserBeamSprite(
+            width / 2,
+            by,
+            width,
+            120,
+            palette=SSJ_PALETTE,
+            lifetime=1.05,
+            damage=46,
+            warning_only=False,
+            discharge=True,
+            fade_in=0.10,
+            taper_time=0.24,
+            pulse_freq=30.0,
         )
 
     def _rock_bullet(self, sx: float, vy: float, vx: float = 0.0) -> EnemyBullet:
@@ -643,7 +677,7 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
         elif pattern == "mega_laser":
             if variant % 2 == 0:
-                enemy_bullets.add(self._laser_warning(by))
+                enemy_bullets.add(self._laser_warning(by, 0.62, BOSS_PALETTE))
                 for off in (-56, 56):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
                 self._shoot_delay_override = 0.62
@@ -660,6 +694,37 @@ class Boss(pygame.sprite.Sprite):
                     self._weak_timer = max(self._weak_timer, 1.65)
                     self._armor = min(self._armor, _ARMOR_MAX // 2)
                 self._shoot_delay_override = 2.55
+
+        # ── Stage2 第二形態: 超サイヤ人の極太レーザー。チャージ中は自機を吸引。
+        elif pattern == "super_laser":
+            if variant % 2 == 0:
+                # チャージ: 金の予告線＋特大充電球＋自機吸引（heavy_laserを停止）。
+                charge_t = 1.5
+                self.suction_y = by
+                self.suction_x = self.sx
+                self.suction_active = True
+                self._suction_timer = charge_t
+                enemy_bullets.add(self._laser_warning(by, charge_t, SSJ_PALETTE))
+                enemy_bullets.add(LaserChargeOrb(self, charge_t, SSJ_PALETTE,
+                                                 offset_ratio=-0.12, size=156))
+                if self.camera is not None:
+                    self.camera.shake(2.5)
+                self._shoot_delay_override = charge_t
+            else:
+                fire_y = self.suction_y          # チャージ位置＝着弾位置（テレグラフ一致）
+                self.suction_active = False
+                self._suction_timer = 0.0
+                enemy_bullets.add(self._super_beam(fire_y))
+                enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.20, fire_y,
+                                                   SSJ_PALETTE, max_radius=156, spikes=12,
+                                                   duration=0.24))
+                if self.camera is not None:
+                    self.camera.shake(18.0)
+                # 吸引で寄せた直後に上下へ抜けさせる圧（避け先は残す）。
+                for off in (-150, -80, 80, 150):
+                    enemy_bullets.add(EnemyBullet(self.sx, fire_y + off, -320.0, off * 0.18,
+                                                  14, radius=7, color=(255, 215, 90)))
+                self._shoot_delay_override = 2.6
 
         # ── Stage3: 砲台/子機の射線と交差する狙撃。
         elif pattern == "drone_cross":
@@ -761,6 +826,9 @@ class Boss(pygame.sprite.Sprite):
             if self._stage_id == 4 and self._form2 and not self._form3:
                 self._transform_form3()
                 return False  # 投了王サワグチへ
+            if self._stage_id == 2 and not self._form2:
+                self._transform_super_saiyan()
+                return False  # 超サイヤ人ブロリーへ
             return True
         return False
 
@@ -779,6 +847,46 @@ class Boss(pygame.sprite.Sprite):
         self._armor         = _ARMOR_MAX
         self._weak_timer    = 0.0
         # SE なし（演出は game_scene 側の form2 検知で行う）
+
+    def _make_super_saiyan_sprite(self) -> pygame.Surface:
+        """超サイヤ人ブロリー: 通常スプライトを金オーラ＋増感で生成（専用画像なし）。"""
+        raw = self.game.resources.image("graphic/enemy_ブロリー.png")
+        w = int(raw.get_width()  * _SSJ_SCALE)
+        h = int(raw.get_height() * _SSJ_SCALE)
+        big = pygame.transform.smoothscale(raw, (w, h))
+        pad = 18
+        canvas = pygame.Surface((w + pad * 2, h + pad * 2), pygame.SRCALPHA)
+        # 金色オーラ: マスク外周を金色で多重描き＋柔らかいグロー。
+        outline = pygame.mask.from_surface(big).to_surface(
+            setcolor=(255, 226, 70, 255), unsetcolor=(0, 0, 0, 0))
+        for ox, oy in ((-7, 0), (7, 0), (0, -7), (0, 7), (-5, -5), (5, -5), (-5, 5), (5, 5)):
+            canvas.blit(outline, (pad + ox, pad + oy))
+        glow = pygame.transform.smoothscale(outline, (w + pad, h + pad))
+        glow.set_alpha(130)
+        canvas.blit(glow, (pad // 2, pad // 2))
+        # 本体を金寄りに増感（黄を加算）。
+        body = big.copy()
+        body.fill((120, 88, 0), special_flags=pygame.BLEND_RGB_ADD)
+        canvas.blit(body, (pad, pad))
+        return canvas
+
+    def _transform_super_saiyan(self) -> None:
+        self._form2 = True
+        self.image  = self._make_super_saiyan_sprite()
+        self.rect   = self.image.get_rect(center=(int(self.sx), int(self.sy)))
+        self.hp     = _SSJ_HP
+        self.max_hp = _SSJ_HP
+        self._shoot_timer  = 1.4   # 変身直後はひと溜め
+        self._spiral_angle = 0.0
+        self._shot_variant = 0     # 必ず super_laser のチャージ(variant0)から始める
+        self._shield_active = False
+        self._armor         = _ARMOR_MAX
+        self._weak_timer    = 0.0
+        self.suction_active = False
+        self._suction_timer = 0.0
+        if self.camera is not None:
+            self.camera.shake(20.0)
+        self.game.sound.play_se_alias("SE_BOSS_SHOT", volume=0.6)
 
     def _make_form3_sprite(self) -> pygame.Surface:
         """投了王サワグチのダミースプライト（差し替え前提）。
