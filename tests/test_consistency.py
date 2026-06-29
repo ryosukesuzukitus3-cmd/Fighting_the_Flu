@@ -437,6 +437,11 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
     gates = [ev for ev in world_events if ev["type"] in {"breakable_gate", "weapon_gate"}]
     reward_gates = [ev for ev in world_events if ev["type"] == "weapon_gate"]
+    breakable_blocks = [
+        ev for ev in world_events
+        if ev.get("kind") == "fortress_block"
+        and (ev.get("destructible") or ev["type"] in {"breakable_gate", "weapon_gate"})
+    ]
     minibosses = [
         ev for ev in world_events
         if ev["type"] in {"EnemyCoughSprayer", "EnemySporeSplitter"}
@@ -472,7 +477,13 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 2
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 2
     assert any(ev["type"] == "EnemyBilly" for ev in world_events)
-    assert max(ev.get("hp", 0) for ev in gates) >= 24
+    assert [(ev["w"], ev["h"], ev["hp"]) for ev in breakable_blocks] == [
+        (150, 94, 12),
+        (105, 246, 36),
+        (107, 168, 44),
+        (123, 288, 48),
+    ]
+    assert max(ev.get("hp", 0) for ev in gates) >= 48
     assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
     assert boss_gate["player_limit_x"] <= first_boss_room_x
     assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
@@ -1025,6 +1036,7 @@ def test_stage3_composer_body_fill_touches_surface_caps() -> None:
 
 def test_stage3_composer_rect_roles_are_available() -> None:
     from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+    from src.entities.terrain import _stage3_piece_cover_scale
 
     pieces = load_stage3_composer_pieces()
     expected_roles = {
@@ -1040,6 +1052,13 @@ def test_stage3_composer_rect_roles_are_available() -> None:
 
     assert expected_roles <= set(pieces)
     assert all(pieces[role] for role in expected_roles)
+    assert "block_tall" in {piece.group for piece in pieces["breakable_block"]}
+    for w, h in ((150, 94), (105, 246), (107, 168), (123, 288)):
+        assert min(_stage3_piece_cover_scale(piece.image, w, h) for piece in pieces["breakable_block"]) <= 1.25
+        assert min(
+            abs((piece.image.get_width() / max(1, piece.image.get_height())) - (w / h))
+            for piece in pieces["breakable_block"]
+        ) <= 0.02
 
 
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
@@ -1052,6 +1071,62 @@ def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
     assert ceiling_block._surface_anchor == "ceiling"
     assert floor_block.take_damage(1) is False
     assert floor_block._surface_anchor == "floor"
+
+
+def test_stage3_fortress_breakable_blocks_are_visually_distinct() -> None:
+    from src.entities.terrain import Terrain
+
+    normal = Terrain(0, 330, 126, 168, "fortress_block")
+    breakable = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=3)
+    reward = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=3, fixed_drop="WeaponItem")
+
+    def count_crack_pixels(surface: pygame.Surface) -> int:
+        count = 0
+        for y in range(surface.get_height()):
+            for x in range(surface.get_width()):
+                r, g, b, a = surface.get_at((x, y))
+                if a >= 180 and 175 <= r <= 205 and 120 <= g <= 145 and 90 <= b <= 115:
+                    count += 1
+        return count
+
+    def count_reward_core_pixels(surface: pygame.Surface) -> int:
+        count = 0
+        for y in range(surface.get_height()):
+            for x in range(surface.get_width()):
+                r, g, b, a = surface.get_at((x, y))
+                if a > 120 and r <= 160 and g >= 180 and b >= 210:
+                    count += 1
+        return count
+
+    assert pygame.image.tobytes(normal.image, "RGBA") != pygame.image.tobytes(breakable.image, "RGBA")
+    assert count_crack_pixels(breakable.image) > count_crack_pixels(normal.image) + 18
+    assert count_reward_core_pixels(reward.image) > count_reward_core_pixels(breakable.image) + 40
+
+
+def test_stage3_fortress_breakable_damage_changes_visual_state() -> None:
+    from src.entities.terrain import Terrain, _stage3_breakable_crack_count
+
+    def count_crack_pixels(surface: pygame.Surface) -> int:
+        count = 0
+        for y in range(surface.get_height()):
+            for x in range(surface.get_width()):
+                r, g, b, a = surface.get_at((x, y))
+                if a >= 180 and 175 <= r <= 205 and 120 <= g <= 145 and 90 <= b <= 115:
+                    count += 1
+        return count
+
+    block = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=4)
+    before_count = count_crack_pixels(block.image)
+
+    assert block.take_damage(1) is False
+    first_count = count_crack_pixels(block.image)
+    assert first_count > before_count
+
+    assert block.take_damage(1) is False
+    second_count = count_crack_pixels(block.image)
+    assert second_count > first_count
+
+    assert _stage3_breakable_crack_count(126, 168, 0.5) > _stage3_breakable_crack_count(126, 168, 0.0)
 
 
 def test_spawner_surface_ignores_visual_only_terrain() -> None:
