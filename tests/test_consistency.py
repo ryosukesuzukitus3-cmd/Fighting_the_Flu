@@ -1659,6 +1659,39 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     assert "PYTHONIOENCODING" in src
     assert ".venv" in src
     assert "stage3-composer-report" in src
+    assert "stage-designer" in src
+
+
+def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
+    from tools.stage_designer import _format_stage_json
+
+    data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    text = _format_stage_json(data)
+
+    assert json.loads(text) == data
+    assert '        [0, 36],' in text
+    assert '    {"type": "EnemyTakeshi", "x": 940' in text
+    assert '\n          "x": 940' not in text
+
+
+def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
+    from tools.stage_designer import _set_event_x
+
+    gate = {
+        "type": "BossGate",
+        "trigger_x": 10150,
+        "lock_camera_x": 9350,
+        "player_limit_x": 10150,
+    }
+
+    _set_event_x(gate, 10200)
+
+    assert gate == {
+        "type": "BossGate",
+        "trigger_x": 10200,
+        "lock_camera_x": 9400,
+        "player_limit_x": 10200,
+    }
 
 
 def test_stage3_composer_report_opens_preview_by_default() -> None:
