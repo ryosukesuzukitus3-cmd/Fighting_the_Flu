@@ -24,9 +24,6 @@ SURFACE_CAP_OVERHANG = 2
 MAX_AUTO_PROP_OPAQUE_HEIGHT = 108
 PROP_SPAWN_CHANCE = 0.46
 SUBSURFACE_FADE_MARGIN = 56
-SURFACE_CONTACT_SHADOW_DEPTH = 44
-SURFACE_CONTACT_SHADOW_OVERLAP = 10
-SURFACE_CONTACT_SHADOW_ALPHA = 62
 ROLE_FALLBACK_GROUPS: dict[str, tuple[str, ...]] = {
     "floor_surface": ("strip_top", "block_wide", "block_square"),
     "ceiling_surface": ("strip_top", "block_wide", "block_square"),
@@ -98,7 +95,6 @@ class Stage3ComposerLayout:
 
 _PIECE_CACHE: dict[tuple[str, str], dict[str, list[Stage3ComposerPiece]]] = {}
 _FADE_CACHE: dict[tuple[int, int, str], pygame.Surface] = {}
-_CONTACT_SHADOW_CACHE: dict[tuple[int, int, str], pygame.Surface] = {}
 
 
 def _resolve(path: str | Path, *, base: Path = ROOT) -> Path:
@@ -660,30 +656,6 @@ def _draw_subsurface_fade(
         target.blit(_subsurface_fade_surface(width, y1 - y0, run.side), (sx, y0))
 
 
-def _draw_surface_contact_shadow(
-    target: pygame.Surface,
-    layout: Stage3ComposerLayout,
-    *,
-    camera_x: float,
-) -> None:
-    target_rect = target.get_rect()
-    for run in layout.surface_runs:
-        sx = int(round(run.x0 - camera_x))
-        ex = int(round(run.x1 - camera_x))
-        if ex < 0 or sx > target_rect.width:
-            continue
-        width = max(1, ex - sx)
-        if run.side == "bottom":
-            y0 = max(0, run.y - SURFACE_CONTACT_SHADOW_DEPTH)
-            y1 = min(target_rect.height, run.y + SURFACE_CONTACT_SHADOW_OVERLAP)
-        else:
-            y0 = max(0, run.y - SURFACE_CONTACT_SHADOW_OVERLAP)
-            y1 = min(target_rect.height, run.y + SURFACE_CONTACT_SHADOW_DEPTH)
-        if y1 <= y0:
-            continue
-        target.blit(_surface_contact_shadow_surface(width, y1 - y0, run.side), (sx, y0))
-
-
 def _subsurface_fade_surface(width: int, height: int, side: str) -> pygame.Surface:
     key = (max(1, int(width)), max(1, int(height)), side)
     cached = _FADE_CACHE.get(key)
@@ -698,22 +670,6 @@ def _subsurface_fade_surface(width: int, height: int, side: str) -> pygame.Surfa
         pygame.draw.line(fade, (0, 0, 0, alpha), (0, y), (key[0] - 1, y), 1)
     _FADE_CACHE[key] = fade
     return fade
-
-
-def _surface_contact_shadow_surface(width: int, height: int, side: str) -> pygame.Surface:
-    key = (max(1, int(width)), max(1, int(height)), side)
-    cached = _CONTACT_SHADOW_CACHE.get(key)
-    if cached is not None:
-        return cached
-    shadow = pygame.Surface((key[0], key[1]), pygame.SRCALPHA)
-    for y in range(key[1]):
-        t = y / max(1, key[1] - 1)
-        if side == "top":
-            t = 1.0 - t
-        alpha = int(SURFACE_CONTACT_SHADOW_ALPHA * (t ** 1.75))
-        pygame.draw.line(shadow, (0, 0, 0, alpha), (0, y), (key[0] - 1, y), 1)
-    _CONTACT_SHADOW_CACHE[key] = shadow
-    return shadow
 
 
 def draw_stage3_composer_layout(
@@ -738,8 +694,6 @@ def draw_stage3_composer_layout(
         else:
             area_h = max(0, run.y - layout.surface_depth)
             target.blit(base, (sx, 0), area=pygame.Rect(0, 0, width, area_h))
-
-    _draw_surface_contact_shadow(target, layout, camera_x=camera_x)
 
     for placement in layout.placements:
         if placement.clip.right < camera_x or placement.clip.left > camera_x + target_rect.width:
