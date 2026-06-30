@@ -7,6 +7,7 @@ from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 
 _STAGE2_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage2_cyber_static_bg.png"
 _STAGE3_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
+_STAGE3_BG_TILE_OVERLAP = 220
 
 
 class _StarLayer:
@@ -58,6 +59,8 @@ class ScrollingBackground:
         self._stage2_fragments: list = []
         self._stage2_bg: pygame.Surface | None = None
         self._stage3_bg: pygame.Surface | None = None
+        self._stage3_bg_blend_strip: pygame.Surface | None = None
+        self._stage3_bg_blend_key: tuple[int, int] | None = None
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -334,10 +337,7 @@ class ScrollingBackground:
         bg = self._load_stage3_backdrop()
         if bg is None:
             return
-        width = bg.get_width()
-        offset = int(camera_x * 0.08) % width
-        for x in range(-offset, SCREEN_WIDTH, width):
-            screen.blit(bg, (x, 0))
+        self._draw_stage3_backdrop_tiles(screen, bg, camera_x)
         veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         veil.fill((8, 12, 14, 30))
         for y in range(SCREEN_HEIGHT):
@@ -353,6 +353,58 @@ class ScrollingBackground:
             if alpha:
                 pygame.draw.line(depth_haze, (126, 154, 148, alpha), (0, y), (SCREEN_WIDTH, y), 2)
         screen.blit(depth_haze, (0, 0))
+
+    def _draw_stage3_backdrop_tiles(self, screen: pygame.Surface, bg: pygame.Surface, camera_x: float) -> None:
+        width = bg.get_width()
+        overlap = min(_STAGE3_BG_TILE_OVERLAP, max(0, width // 4))
+        if overlap <= 0:
+            offset = int(camera_x * 0.08) % width
+            for x in range(-offset, SCREEN_WIDTH, width):
+                screen.blit(bg, (x, 0))
+            return
+
+        step = max(1, width - overlap)
+        offset = int(camera_x * 0.08) % step
+        x = -offset
+        first_tile = True
+        while x < SCREEN_WIDTH:
+            if first_tile:
+                screen.blit(bg, (x, 0))
+                first_tile = False
+            else:
+                self._blit_stage3_backdrop_tile(screen, bg, x, overlap)
+            x += step
+
+    def _blit_stage3_backdrop_tile(
+        self,
+        screen: pygame.Surface,
+        bg: pygame.Surface,
+        x: int,
+        overlap: int,
+    ) -> None:
+        width, height = bg.get_size()
+        overlap = min(overlap, width - 1)
+        body_rect = pygame.Rect(overlap, 0, width - overlap, height)
+        screen.blit(bg, (x + overlap, 0), body_rect)
+        screen.blit(self._stage3_backdrop_blend_strip(bg, overlap), (x, 0))
+
+    def _stage3_backdrop_blend_strip(self, bg: pygame.Surface, overlap: int) -> pygame.Surface:
+        key = (overlap, bg.get_height())
+        if self._stage3_bg_blend_strip is not None and self._stage3_bg_blend_key == key:
+            return self._stage3_bg_blend_strip
+
+        strip = pygame.Surface(key, pygame.SRCALPHA)
+        strip.blit(bg, (0, 0), pygame.Rect(0, 0, overlap, bg.get_height()))
+        alpha_mask = pygame.Surface(key, pygame.SRCALPHA)
+        for ix in range(overlap):
+            t = ix / max(1, overlap - 1)
+            alpha = int(255 * (t ** 1.35))
+            pygame.draw.line(alpha_mask, (255, 255, 255, alpha), (ix, 0), (ix, key[1] - 1), 1)
+        strip.blit(alpha_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+        self._stage3_bg_blend_key = key
+        self._stage3_bg_blend_strip = strip
+        return strip
 
     def _load_stage3_backdrop(self) -> pygame.Surface | None:
         if self._stage3_bg is not None:
