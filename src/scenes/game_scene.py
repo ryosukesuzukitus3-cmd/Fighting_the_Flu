@@ -149,6 +149,15 @@ class GameScene(
         self._bg_text_timer: float = 0.0
         self._bg_text_font   = None
 
+        # Stage2（情報汚染地帯）のみ、背景に Matrix 風の縦コード雨を重ねる。
+        # 等幅フォント（MS ゴシック）で3層（奥→手前）の奥行きを出す。
+        self._matrix_rain = None
+        if self._stage_id == 2:
+            from src.entities.matrix_rain import MatrixRain
+            self._matrix_rain = MatrixRain(
+                SCREEN_WIDTH, SCREEN_HEIGHT,
+                lambda s: self.game.resources.sysfont("msgothic", s))
+
         # 戦闘中自動タイムアウトセリフ
         self._boss_dialogue_timer:   float = 0.0
         self._boss_dialogue_text:    str   = ""
@@ -385,6 +394,8 @@ class GameScene(
         # ── 常時更新 ───────────────────────────────────────
         self.camera.update(dt)
         self._update_bg_text(dt)
+        if self._matrix_rain is not None:
+            self._matrix_rain.update(dt)
 
         # Freeze gameplay during boss intro overlays.
         if self._gameplay_frozen:
@@ -686,6 +697,8 @@ class GameScene(
         buf = self._buf
         buf.fill((0, 0, 0))
         self.bg.draw(buf, self.camera.x)
+        if self._matrix_rain is not None:
+            self._matrix_rain.draw(buf)
         self._draw_bg_text(buf)
         self.terrain.draw(buf)
         self.items.draw(buf)
