@@ -105,6 +105,8 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 - `floor_surface`: 床側の移動可能領域に接する表面
 - `ceiling_surface`: 天井側の移動可能領域に接する表面
 - `body_fill`: 地中・壁内部の充填。上面・報酬マーク・横長装飾が目立つrectは入れない
+- `fixed_floor_block`: 床上・地上に露出する固定ブロック。一枚素材を見切らず使い、上面が見えるrectに絞る
+- `fixed_ceiling_block`: 天井から生える固定ブロック。床用の上面を足さず、天井側にアンカーして一枚素材を使う
 - `exposed_column`: 露出した柱・壁
 - `floor_prop`: 床上に積む当たり判定ありの小物
 - `decor_prop`: 当たり判定なしの装飾
