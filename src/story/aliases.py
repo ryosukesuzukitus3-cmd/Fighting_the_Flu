@@ -33,6 +33,8 @@ SE: dict[str, str | None] = {
     "SE_PLAYER_HIT":   "music/se/shout.wav",
     "SE_ENEMY_SHOT":   "music/se/dummy_enemy_shot.wav",      # dummy（雑魚/砲台の発射）
     "SE_BOSS_SHOT":    "music/se/dummy_boss_shot.wav",       # dummy（ボスの発射）
+    "SE_LASER_FIRE":   "music/se/laser_fire.mp3",            # ブロリー粒子砲の発射音
+
     "SE_KARONARU_HIT": "music/se/dummy_karonaru_hit.wav",    # dummy（先輩 被弾）
     "SE_KARONARU_RETIRE": "music/se/dummy_karonaru_retire.wav",  # dummy（先輩 退場）
     "SE_KARONARU_ARRIVE": "music/se/dummy_karonaru_arrive.wav",  # dummy（先輩 移動出現）

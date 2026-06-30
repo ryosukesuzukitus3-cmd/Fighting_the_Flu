@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import random
+from pathlib import Path
 
 import pygame
 
@@ -23,9 +24,26 @@ Palette = tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]
 
 MOB_PALETTE: Palette = ((255, 250, 220), (255, 150, 50), (255, 80, 20))
 BOSS_PALETTE: Palette = ((255, 245, 225), (255, 60, 55), (210, 15, 30))
+# 粒子砲（緑プラズマ動画素材）用のフラッシュ／グロー色。
+ZUNDA_PALETTE: Palette = ((245, 255, 240), (170, 255, 150), (90, 240, 110))
 
 # 放電アークの色（電撃感を出す寒色＋白）
 _ARC_COLORS = ((215, 238, 255), (255, 255, 255), (150, 205, 255))
+
+# 動画素材から抜き出したフレーム列（assets/graphic/laser/{beam,charge}/）。
+# 黒背景を抜いた RGBA なので通常αブリットで光って見える。初回のみ読み込みキャッシュ。
+_LASER_DIR = Path(__file__).resolve().parents[3] / "assets" / "graphic" / "laser"
+_FRAME_CACHE: dict[str, list[pygame.Surface]] = {}
+
+
+def load_laser_frames(resources, subdir: str) -> list[pygame.Surface]:
+    """`{subdir}/{subdir}_NN.png` を番号順に読み込む（resources 経由でキャッシュ＆convert）。"""
+    if subdir not in _FRAME_CACHE:
+        files = sorted((_LASER_DIR / subdir).glob(f"{subdir}_*.png"))
+        _FRAME_CACHE[subdir] = [
+            resources.image(f"graphic/laser/{subdir}/{f.name}") for f in files
+        ]
+    return _FRAME_CACHE[subdir]
 
 
 class LaserBeamSprite(EnemyBullet):
@@ -60,8 +78,11 @@ class LaserBeamSprite(EnemyBullet):
         taper_time: float = 0.32,
         pulse_freq: float = 26.0,
         left_extend: int = 140,
+        frames: list[pygame.Surface] | None = None,
+        frame_fps: float = 18.0,
     ) -> None:
-        ext = max(0, left_extend)
+        # 動画フレーム使用時は素材自体が端の形まで持つので左延長しない。
+        ext = 0 if frames else max(0, left_extend)
         total_w = width + ext
         super().__init__(
             cx - ext / 2.0, cy, 0.0, 0.0, damage,
@@ -78,8 +99,30 @@ class LaserBeamSprite(EnemyBullet):
         self._fade_in = max(0.0, fade_in)
         self._taper_time = max(0.001, taper_time)
         self._pulse_freq = pulse_freq
+        self._frames = frames
+        self._frame_fps = frame_fps
         self._t = 0.0
         self._render()
+
+    def _alpha_factor(self) -> float:
+        """立ち上がり(fade_in)→保持→終端(taper)のアルファ係数。"""
+        max_life = self._max_lifetime or self.lifetime or self._taper_time
+        remaining = self.lifetime if self.lifetime is not None else max_life
+        elapsed = max_life - remaining
+        if self._fade_in > 0 and elapsed < self._fade_in:
+            return elapsed / self._fade_in
+        if remaining < self._taper_time:
+            return max(0.0, remaining / self._taper_time)
+        return 1.0
+
+    def _render_frames(self) -> None:
+        frames = self._frames
+        idx = int(self._t * self._frame_fps) % len(frames)
+        scaled = pygame.transform.smoothscale(frames[idx], (self._w, self._h))
+        a = self._alpha_factor()
+        if a < 1.0:
+            scaled.fill((255, 255, 255, int(255 * a)), special_flags=pygame.BLEND_RGBA_MULT)
+        self.image = scaled
 
     def update(self, dt: float) -> None:
         self._t += dt
@@ -117,6 +160,9 @@ class LaserBeamSprite(EnemyBullet):
         return vscale, alpha, flash
 
     def _render(self) -> None:
+        if self._frames:
+            self._render_frames()
+            return
         w, h = self._w, self._h
         vscale, alpha, flash = self._vertical_scale()
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -172,13 +218,15 @@ class LaserChargeOrb(pygame.sprite.Sprite):
     terrain_passthrough = True
 
     def __init__(self, host: pygame.sprite.Sprite, duration: float, palette: Palette,
-                 *, offset_ratio: float = -0.30, size: int = 104) -> None:
+                 *, offset_ratio: float = -0.30, size: int = 104,
+                 frames: list[pygame.Surface] | None = None) -> None:
         super().__init__()
         self._host = host
         self._duration = max(0.001, duration)
         self._core, self._mid, self._glow = palette
         self._size = size
         self._offset_ratio = offset_ratio
+        self._frames = frames
         self._t = 0.0
         self.sx, self.sy = host.rect.center
         self.image = pygame.Surface((size, size), pygame.SRCALPHA)
@@ -201,6 +249,11 @@ class LaserChargeOrb(pygame.sprite.Sprite):
 
     def _render(self, ratio: float) -> None:
         size = self._size
+        if self._frames:
+            # 充電動画フレームを進捗で進める（エネルギーが集束→球になる）。
+            idx = min(len(self._frames) - 1, int(ratio * len(self._frames)))
+            self.image = pygame.transform.smoothscale(self._frames[idx], (size, size))
+            return
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
         c = size // 2
 

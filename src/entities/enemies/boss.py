@@ -7,10 +7,12 @@ from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.bullets.enemy_bullet import EnemyBullet
 from src.entities.bullets.laser_fx import (
     BOSS_PALETTE,
+    ZUNDA_PALETTE,
     LaserBeamSprite,
     LaserChargeOrb,
     LaserMuzzleFlash,
     LaserWarningBeam,
+    load_laser_frames,
 )
 from src.entities.bullets.shogi_bullet import ShogiBullet, ThrownBoardBullet
 
@@ -452,37 +454,36 @@ class Boss(pygame.sprite.Sprite):
                                 muzzle=(self.sx - 18, by), height=46)
 
     def _mega_beam(self, by: float) -> LaserBeamSprite:
-        # 極太・凶悪な本体レーザー。放電アークをまとい、発射中ずっと描き直す。
+        # 極太・凶悪な本体レーザー（粒子砲の緑プラズマ動画フレーム）。
         width = max(80, int(self.sx - 18))
         return LaserBeamSprite(
             width / 2,
             by,
             width,
-            68,
-            palette=BOSS_PALETTE,
+            150,
+            palette=ZUNDA_PALETTE,
             lifetime=0.82,
             damage=28,
             warning_only=False,
-            discharge=True,
             taper_time=0.20,
+            frames=load_laser_frames(self.game.resources, "beam"),
         )
 
     def _super_beam(self, by: float) -> LaserBeamSprite:
-        # 超サイヤ人レーザー: 桁外れに極太・高威力・金色の放電。
+        # 超サイヤ人レーザー: 桁外れに極太・高威力（同じ粒子砲フレームを特大表示）。
         width = max(80, int(self.sx - 18))
         return LaserBeamSprite(
             width / 2,
             by,
             width,
-            120,
-            palette=SSJ_PALETTE,
+            260,
+            palette=ZUNDA_PALETTE,
             lifetime=1.05,
             damage=46,
             warning_only=False,
-            discharge=True,
             fade_in=0.10,
             taper_time=0.24,
-            pulse_freq=30.0,
+            frames=load_laser_frames(self.game.resources, "beam"),
         )
 
     def _laser_bullet(self, by: float, *, warning: bool = False, height: int = 46,
@@ -813,15 +814,16 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
         elif pattern == "mega_laser":
             if variant % 2 == 0:
-                enemy_bullets.add(self._laser_warning(by, 0.62, BOSS_PALETTE))
+                enemy_bullets.add(self._laser_warning(by, 0.62, ZUNDA_PALETTE))
                 for off in (-56, 56):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
                 self._shoot_delay_override = 0.62
             else:
                 enemy_bullets.add(self._mega_beam(by))
-                # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク。
+                # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク＋発射音。
                 enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.28, by,
-                                                   BOSS_PALETTE, max_radius=104, spikes=10))
+                                                   ZUNDA_PALETTE, max_radius=104, spikes=10))
+                self.game.sound.play_se_alias("SE_LASER_FIRE", volume=0.5)
                 if self.camera is not None:
                     self.camera.shake(8.0)
                 for off in (-88, 88):
@@ -840,9 +842,10 @@ class Boss(pygame.sprite.Sprite):
                 self.suction_x = self.sx
                 self.suction_active = True
                 self._suction_timer = charge_t
-                enemy_bullets.add(self._laser_warning(by, charge_t, SSJ_PALETTE))
-                enemy_bullets.add(LaserChargeOrb(self, charge_t, SSJ_PALETTE,
-                                                 offset_ratio=-0.12, size=156))
+                enemy_bullets.add(self._laser_warning(by, charge_t, ZUNDA_PALETTE))
+                enemy_bullets.add(LaserChargeOrb(
+                    self, charge_t, ZUNDA_PALETTE, offset_ratio=-0.12, size=210,
+                    frames=load_laser_frames(self.game.resources, "charge")))
                 if self.camera is not None:
                     self.camera.shake(2.5)
                 self._shoot_delay_override = charge_t
@@ -852,8 +855,9 @@ class Boss(pygame.sprite.Sprite):
                 self._suction_timer = 0.0
                 enemy_bullets.add(self._super_beam(fire_y))
                 enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.20, fire_y,
-                                                   SSJ_PALETTE, max_radius=156, spikes=12,
+                                                   ZUNDA_PALETTE, max_radius=170, spikes=12,
                                                    duration=0.24))
+                self.game.sound.play_se_alias("SE_LASER_FIRE", volume=0.7)
                 if self.camera is not None:
                     self.camera.shake(18.0)
                 # 吸引で寄せた直後に上下へ抜けさせる圧（避け先は残す）。

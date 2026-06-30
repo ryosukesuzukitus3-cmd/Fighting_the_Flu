@@ -91,47 +91,55 @@ class EnemyBroly(Enemy):
         if self._enemy_bullets is None or self._warning_fired:
             return
         from src.entities.bullets.laser_fx import (
-            MOB_PALETTE,
+            ZUNDA_PALETTE,
             LaserChargeOrb,
             LaserWarningBeam,
+            load_laser_frames,
         )
 
         self._warning_fired = True
         # かすかな予告線＋銃口へ吸い込まれる収束ダッシュ（ブロリーに追従）。
         self._enemy_bullets.add(
-            LaserWarningBeam(MOB_PALETTE, _WINDUP_TIME, host=self, height=36)
+            LaserWarningBeam(ZUNDA_PALETTE, _WINDUP_TIME, host=self, height=36)
         )
-        # 銃口で充電球を育てる（＝発射前のチャージ演出）。
-        self._enemy_bullets.add(LaserChargeOrb(self, _WINDUP_TIME, MOB_PALETTE))
+        # 銃口で充電球を育てる（チャージ動画フレーム）。
+        charge_frames = load_laser_frames(self._game.resources, "charge")
+        self._enemy_bullets.add(
+            LaserChargeOrb(self, _WINDUP_TIME, ZUNDA_PALETTE, size=128, frames=charge_frames)
+        )
         self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.3)
 
     def _fire_charge_beam(self) -> None:
         if self._enemy_bullets is None or self._beam_fired:
             return
         from src.entities.bullets.laser_fx import (
-            MOB_PALETTE,
+            ZUNDA_PALETTE,
             LaserBeamSprite,
             LaserMuzzleFlash,
+            load_laser_frames,
         )
 
         self._beam_fired = True
-        # 銃口から左へ伸びる本体ビーム。warning_only＝当たり判定は突進本体が担う。
-        # 立ち上がりで一気に展開し、最後の _BEAM_TAPER 秒で徐々に細くなって消える。
+        # 銃口から左へ伸びる粒子砲ビーム（緑プラズマ動画素材）。warning_only＝
+        # 当たり判定は突進本体が担う。立ち上がり→保持→終端でアルファが抜ける。
         mx = self._muzzle_x()
         width = max(80, int(mx))
+        beam_frames = load_laser_frames(self._game.resources, "beam")
         beam = LaserBeamSprite(
             width / 2,
             self.world_y,
             width,
-            48,
-            palette=MOB_PALETTE,
+            150,
+            palette=ZUNDA_PALETTE,
             lifetime=_BEAM_FADE_TIME,
             warning_only=True,
             taper_time=_BEAM_TAPER,
+            frames=beam_frames,
         )
         self._enemy_bullets.add(beam)
-        # 発射の瞬間: 銃口フラッシュ＋画面シェイク。
-        self._enemy_bullets.add(LaserMuzzleFlash(mx, self.world_y, MOB_PALETTE))
+        # 発射の瞬間: 銃口フラッシュ＋画面シェイク＋発射音。
+        self._enemy_bullets.add(LaserMuzzleFlash(mx, self.world_y, ZUNDA_PALETTE, max_radius=64))
+        self._game.sound.play_se_alias("SE_LASER_FIRE", volume=0.4)
         if self._camera is not None:
             self._camera.shake(_FIRE_SHAKE)
 
