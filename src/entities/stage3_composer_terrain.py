@@ -189,17 +189,15 @@ def load_stage3_composer_pieces(
     if roles_raw is not None and not isinstance(roles_raw, dict):
         raise ValueError("rect config roles must be an object")
     for role, sources_raw in (roles_raw or {}).items():
-        if isinstance(sources_raw, str):
+        if isinstance(sources_raw, (str, dict)):
             sources = [sources_raw]
         elif isinstance(sources_raw, list):
-            sources = [str(source) for source in sources_raw]
+            sources = sources_raw
         else:
-            raise ValueError(f"roles.{role} must be a string or list of strings")
+            raise ValueError(f"roles.{role} must be a group name, object, or list")
         role_pieces: list[Stage3ComposerPiece] = []
         for source in sources:
-            if source not in pieces:
-                raise ValueError(f"roles.{role} references unknown group: {source}")
-            role_pieces.extend(pieces[source])
+            role_pieces.extend(_role_source_pieces(pieces, str(role), source))
         pieces[str(role)] = role_pieces
     _PIECE_CACHE[cache_key] = pieces
     return pieces
@@ -285,6 +283,40 @@ def _pieces_for_role(
     return result
 
 
+def _role_source_pieces(
+    pieces: dict[str, list[Stage3ComposerPiece]],
+    role: str,
+    source_raw: Any,
+) -> list[Stage3ComposerPiece]:
+    if isinstance(source_raw, str):
+        if source_raw not in pieces:
+            raise ValueError(f"roles.{role} references unknown group: {source_raw}")
+        return pieces[source_raw]
+    if not isinstance(source_raw, dict):
+        raise ValueError(f"roles.{role} entries must be group names or {{group, indices}} objects")
+
+    group = str(source_raw.get("group", ""))
+    if not group:
+        raise ValueError(f"roles.{role} entry is missing group")
+    if group not in pieces:
+        raise ValueError(f"roles.{role} references unknown group: {group}")
+
+    group_pieces = pieces[group]
+    indices_raw = source_raw.get("indices")
+    if indices_raw is None:
+        return group_pieces
+    if not isinstance(indices_raw, list):
+        raise ValueError(f"roles.{role}.{group}.indices must be a list")
+
+    selected: list[Stage3ComposerPiece] = []
+    for raw_index in indices_raw:
+        index = int(raw_index)
+        if index < 1 or index > len(group_pieces):
+            raise ValueError(f"roles.{role}.{group}.indices contains out-of-range index: {index}")
+        selected.append(group_pieces[index - 1])
+    return selected
+
+
 def _opaque_bounds(image: pygame.Surface) -> pygame.Rect:
     w, h = image.get_size()
     min_x, min_y = w, h
@@ -340,9 +372,7 @@ def _add_body_fill(
     overlap: int,
     surface_depth: int,
 ) -> None:
-    raw_body_pieces = _pieces_for_role(pieces, "body_fill")
-    body_pieces = [piece for piece in raw_body_pieces if piece.image.get_width() <= 130]
-    body_pieces = body_pieces or raw_body_pieces
+    body_pieces = _pieces_for_role(pieces, "body_fill")
     if not body_pieces:
         return
 
