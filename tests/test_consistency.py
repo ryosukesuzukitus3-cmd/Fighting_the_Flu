@@ -437,6 +437,11 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
     gates = [ev for ev in world_events if ev["type"] in {"breakable_gate", "weapon_gate"}]
     reward_gates = [ev for ev in world_events if ev["type"] == "weapon_gate"]
+    breakable_blocks = [
+        ev for ev in world_events
+        if ev.get("kind") == "fortress_block"
+        and (ev.get("destructible") or ev["type"] in {"breakable_gate", "weapon_gate"})
+    ]
     minibosses = [
         ev for ev in world_events
         if ev["type"] in {"EnemyCoughSprayer", "EnemySporeSplitter"}
@@ -464,7 +469,7 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert layout["length"] >= boss_x + 800
     assert len(world_events) >= 40
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 10
-    assert len(mounts) >= 3
+    assert len(mounts) >= 5
     assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
     assert len(gates) >= 3
     assert len(reward_gates) == 1
@@ -472,7 +477,28 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 2
     assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 2
     assert any(ev["type"] == "EnemyBilly" for ev in world_events)
-    assert max(ev.get("hp", 0) for ev in gates) >= 24
+    assert [(ev["w"], ev["h"], ev["hp"]) for ev in breakable_blocks] == [
+        (150, 94, 12),
+        (105, 246, 36),
+        (107, 168, 44),
+        (123, 288, 48),
+    ]
+    assert max(ev.get("hp", 0) for ev in gates) >= 48
+    for mount in mounts:
+        mount_center = mount["x"] + mount["w"] / 2
+        assert any(
+            abs(ev["x"] - mount_center) <= 220
+            for ev in turrets
+        ), f"turret_mount at x={mount['x']} should have nearby turrets"
+    for gate in gates:
+        assert any(
+            ev["type"] in {"EnemyTurret", "EnemyCrawler", "EnemyCoughSprayer"}
+            and gate["x"] - 300 <= ev.get("x", -9999) <= gate["x"] + 360
+            for ev in world_events
+        ), f"gate at x={gate['x']} should be part of a combat setpiece"
+    assert any(ev["type"] == "EnemyTurret" and ev.get("y", 0) >= 200 and 3140 <= ev["x"] <= 3400 for ev in turrets)
+    assert any(ev["type"] == "EnemyTurret" and ev.get("y", 0) >= 220 and 5400 <= ev["x"] <= 5650 for ev in turrets)
+    assert any(ev["type"] == "EnemyCrawler" and 7200 <= ev["x"] <= 7300 for ev in world_events)
     assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
     assert boss_gate["player_limit_x"] <= first_boss_room_x
     assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
@@ -865,6 +891,18 @@ def test_stage_backgrounds_draw_all_stages() -> None:
 
 # ── docs ─────────────────────────────────────────────────────────────
 
+def test_stage3_background_loop_uses_fade_in_tile_edge() -> None:
+    from src.entities.background import ScrollingBackground
+
+    bg = ScrollingBackground(3)
+    source = pygame.Surface((16, 4), pygame.SRCALPHA)
+    source.fill((120, 140, 150, 255))
+    strip = bg._stage3_backdrop_blend_strip(source, 12)
+
+    assert strip.get_at((0, 0)).a == 0
+    assert strip.get_at((11, 0)).a >= 250
+
+
 def test_terrain_strip_can_spawn_breakable_segments() -> None:
     from src.core.constants import SCREEN_HEIGHT
     from src.entities.terrain import make_terrain_strip
@@ -968,7 +1006,7 @@ def test_stage3_composer_floor_props_are_collidable() -> None:
         and getattr(sprite, "side", "") == ""
     ]
 
-    assert any(placement.role == "prop" for placement in composer_layout.placements)
+    assert any(placement.role == "floor_prop" for placement in composer_layout.placements)
     assert composer_layout.collision_rects
     assert prop_blocks
     assert all(block.rect.width > 0 and block.rect.height > 0 for block in prop_blocks)
@@ -979,13 +1017,16 @@ def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
     from src.entities.terrain import make_terrain_strip
 
     pieces = load_stage3_composer_pieces()
-    source_sizes = {
-        piece.image.get_size()
-        for piece in pieces.get("block_square", [])
-        if piece.image.get_width() <= 130
-    }
-    source_sizes = source_sizes or {piece.image.get_size() for piece in pieces.get("block_square", [])}
+    source_sizes = {piece.image.get_size() for piece in pieces.get("body_fill", [])}
     assert source_sizes
+    assert [(piece.group, piece.index + 1) for piece in pieces["body_fill"]] == [
+        ("block_square", 1),
+        ("block_square", 3),
+        ("block_square", 4),
+        ("block_square", 6),
+        ("block_square", 7),
+        ("block_square", 8),
+    ]
 
     segments = make_terrain_strip(
         -100,
@@ -1003,7 +1044,7 @@ def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
         irregularity=58,
     )
     layout = build_stage3_composer_layout(segments, pieces, start_x=0, end_x=1000)
-    body = [placement for placement in layout.placements if placement.role == "body"]
+    body = [placement for placement in layout.placements if placement.role == "body_fill"]
 
     assert body
     assert all(placement.image.get_size() in source_sizes for placement in body)
@@ -1018,9 +1059,36 @@ def test_stage3_composer_body_fill_touches_surface_caps() -> None:
     )
 
     pieces = load_stage3_composer_pieces()
-    cap_heights = sorted(piece.image.get_height() for piece in pieces["strip_top"])
+    cap_heights = sorted(piece.image.get_height() for piece in pieces["floor_surface"])
 
     assert _surface_band_depth(pieces) == cap_heights[len(cap_heights) // 2] - SURFACE_CAP_OVERHANG
+
+
+def test_stage3_composer_rect_roles_are_available() -> None:
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+    from src.entities.terrain import _stage3_piece_cover_scale
+
+    pieces = load_stage3_composer_pieces()
+    expected_roles = {
+        "floor_surface",
+        "ceiling_surface",
+        "body_fill",
+        "exposed_column",
+        "floor_prop",
+        "decor_prop",
+        "turret_mount",
+        "breakable_block",
+    }
+
+    assert expected_roles <= set(pieces)
+    assert all(pieces[role] for role in expected_roles)
+    assert "block_tall" in {piece.group for piece in pieces["breakable_block"]}
+    for w, h in ((150, 94), (105, 246), (107, 168), (123, 288)):
+        assert min(_stage3_piece_cover_scale(piece.image, w, h) for piece in pieces["breakable_block"]) <= 1.25
+        assert min(
+            abs((piece.image.get_width() / max(1, piece.image.get_height())) - (w / h))
+            for piece in pieces["breakable_block"]
+        ) <= 0.02
 
 
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
@@ -1033,6 +1101,62 @@ def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
     assert ceiling_block._surface_anchor == "ceiling"
     assert floor_block.take_damage(1) is False
     assert floor_block._surface_anchor == "floor"
+
+
+def test_stage3_fortress_breakable_blocks_are_visually_distinct() -> None:
+    from src.entities.terrain import Terrain
+
+    normal = Terrain(0, 330, 126, 168, "fortress_block")
+    breakable = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=3)
+    reward = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=3, fixed_drop="WeaponItem")
+
+    def count_crack_pixels(surface: pygame.Surface) -> int:
+        count = 0
+        for y in range(surface.get_height()):
+            for x in range(surface.get_width()):
+                r, g, b, a = surface.get_at((x, y))
+                if a >= 180 and 175 <= r <= 205 and 120 <= g <= 145 and 90 <= b <= 115:
+                    count += 1
+        return count
+
+    def count_reward_core_pixels(surface: pygame.Surface) -> int:
+        count = 0
+        for y in range(surface.get_height()):
+            for x in range(surface.get_width()):
+                r, g, b, a = surface.get_at((x, y))
+                if a > 120 and r <= 160 and g >= 180 and b >= 210:
+                    count += 1
+        return count
+
+    assert pygame.image.tobytes(normal.image, "RGBA") != pygame.image.tobytes(breakable.image, "RGBA")
+    assert count_crack_pixels(breakable.image) > count_crack_pixels(normal.image) + 18
+    assert count_reward_core_pixels(reward.image) > count_reward_core_pixels(breakable.image) + 40
+
+
+def test_stage3_fortress_breakable_damage_changes_visual_state() -> None:
+    from src.entities.terrain import Terrain, _stage3_breakable_crack_count
+
+    def count_crack_pixels(surface: pygame.Surface) -> int:
+        count = 0
+        for y in range(surface.get_height()):
+            for x in range(surface.get_width()):
+                r, g, b, a = surface.get_at((x, y))
+                if a >= 180 and 175 <= r <= 205 and 120 <= g <= 145 and 90 <= b <= 115:
+                    count += 1
+        return count
+
+    block = Terrain(0, 330, 126, 168, "fortress_block", destructible=True, hp=4)
+    before_count = count_crack_pixels(block.image)
+
+    assert block.take_damage(1) is False
+    first_count = count_crack_pixels(block.image)
+    assert first_count > before_count
+
+    assert block.take_damage(1) is False
+    second_count = count_crack_pixels(block.image)
+    assert second_count > first_count
+
+    assert _stage3_breakable_crack_count(126, 168, 0.5) > _stage3_breakable_crack_count(126, 168, 0.0)
 
 
 def test_spawner_surface_ignores_visual_only_terrain() -> None:
@@ -1162,6 +1286,7 @@ def test_boss_phase_configs_reference_known_patterns() -> None:
         "aimring6", "aimring8", "scatter", "cross", "spiral", "vortex2",
         "vortex3", "chaos", "burst3", "wall_gap", "fever_lunge",
         "mega_laser", "super_laser", "drone_cross", "rock_fall", "shogi_file",
+        "shogi_storm", "shogi_drop", "board_throw", "mega_beam", "void_break",
         "dash_knives", "curtain",
     }
     used = {phase[1] for phases in _PHASE_CONFIGS.values() for phase in phases}

@@ -1,5 +1,17 @@
 {
   "sheet": "assets/graphic/stage3_fortress_terrain_sheet.png",
+  "roles": {
+    "floor_surface": ["strip_top"],
+    "ceiling_surface": ["strip_top"],
+    "body_fill": [
+      {"group": "block_square", "indices": [1, 3, 4, 6, 7, 8]}
+    ],
+    "exposed_column": ["block_tall", "block_square"],
+    "floor_prop": ["floor_props"],
+    "decor_prop": ["floor_props"],
+    "turret_mount": ["block_wide", "strip_top"],
+    "breakable_block": ["block_wide", "block_square", "block_tall"]
+  },
   "groups": {
     "strip_top": {
       "color": [

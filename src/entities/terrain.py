@@ -78,17 +78,36 @@ def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.
     return surf
 
 
-def _stage3_piece_fill(image: pygame.Surface, w: int, h: int) -> pygame.Surface:
+def _stage3_piece_fill(image: pygame.Surface, w: int, h: int, *, fit: str = "cover") -> pygame.Surface:
     sw, sh = image.get_size()
-    scale = max(w / max(1, sw), h / max(1, sh))
-    scaled_size = (max(w, int(sw * scale)), max(h, int(sh * scale)))
+    if fit == "contain":
+        scale = min(w / max(1, sw), h / max(1, sh))
+        scaled_size = (
+            max(1, min(w, round(sw * scale))),
+            max(1, min(h, round(sh * scale))),
+        )
+    else:
+        scale = _stage3_piece_cover_scale(image, w, h)
+        scaled_size = (max(w, int(sw * scale)), max(h, int(sh * scale)))
     scaled = pygame.transform.smoothscale(image, scaled_size)
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
     surf.blit(scaled, ((w - scaled.get_width()) // 2, (h - scaled.get_height()) // 2))
     return surf
 
 
-def _stage3_rect_material_surface(w: int, h: int, *, seed: int, require_top: bool) -> pygame.Surface | None:
+def _stage3_piece_cover_scale(image: pygame.Surface, w: int, h: int) -> float:
+    sw, sh = image.get_size()
+    return max(w / max(1, sw), h / max(1, sh))
+
+
+def _stage3_rect_material_surface(
+    w: int,
+    h: int,
+    *,
+    seed: int,
+    require_top: bool,
+    preferred_role: str | None = None,
+) -> pygame.Surface | None:
     try:
         from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
     except Exception:
@@ -99,19 +118,21 @@ def _stage3_rect_material_surface(w: int, h: int, *, seed: int, require_top: boo
         return None
 
     aspect = w / max(1, h)
-    if require_top:
+    if preferred_role == "breakable_block":
+        groups = ("breakable_block",)
+    elif require_top:
         if h > w * 1.35:
-            groups = ("block_tall", "block_square", "block_wide")
+            groups = ("exposed_column", "body_fill", "block_tall", "block_square", "block_wide")
         elif w > h * 1.55:
-            groups = ("block_wide", "strip_top", "block_square")
+            groups = ("turret_mount", "floor_surface", "block_wide", "strip_top", "block_square")
         else:
-            groups = ("block_square", "block_wide", "block_tall")
+            groups = ("breakable_block", "turret_mount", "exposed_column", "block_square", "block_wide", "block_tall")
     elif h > w * 1.35:
-        groups = ("block_tall", "block_square")
+        groups = ("exposed_column", "body_fill", "block_tall", "block_square")
     elif w > h * 1.55:
-        groups = ("block_wide", "block_square")
+        groups = ("turret_mount", "body_fill", "block_wide", "block_square")
     else:
-        groups = ("block_square", "block_tall", "block_wide")
+        groups = ("body_fill", "exposed_column", "breakable_block", "block_square", "block_tall", "block_wide")
     candidates = [
         piece
         for group in groups
@@ -119,18 +140,44 @@ def _stage3_rect_material_surface(w: int, h: int, *, seed: int, require_top: boo
     ]
     if not candidates:
         return None
+    if preferred_role == "breakable_block":
+        low_upscale_candidates = [
+            piece
+            for piece in candidates
+            if _stage3_piece_cover_scale(piece.image, w, h) <= 1.25
+        ]
+        if low_upscale_candidates:
+            candidates = low_upscale_candidates
 
-    ranked = sorted(
-        candidates,
-        key=lambda piece: (
-            abs((piece.image.get_width() / max(1, piece.image.get_height())) - aspect),
-            abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
-        ),
-    )
-    piece = ranked[seed % min(4, len(ranked))]
-    surf = _stage3_piece_fill(piece.image, w, h)
-    if require_top:
-        top_candidates = pieces_by_group.get("block_wide", []) or pieces_by_group.get("strip_top", [])
+    if preferred_role == "breakable_block":
+        ranked = sorted(
+            candidates,
+            key=lambda piece: (
+                abs((piece.image.get_width() / max(1, piece.image.get_height())) - aspect),
+                max(0.0, _stage3_piece_cover_scale(piece.image, w, h) - 1.0),
+                abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
+            ),
+        )
+    else:
+        ranked = sorted(
+            candidates,
+            key=lambda piece: (
+                abs((piece.image.get_width() / max(1, piece.image.get_height())) - aspect),
+                abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
+            ),
+        )
+    if preferred_role == "breakable_block":
+        piece = ranked[0]
+    else:
+        piece = ranked[seed % min(4, len(ranked))]
+    surf = _stage3_piece_fill(piece.image, w, h, fit="contain" if preferred_role == "breakable_block" else "cover")
+    if require_top and preferred_role != "breakable_block":
+        top_candidates = (
+            pieces_by_group.get("floor_surface", [])
+            or pieces_by_group.get("turret_mount", [])
+            or pieces_by_group.get("block_wide", [])
+            or pieces_by_group.get("strip_top", [])
+        )
         if top_candidates:
             top_piece = top_candidates[(seed >> 3) % min(4, len(top_candidates))]
             cap_h = min(h, max(34, min(92, int(h * 0.42))))
@@ -140,6 +187,38 @@ def _stage3_rect_material_surface(w: int, h: int, *, seed: int, require_top: boo
     veil.fill((0, 0, 0, 24))
     surf.blit(veil, (0, 0))
     return surf
+
+
+def _stage3_breakable_crack_count(w: int, h: int, damage_ratio: float) -> int:
+    damage = max(0.0, min(1.0, damage_ratio))
+    base = max(3, min(7, (w * h) // 7000 + 2))
+    growth = max(6, min(14, (w + h) // 34))
+    return base + int(round(damage * growth))
+
+
+def _stage3_draw_breakable_cracks(
+    surf: pygame.Surface,
+    w: int,
+    h: int,
+    *,
+    rng: random.Random,
+    damage_ratio: float,
+) -> None:
+    damage = max(0.0, min(1.0, damage_ratio))
+    crack_count = _stage3_breakable_crack_count(w, h, damage)
+    for i in range(crack_count):
+        if i == 0:
+            x, y = w // 2, h // 2
+        else:
+            x = rng.randint(6, max(6, w - 7))
+            y = rng.randint(7, max(7, h - 8))
+        pts = [(x, y)]
+        for _step in range(rng.randint(2, 4 + int(damage > 0.5))):
+            x += rng.randint(-12, 12)
+            y += rng.randint(-10, 10)
+            pts.append((max(3, min(w - 4, x)), max(3, min(h - 4, y))))
+        pygame.draw.lines(surf, (30, 18, 16, 170), False, pts, 2)
+        pygame.draw.lines(surf, (190, 132, 104, 220), False, pts, 1)
 
 
 class Terrain(pygame.sprite.Sprite):
@@ -255,34 +334,32 @@ class Terrain(pygame.sprite.Sprite):
         seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
         rng = random.Random(seed)
         surf = _stage3_rect_material_surface(
-            w, h, seed=seed, require_top=surface_anchor != "ceiling",
+            w,
+            h,
+            seed=seed,
+            require_top=surface_anchor != "ceiling",
+            preferred_role="breakable_block" if destructible else None,
         ) or _stage3_material_surface(
             w, h, seed=seed, role="block",
         )
 
-        light_count = max(1, (w * h) // 8200)
-        for _ in range(light_count):
-            sx = rng.randint(8, max(8, w - 10))
-            sy = rng.randint(8, max(8, h - 10))
-            pygame.draw.rect(surf, (174, 78, 108), (sx, sy, rng.randint(2, 4), rng.randint(1, 3)))
-            if rng.random() < 0.45:
-                pygame.draw.rect(surf, (80, 210, 170), (max(0, sx - 4), sy + 1, rng.randint(1, 3), 1))
+        if not destructible:
+            light_count = max(1, (w * h) // 8200)
+            for _ in range(light_count):
+                sx = rng.randint(8, max(8, w - 10))
+                sy = rng.randint(8, max(8, h - 10))
+                pygame.draw.rect(surf, (174, 78, 108), (sx, sy, rng.randint(2, 4), rng.randint(1, 3)))
+                if rng.random() < 0.45:
+                    pygame.draw.rect(surf, (80, 210, 170), (max(0, sx - 4), sy + 1, rng.randint(1, 3), 1))
 
         if destructible:
-            damage = max(0.0, min(1.0, damage_ratio))
-            for _ in range(4 + int(damage * 7)):
-                x = rng.randint(6, max(6, w - 7))
-                y = rng.randint(7, max(7, h - 8))
-                pts = [(x, y)]
-                for _step in range(rng.randint(2, 4)):
-                    x += rng.randint(-12, 12)
-                    y += rng.randint(-10, 10)
-                    pts.append((max(3, min(w - 4, x)), max(3, min(h - 4, y))))
-                pygame.draw.lines(surf, (190, 132, 104), False, pts, 1)
-            for _ in range(max(1, (w * h) // 6400)):
-                sx = rng.randint(7, max(7, w - 8))
-                sy = rng.randint(7, max(7, h - 8))
-                pygame.draw.circle(surf, (210, 96, 92), (sx, sy), rng.randint(2, 4))
+            _stage3_draw_breakable_cracks(
+                surf,
+                w,
+                h,
+                rng=rng,
+                damage_ratio=damage_ratio,
+            )
 
         Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
         return surf

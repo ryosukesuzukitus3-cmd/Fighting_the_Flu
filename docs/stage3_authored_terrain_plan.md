@@ -90,16 +90,21 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 - `AuthoredTerrain` の制御点で通路幅、上下比率、蛇行、開ける地点を調整する
 - 敵、砲台、floor props、破壊可能ブロック、ゲート周辺を地形と合わせて再配置する
 - 地形変更前に敵配置だけ詰めることは避ける
+- ゲートは単独のHP壁にせず、近くの砲台台・砲台・地形走行敵と組み合わせた戦闘セットピースにする。Stage3では、最初のゲートを上下砲台のクロスファイア、ウェポンゲートを報酬庫、終盤ゲートをCrawlerで足元から押す突破戦として扱う
 
 ### 3. 地形パーツの役割整理
 
 素材分類を形状だけでなく用途ベースへ整理する。
 
+`tools/stage3_terrain_rects.json` は、画像上の切り出し単位である `groups` と、ゲーム内用途を表す `roles` の二層で管理する。composerや固定地形描画は `floor_surface` / `body_fill` などの role を参照し、`strip_top` / `block_square` などの形状グループ名へ直接依存しない。
+
+`roles` はグループ全体だけでなく、`{"group": "block_square", "indices": [1, 3]}` のようにプレビュー番号ベースで個別rectを指定できる。手動alpha maskは元の `group` とrect位置に紐づくため、同じrectを別グループへ複製せず、role側で用途を絞る。
+
 候補:
 
 - `floor_surface`: 床側の移動可能領域に接する表面
 - `ceiling_surface`: 天井側の移動可能領域に接する表面
-- `body_fill`: 地中・壁内部の充填
+- `body_fill`: 地中・壁内部の充填。上面・報酬マーク・横長装飾が目立つrectは入れない
 - `exposed_column`: 露出した柱・壁
 - `floor_prop`: 床上に積む当たり判定ありの小物
 - `decor_prop`: 当たり判定なしの装飾
@@ -111,6 +116,8 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 - 壊せることが分かる見た目にする
 - 上面ありの配置用素材を用意する
 - ひび入り、弱点、報酬入りが分かる発光差分を検討する
+- Stage3の `fortress_block` は、破壊可能な場合だけ `breakable_block` roleのrect素材を一枚で使い、ダメージ段階に応じて亀裂量を増やす。警告帯・弱点ノード・赤点は足さない
+- 縦長ゲートでは小さいsquare素材を無理に拡大せず、`block_tall` を候補に含める。破壊可能ブロックは素材を見切らずに表示し、ブロック寸法を素材アスペクトへ寄せる。高倍率拡大は避け、破壊可能ブロックのHPは既存の約2倍を基準にする
 
 ### 5. 奥行きと視認性の最終調整
 
