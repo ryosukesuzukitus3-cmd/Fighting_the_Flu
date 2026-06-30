@@ -150,11 +150,13 @@ class GameScene(
         self._bg_text_font   = None
 
         # Stage2（情報汚染地帯）のみ、背景に Matrix 風の縦コード雨を重ねる。
+        # 等幅フォント（MS ゴシック）で3層（奥→手前）の奥行きを出す。
         self._matrix_rain = None
         if self._stage_id == 2:
             from src.entities.matrix_rain import MatrixRain
             self._matrix_rain = MatrixRain(
-                SCREEN_WIDTH, SCREEN_HEIGHT, self.game.resources.pixelfont(18))
+                SCREEN_WIDTH, SCREEN_HEIGHT,
+                lambda s: self.game.resources.sysfont("msgothic", s))
 
         # 戦闘中自動タイムアウトセリフ
         self._boss_dialogue_timer:   float = 0.0
