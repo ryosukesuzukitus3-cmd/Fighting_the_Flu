@@ -1017,13 +1017,16 @@ def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
     from src.entities.terrain import make_terrain_strip
 
     pieces = load_stage3_composer_pieces()
-    source_sizes = {
-        piece.image.get_size()
-        for piece in pieces.get("body_fill", [])
-        if piece.image.get_width() <= 130
-    }
-    source_sizes = source_sizes or {piece.image.get_size() for piece in pieces.get("body_fill", [])}
+    source_sizes = {piece.image.get_size() for piece in pieces.get("body_fill", [])}
     assert source_sizes
+    assert [(piece.group, piece.index + 1) for piece in pieces["body_fill"]] == [
+        ("block_square", 1),
+        ("block_square", 3),
+        ("block_square", 4),
+        ("block_square", 6),
+        ("block_square", 7),
+        ("block_square", 8),
+    ]
 
     segments = make_terrain_strip(
         -100,

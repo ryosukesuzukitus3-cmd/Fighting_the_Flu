@@ -98,11 +98,13 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 
 `tools/stage3_terrain_rects.json` は、画像上の切り出し単位である `groups` と、ゲーム内用途を表す `roles` の二層で管理する。composerや固定地形描画は `floor_surface` / `body_fill` などの role を参照し、`strip_top` / `block_square` などの形状グループ名へ直接依存しない。
 
+`roles` はグループ全体だけでなく、`{"group": "block_square", "indices": [1, 3]}` のようにプレビュー番号ベースで個別rectを指定できる。手動alpha maskは元の `group` とrect位置に紐づくため、同じrectを別グループへ複製せず、role側で用途を絞る。
+
 候補:
 
 - `floor_surface`: 床側の移動可能領域に接する表面
 - `ceiling_surface`: 天井側の移動可能領域に接する表面
-- `body_fill`: 地中・壁内部の充填
+- `body_fill`: 地中・壁内部の充填。上面・報酬マーク・横長装飾が目立つrectは入れない
 - `exposed_column`: 露出した柱・壁
 - `floor_prop`: 床上に積む当たり判定ありの小物
 - `decor_prop`: 当たり判定なしの装飾
