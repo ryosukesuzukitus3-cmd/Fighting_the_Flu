@@ -156,12 +156,15 @@ def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_boss_terrain_modes = {"replace", "preplaced"}
     valid_terrain_kinds = {"wall", "rock", "debris", "data_block", "fortress_block", "clot"}
+    valid_surface_anchors = {"floor", "ceiling"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
     from src.core.registries import ITEM_NAMES
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
+    stage3_rects = json.loads((ROOT / "tools" / "stage3_terrain_rects.json").read_text(encoding="utf-8"))
+    valid_stage3_material_roles = set(stage3_rects.get("roles", {}))
 
     def assert_terrain_event(section: str, i: int, ev: dict) -> None:
         assert ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types, (
@@ -177,6 +180,14 @@ def test_stage_json_required_fields() -> None:
             assert ev.get("kind", "wall") in valid_terrain_kinds, (
                 f"{section}[{i}](Terrain): unknown kind '{ev.get('kind', 'wall')}'"
             )
+            if "surface_anchor" in ev:
+                assert ev["surface_anchor"] in valid_surface_anchors, (
+                    f"{section}[{i}](Terrain): invalid surface_anchor '{ev['surface_anchor']}'"
+                )
+            if "material_role" in ev:
+                assert ev["material_role"] in valid_stage3_material_roles, (
+                    f"{section}[{i}](Terrain): invalid material_role '{ev['material_role']}'"
+                )
         else:
             required = ("top", "bottom") if ev.get("type") in authored_terrain_types else ("length",)
             for field in required:
@@ -222,6 +233,14 @@ def test_stage_json_required_fields() -> None:
                 assert ev["kind"] in valid_terrain_kinds, (
                     f"{p.name} events[{i}](Terrain): 未知の kind '{ev['kind']}'"
                 )
+                if "surface_anchor" in ev:
+                    assert ev["surface_anchor"] in valid_surface_anchors, (
+                        f"{p.name} events[{i}](Terrain): invalid surface_anchor '{ev['surface_anchor']}'"
+                    )
+                if "material_role" in ev:
+                    assert ev["material_role"] in valid_stage3_material_roles, (
+                        f"{p.name} events[{i}](Terrain): invalid material_role '{ev['material_role']}'"
+                    )
             elif ev.get("type") in strip_terrain_types | authored_terrain_types:
                 required = ("theme", "top", "bottom") if ev.get("type") in authored_terrain_types else ("theme", "length")
                 for field in required:
@@ -250,6 +269,8 @@ def test_stage_json_required_fields() -> None:
                 assert ev["surface"] in {"top", "bottom"}, (
                     f"{p.name} world_events[{i}]: invalid surface '{ev['surface']}'"
                 )
+            if ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types:
+                assert_terrain_event(f"{p.name} world_events", i, ev)
         for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for i, ev in enumerate(data.get(section, [])):
                 assert_terrain_event(f"{p.name} {section}", i, ev)
@@ -1073,6 +1094,8 @@ def test_stage3_composer_rect_roles_are_available() -> None:
         "floor_surface",
         "ceiling_surface",
         "body_fill",
+        "fixed_floor_block",
+        "fixed_ceiling_block",
         "exposed_column",
         "floor_prop",
         "decor_prop",
@@ -1082,7 +1105,13 @@ def test_stage3_composer_rect_roles_are_available() -> None:
 
     assert expected_roles <= set(pieces)
     assert all(pieces[role] for role in expected_roles)
-    assert "block_tall" in {piece.group for piece in pieces["breakable_block"]}
+    assert [(piece.group, piece.index + 1) for piece in pieces["breakable_block"]] == [
+        ("block_square", 2),
+        ("block_tall", 1),
+        ("block_tall", 2),
+        ("block_tall", 4),
+        ("block_tall", 8),
+    ]
     for w, h in ((150, 94), (105, 246), (107, 168), (123, 288)):
         assert min(_stage3_piece_cover_scale(piece.image, w, h) for piece in pieces["breakable_block"]) <= 1.25
         assert min(

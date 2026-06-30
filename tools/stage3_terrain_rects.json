@@ -6,11 +6,25 @@
     "body_fill": [
       {"group": "block_square", "indices": [1, 3, 4, 6, 7, 8]}
     ],
+    "fixed_floor_block": [
+      {"group": "block_wide", "indices": [2, 3, 5]},
+      {"group": "block_square", "indices": [2, 5]},
+      {"group": "block_tall", "indices": [7, 8]}
+    ],
+    "fixed_ceiling_block": [
+      {"group": "block_square", "indices": [1, 2, 3, 4, 5, 6, 7, 8]},
+      {"group": "block_tall", "indices": [2, 3, 5, 6]}
+    ],
     "exposed_column": ["block_tall", "block_square"],
     "floor_prop": ["floor_props"],
     "decor_prop": ["floor_props"],
-    "turret_mount": ["block_wide", "strip_top"],
-    "breakable_block": ["block_wide", "block_square", "block_tall"]
+    "turret_mount": [
+      {"group": "block_wide", "indices": [4, 5]}
+    ],
+    "breakable_block": [
+      {"group": "block_square", "indices": [2]},
+      {"group": "block_tall", "indices": [1, 2, 4, 8]}
+    ]
   },
   "groups": {
     "strip_top": {

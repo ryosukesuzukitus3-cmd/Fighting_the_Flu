@@ -284,6 +284,9 @@ class EnemySpawner:
                 fixed_drop = event.get("fixed_drop")
                 if enemy_type == "weapon_gate" and fixed_drop is None:
                     fixed_drop = "WeaponItem"
+                material_role = event.get("material_role")
+                if enemy_type == "turret_mount" and material_role is None:
+                    material_role = "turret_mount"
                 self._terrain.add(Terrain(
                     world_x,
                     float(event.get("y", 0)),
@@ -294,6 +297,8 @@ class EnemySpawner:
                     hp=int(event.get("hp", 5)),
                     drop_chance=float(event.get("drop_chance", 0.0)),
                     fixed_drop=fixed_drop,
+                    surface_anchor=event.get("surface_anchor"),
+                    material_role=material_role,
                 ))
             return True
 

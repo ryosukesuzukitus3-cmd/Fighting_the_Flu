@@ -78,9 +78,26 @@ def _stage3_material_surface(w: int, h: int, *, seed: int, role: str) -> pygame.
     return surf
 
 
-def _stage3_piece_fill(image: pygame.Surface, w: int, h: int, *, fit: str = "cover") -> pygame.Surface:
+_STAGE3_WHOLE_PIECE_ROLES = frozenset({
+    "breakable_block",
+    "fixed_floor_block",
+    "fixed_ceiling_block",
+    "turret_mount",
+})
+
+
+def _stage3_piece_fill(
+    image: pygame.Surface,
+    w: int,
+    h: int,
+    *,
+    fit: str = "cover",
+    anchor: str = "center",
+) -> pygame.Surface:
     sw, sh = image.get_size()
-    if fit == "contain":
+    if fit == "stretch":
+        scaled_size = (max(1, w), max(1, h))
+    elif fit == "contain":
         scale = min(w / max(1, sw), h / max(1, sh))
         scaled_size = (
             max(1, min(w, round(sw * scale))),
@@ -91,7 +108,14 @@ def _stage3_piece_fill(image: pygame.Surface, w: int, h: int, *, fit: str = "cov
         scaled_size = (max(w, int(sw * scale)), max(h, int(sh * scale)))
     scaled = pygame.transform.smoothscale(image, scaled_size)
     surf = pygame.Surface((w, h), pygame.SRCALPHA)
-    surf.blit(scaled, ((w - scaled.get_width()) // 2, (h - scaled.get_height()) // 2))
+    x = (w - scaled.get_width()) // 2
+    if anchor == "ceiling":
+        y = 0
+    elif anchor == "floor":
+        y = h - scaled.get_height()
+    else:
+        y = (h - scaled.get_height()) // 2
+    surf.blit(scaled, (x, y))
     return surf
 
 
@@ -107,6 +131,7 @@ def _stage3_rect_material_surface(
     seed: int,
     require_top: bool,
     preferred_role: str | None = None,
+    surface_anchor: str = "floor",
 ) -> pygame.Surface | None:
     try:
         from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
@@ -118,21 +143,23 @@ def _stage3_rect_material_surface(
         return None
 
     aspect = w / max(1, h)
-    if preferred_role == "breakable_block":
+    if preferred_role and pieces_by_group.get(preferred_role):
+        groups = (preferred_role,)
+    elif preferred_role == "breakable_block":
         groups = ("breakable_block",)
     elif require_top:
         if h > w * 1.35:
-            groups = ("exposed_column", "body_fill", "block_tall", "block_square", "block_wide")
+            groups = ("fixed_floor_block", "exposed_column", "body_fill", "block_tall", "block_square", "block_wide")
         elif w > h * 1.55:
-            groups = ("turret_mount", "floor_surface", "block_wide", "strip_top", "block_square")
+            groups = ("turret_mount", "fixed_floor_block", "floor_surface", "block_wide", "strip_top", "block_square")
         else:
-            groups = ("breakable_block", "turret_mount", "exposed_column", "block_square", "block_wide", "block_tall")
+            groups = ("fixed_floor_block", "turret_mount", "exposed_column", "block_square", "block_wide", "block_tall")
     elif h > w * 1.35:
-        groups = ("exposed_column", "body_fill", "block_tall", "block_square")
+        groups = ("fixed_ceiling_block", "exposed_column", "body_fill", "block_tall", "block_square")
     elif w > h * 1.55:
-        groups = ("turret_mount", "body_fill", "block_wide", "block_square")
+        groups = ("turret_mount", "fixed_ceiling_block", "body_fill", "block_wide", "block_square")
     else:
-        groups = ("body_fill", "exposed_column", "breakable_block", "block_square", "block_tall", "block_wide")
+        groups = ("fixed_ceiling_block", "body_fill", "exposed_column", "block_square", "block_tall", "block_wide")
     candidates = [
         piece
         for group in groups
@@ -140,7 +167,7 @@ def _stage3_rect_material_surface(
     ]
     if not candidates:
         return None
-    if preferred_role == "breakable_block":
+    if preferred_role in _STAGE3_WHOLE_PIECE_ROLES:
         low_upscale_candidates = [
             piece
             for piece in candidates
@@ -149,7 +176,7 @@ def _stage3_rect_material_surface(
         if low_upscale_candidates:
             candidates = low_upscale_candidates
 
-    if preferred_role == "breakable_block":
+    if preferred_role in _STAGE3_WHOLE_PIECE_ROLES:
         ranked = sorted(
             candidates,
             key=lambda piece: (
@@ -166,12 +193,18 @@ def _stage3_rect_material_surface(
                 abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
             ),
         )
-    if preferred_role == "breakable_block":
+    if preferred_role in _STAGE3_WHOLE_PIECE_ROLES:
         piece = ranked[0]
     else:
         piece = ranked[seed % min(4, len(ranked))]
-    surf = _stage3_piece_fill(piece.image, w, h, fit="contain" if preferred_role == "breakable_block" else "cover")
-    if require_top and preferred_role != "breakable_block":
+    if preferred_role in {"fixed_floor_block", "fixed_ceiling_block", "turret_mount"}:
+        fit = "stretch"
+    elif preferred_role in _STAGE3_WHOLE_PIECE_ROLES:
+        fit = "contain"
+    else:
+        fit = "cover"
+    surf = _stage3_piece_fill(piece.image, w, h, fit=fit, anchor=surface_anchor)
+    if require_top and preferred_role not in _STAGE3_WHOLE_PIECE_ROLES:
         top_candidates = (
             pieces_by_group.get("floor_surface", [])
             or pieces_by_group.get("turret_mount", [])
@@ -236,6 +269,8 @@ class Terrain(pygame.sprite.Sprite):
         hp: int = 5,
         drop_chance: float = 0.0,
         fixed_drop: str | None = None,
+        surface_anchor: str | None = None,
+        material_role: str | None = None,
     ) -> None:
         super().__init__()
         self.world_x = float(world_x)
@@ -248,12 +283,16 @@ class Terrain(pygame.sprite.Sprite):
         self.fixed_drop = fixed_drop
         self._w = w
         self._h = h
-        self._surface_anchor = "ceiling" if self.y <= 1.0 else "floor"
+        self._surface_anchor = surface_anchor if surface_anchor in {"floor", "ceiling"} else (
+            "ceiling" if self.y <= 1.0 else "floor"
+        )
+        self._material_role = material_role
         self.image   = self._make_surface(
             w, h, kind,
             destructible=destructible,
             fixed_drop=fixed_drop,
             surface_anchor=self._surface_anchor,
+            material_role=material_role,
         )
         self.rect    = self.image.get_rect(topleft=(int(world_x), int(y)))
 
@@ -267,6 +306,7 @@ class Terrain(pygame.sprite.Sprite):
         damage_ratio: float = 0.0,
         fixed_drop: str | None = None,
         surface_anchor: str = "floor",
+        material_role: str | None = None,
     ) -> pygame.Surface:
         if kind == "clot":
             return Terrain._make_clot_surface(
@@ -288,6 +328,8 @@ class Terrain(pygame.sprite.Sprite):
                 destructible=destructible,
                 damage_ratio=damage_ratio,
                 fixed_drop=fixed_drop,
+                surface_anchor=surface_anchor,
+                material_role=material_role,
             )
 
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
@@ -330,15 +372,22 @@ class Terrain(pygame.sprite.Sprite):
         damage_ratio: float = 0.0,
         fixed_drop: str | None = None,
         surface_anchor: str = "floor",
+        material_role: str | None = None,
     ) -> pygame.Surface:
         seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
         rng = random.Random(seed)
+        preferred_role = material_role or (
+            "breakable_block" if destructible else (
+                "fixed_ceiling_block" if surface_anchor == "ceiling" else "fixed_floor_block"
+            )
+        )
         surf = _stage3_rect_material_surface(
             w,
             h,
             seed=seed,
             require_top=surface_anchor != "ceiling",
-            preferred_role="breakable_block" if destructible else None,
+            preferred_role=preferred_role,
+            surface_anchor=surface_anchor,
         ) or _stage3_material_surface(
             w, h, seed=seed, role="block",
         )
@@ -601,6 +650,7 @@ class Terrain(pygame.sprite.Sprite):
             damage_ratio=damage_ratio,
             fixed_drop=self.fixed_drop,
             surface_anchor=self._surface_anchor,
+            material_role=self._material_role,
         )
         self.rect = self.image.get_rect(center=center)
         return False
