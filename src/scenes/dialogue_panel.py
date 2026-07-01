@@ -93,6 +93,22 @@ def _visible_lines(lines, chars):
     return tuple(out)
 
 
+def _wrap_line(font, text, max_w):
+    """1 論理行を max_w 以内の副行へ折り返す（日本語＝文字単位で折る）。"""
+    if not text or font.size(text)[0] <= max_w:
+        return [text]
+    out, cur = [], ""
+    for ch in text:
+        if cur and font.size(cur + ch)[0] > max_w:
+            out.append(cur)
+            cur = ch
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
 def _arrow_visible(arrow_on):
     if arrow_on is not None:
         return arrow_on
@@ -162,6 +178,10 @@ def _draw_arrow(screen, rect, alpha, arrow_on, complete):
 # ── 戦闘パネル（顔アイコン・省スペース） ──────────────────────────────
 
 COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 128, SCREEN_WIDTH - 52, 92)
+_COMBAT_PORTRAIT_SIZE = 68        # 顔アイコンは固定（パネルが伸びても一定）
+_COMBAT_LINE_H = 43               # pixelfont(26) の行高（38）＋行間 5
+_COMBAT_PAD_TOP = 18
+_COMBAT_PAD_BOTTOM = 14
 
 
 def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
@@ -169,12 +189,27 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                       alpha=255, center=False, arrow_on=None, chars=None,
                       complete=None, text_transform=None, text_jitter=0,
                       show_portrait=True):
-    rect = COMBAT_PANEL_RECT
-    _draw_window(screen, rect, style, alpha)
-    text_x, text_w = rect.x + 22, rect.w - 44
+    base = COMBAT_PANEL_RECT
+    body = resources.pixelfont(26)
+    # 本文の左端と使える横幅（顔アイコンぶんを差し引く）を先に確定する。
+    text_x, text_w = base.x + 22, base.w - 44
     portrait = speaker_portrait(speaker) if show_portrait else None
     if portrait:
-        size = rect.h - 24
+        text_x = base.x + 14 + _COMBAT_PORTRAIT_SIZE + 20
+        text_w = base.right - 22 - text_x
+    # 長い行は横幅に合わせて折り返し、行数に応じてパネルを上へ伸ばす。
+    # （単行はこれまで通り 92px・同位置。複数行/長行のみ上方向に成長する）
+    wrapped: list[str] = []
+    for ln in lines:
+        wrapped.extend(_wrap_line(body, ln, text_w))
+    wrapped = wrapped or [""]
+    content_h = _COMBAT_PAD_TOP + len(wrapped) * _COMBAT_LINE_H + _COMBAT_PAD_BOTTOM
+    height = max(base.h, content_h)
+    rect = pygame.Rect(base.x, base.bottom - height, base.w, height)
+
+    _draw_window(screen, rect, style, alpha)
+    if portrait:
+        size = _COMBAT_PORTRAIT_SIZE
         img = pygame.transform.smoothscale(resources.image(portrait), (size, size)).convert_alpha()
         img.set_alpha(alpha)
         px, py = rect.x + 14, rect.y + (rect.h - size) // 2
@@ -182,10 +217,8 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
         screen.blit(img, (px, py))
         pygame.draw.rect(screen, (*speaker_color(speaker), min(235, alpha)),
                          (px - 3, py - 3, size + 6, size + 6), 2)
-        text_x = px + size + 20
-        text_w = rect.right - 22 - text_x
     _draw_name_tab(screen, resources, rect, speaker, style, alpha)
-    _draw_text(screen, resources, rect, lines, style, chars=chars, center=center,
+    _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
                valign="center", body_size=26, min_body_size=20, text_x=text_x,
                text_w=text_w, alpha=alpha, text_transform=text_transform,
                text_color=None, text_jitter=text_jitter)

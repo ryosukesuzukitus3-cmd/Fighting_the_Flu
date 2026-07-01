@@ -144,7 +144,7 @@ class GameSceneOverlayMixin:
             screen,
             self.game.resources,  # type: ignore[attr-defined]
             line.speaker,
-            (line.text,),
+            line.lines,
             page_index=idx,
             total_pages=total,
             hint_text=hint,
@@ -181,7 +181,7 @@ class GameSceneOverlayMixin:
             screen,
             self.game.resources,  # type: ignore[attr-defined]
             speaker,
-            (self._boss_dialogue_text,),  # type: ignore[attr-defined]
+            self._boss_dialogue_lines,  # type: ignore[attr-defined]
             style=COMBAT_PURPLE_STYLE,
             alpha=alpha,
         )
@@ -206,7 +206,7 @@ class GameSceneOverlayMixin:
             screen,
             self.game.resources,  # type: ignore[attr-defined]
             line.speaker,
-            (line.text,),
+            line.lines,
             page_index=idx,
             total_pages=total,
             hint_text=hint,

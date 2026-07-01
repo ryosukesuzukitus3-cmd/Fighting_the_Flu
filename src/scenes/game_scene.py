@@ -160,7 +160,7 @@ class GameScene(
 
         # 戦闘中自動タイムアウトセリフ
         self._boss_dialogue_timer:   float = 0.0
-        self._boss_dialogue_text:    str   = ""
+        self._boss_dialogue_lines:   tuple[str, ...] = ()
         self._boss_dialogue_speaker: str   = ""
         self._boss_dialogue_queue:   list  = []
         self._boss_dialogue_font   = None
@@ -1242,7 +1242,7 @@ class GameScene(
         self._boss_dialogue_queue    = list(lines[1:])
         first = lines[0]
         self._boss_dialogue_speaker  = first.speaker
-        self._boss_dialogue_text     = first.text
+        self._boss_dialogue_lines    = first.lines
         self._boss_dialogue_timer    = self._boss_dialogue_line_dur
 
     def _tick_boss_dialogue(self, dt: float) -> None:
@@ -1253,7 +1253,7 @@ class GameScene(
         if self._boss_dialogue_timer <= 0 and self._boss_dialogue_queue:
             nxt = self._boss_dialogue_queue.pop(0)
             self._boss_dialogue_speaker = nxt.speaker
-            self._boss_dialogue_text    = nxt.text
+            self._boss_dialogue_lines   = nxt.lines
             self._boss_dialogue_timer   = getattr(self, "_boss_dialogue_line_dur", BOSS_DIALOGUE_DURATION)
 
     def _damage_player(self, amount: int = PLAYER_DMG_BULLET) -> None:
