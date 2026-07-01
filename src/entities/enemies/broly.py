@@ -16,6 +16,7 @@ _WINDUP_TIME    = 0.55  # 秒：チャージ（充電球＋かすかな予告線
 
 _BEAM_FADE_TIME = 1.05  # 秒：発射継続。最後の _BEAM_TAPER 秒で徐々に細くなって消える
 _BEAM_TAPER     = 0.42
+_BEAM_H         = 200   # 画面上のビーム高さ（粒子砲フレームの発光まで見せる）
 
 _FIRE_SHAKE     = 4.5    # 発射時の画面シェイク強度
 
@@ -92,21 +93,20 @@ class EnemyBroly(Enemy):
             return
         from src.entities.bullets.laser_fx import (
             ZUNDA_PALETTE,
-            LaserChargeOrb,
-            LaserWarningBeam,
-            load_laser_frames,
+            LaserBeamSprite,
+            zunda_charge_frames,
         )
 
         self._warning_fired = True
-        # かすかな予告線＋銃口へ吸い込まれる収束ダッシュ（ブロリーに追従）。
-        self._enemy_bullets.add(
-            LaserWarningBeam(ZUNDA_PALETTE, _WINDUP_TIME, host=self, height=36)
-        )
-        # 銃口で充電球を育てる（チャージ動画フレーム）。
-        charge_frames = load_laser_frames(self._game.resources, "charge")
-        self._enemy_bullets.add(
-            LaserChargeOrb(self, _WINDUP_TIME, ZUNDA_PALETTE, size=128, frames=charge_frames)
-        )
+        # チャージ相（ZUNDA粒子砲 冒頭の細いビーム収束→発光核）をブロリー銃口に追従表示。
+        # warning_only＝見た目専用の予告。windup 進捗でフレームを進める。
+        mx = self._muzzle_x()
+        self._enemy_bullets.add(LaserBeamSprite(
+            max(80, int(mx)) / 2, self.world_y, max(80, int(mx)), _BEAM_H,
+            palette=ZUNDA_PALETTE, lifetime=_WINDUP_TIME, warning_only=True,
+            frames=zunda_charge_frames(self._game.resources), frame_mode="progress",
+            host=self, offset_ratio=-0.30,
+        ))
         self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.3)
 
     def _fire_charge_beam(self) -> None:
@@ -116,25 +116,25 @@ class EnemyBroly(Enemy):
             ZUNDA_PALETTE,
             LaserBeamSprite,
             LaserMuzzleFlash,
-            load_laser_frames,
+            zunda_beam_frames,
         )
 
         self._beam_fired = True
-        # 銃口から左へ伸びる粒子砲ビーム（緑プラズマ動画素材）。warning_only＝
-        # 当たり判定は突進本体が担う。立ち上がり→保持→終端でアルファが抜ける。
+        # 銃口から左へ伸びる粒子砲ビーム（本体→放電まで1周）。warning_only＝
+        # 当たり判定は突進本体が担う。寿命進捗でフレームを進め、終端でアルファが抜ける。
         mx = self._muzzle_x()
         width = max(80, int(mx))
-        beam_frames = load_laser_frames(self._game.resources, "beam")
         beam = LaserBeamSprite(
             width / 2,
             self.world_y,
             width,
-            150,
+            _BEAM_H,
             palette=ZUNDA_PALETTE,
             lifetime=_BEAM_FADE_TIME,
             warning_only=True,
             taper_time=_BEAM_TAPER,
-            frames=beam_frames,
+            frames=zunda_beam_frames(self._game.resources),
+            frame_mode="progress",
         )
         self._enemy_bullets.add(beam)
         # 発射の瞬間: 銃口フラッシュ＋画面シェイク＋発射音。

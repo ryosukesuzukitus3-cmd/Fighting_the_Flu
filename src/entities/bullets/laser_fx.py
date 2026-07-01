@@ -46,6 +46,20 @@ def load_laser_frames(resources, subdir: str) -> list[pygame.Surface]:
     return _FRAME_CACHE[subdir]
 
 
+# ZUNDA粒子砲フレーム(zunda_00..23)の相の切れ目:
+#   [0.._CHARGE_SPLIT) = チャージ相（細いビーム収束→発光核）
+#   [_CHARGE_SPLIT..]  = 本体ビーム→放電（発射本体）
+_CHARGE_SPLIT = 7
+
+
+def zunda_charge_frames(resources) -> list[pygame.Surface]:
+    return load_laser_frames(resources, "zunda")[:_CHARGE_SPLIT]
+
+
+def zunda_beam_frames(resources) -> list[pygame.Surface]:
+    return load_laser_frames(resources, "zunda")[_CHARGE_SPLIT:]
+
+
 class LaserBeamSprite(EnemyBullet):
     """横一文字の極太レーザー本体。
 
@@ -80,6 +94,9 @@ class LaserBeamSprite(EnemyBullet):
         left_extend: int = 140,
         frames: list[pygame.Surface] | None = None,
         frame_fps: float = 18.0,
+        frame_mode: str = "loop",
+        host: pygame.sprite.Sprite | None = None,
+        offset_ratio: float = -0.30,
     ) -> None:
         # 動画フレーム使用時は素材自体が端の形まで持つので左延長しない。
         ext = 0 if frames else max(0, left_extend)
@@ -101,8 +118,16 @@ class LaserBeamSprite(EnemyBullet):
         self._pulse_freq = pulse_freq
         self._frames = frames
         self._frame_fps = frame_fps
+        self._frame_mode = frame_mode   # "loop"（時間）/ "progress"（寿命進捗で1周）
+        self._host = host               # 指定時は毎フレーム銃口へ追従＋幅を張り直す
+        self._offset_ratio = offset_ratio
         self._t = 0.0
         self._render()
+
+    def _progress(self) -> float:
+        max_life = self._max_lifetime or self.lifetime or 1.0
+        remaining = self.lifetime if self.lifetime is not None else max_life
+        return max(0.0, min(1.0, (max_life - remaining) / max_life))
 
     def _alpha_factor(self) -> float:
         """立ち上がり(fade_in)→保持→終端(taper)のアルファ係数。"""
@@ -117,12 +142,23 @@ class LaserBeamSprite(EnemyBullet):
 
     def _render_frames(self) -> None:
         frames = self._frames
-        idx = int(self._t * self._frame_fps) % len(frames)
+        if self._frame_mode == "progress":
+            idx = min(len(frames) - 1, int(self._progress() * len(frames)))
+        else:
+            idx = int(self._t * self._frame_fps) % len(frames)
         scaled = pygame.transform.smoothscale(frames[idx], (self._w, self._h))
         a = self._alpha_factor()
         if a < 1.0:
             scaled.fill((255, 255, 255, int(255 * a)), special_flags=pygame.BLEND_RGBA_MULT)
         self.image = scaled
+
+    def _follow_host(self) -> None:
+        """host の銃口へ追従し、銃口→画面左端の幅を張り直す（frames 前提で ext=0）。"""
+        cx, cy = self._host.rect.center
+        mx = cx + self._offset_ratio * self._host.rect.width
+        self._w = max(80, int(mx))
+        self.sx = self._w / 2.0
+        self.sy = cy
 
     def update(self, dt: float) -> None:
         self._t += dt
@@ -131,6 +167,11 @@ class LaserBeamSprite(EnemyBullet):
             if self.lifetime <= 0:
                 self.kill()
                 return
+        if self._host is not None:
+            if not self._host.alive():
+                self.kill()
+                return
+            self._follow_host()
         self._render()
         self.sx += self.vx * dt
         self.sy += self.vy * dt

@@ -1335,12 +1335,13 @@ def test_enemy_bullet_supports_boss_special_shapes() -> None:
 def test_broly_beam_has_charge_and_taper() -> None:
     src = (ROOT / "src" / "entities" / "enemies" / "broly.py").read_text(encoding="utf-8")
 
-    # かすかな予告線 → 充電球 → 太い本体ビーム（先細りで消滅）の流れを担保する。
+    # チャージ相 → 本体ビーム（粒子砲フレーム・先細りで消滅）の流れを担保する。
     assert "_fire_warning()" in src
     assert "warning_only=True" in src
     assert "_fire_charge_beam()" in src
-    assert "LaserChargeOrb" in src          # 発射前のチャージ演出
-    assert "LaserBeamSprite" in src          # 自前描画の本体ビーム
+    assert "zunda_charge_frames" in src      # ZUNDA粒子砲 冒頭のチャージ相
+    assert "zunda_beam_frames" in src        # 本体ビーム→放電フレーム
+    assert "LaserBeamSprite" in src          # 動画フレーム対応の本体ビーム
     assert "taper_time=" in src              # 発射終了後に徐々に細くなる
 
 

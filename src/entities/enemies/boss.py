@@ -6,18 +6,13 @@ import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.bullets.enemy_bullet import EnemyBullet
 from src.entities.bullets.laser_fx import (
-    BOSS_PALETTE,
     ZUNDA_PALETTE,
     LaserBeamSprite,
-    LaserChargeOrb,
     LaserMuzzleFlash,
-    LaserWarningBeam,
-    load_laser_frames,
+    zunda_beam_frames,
+    zunda_charge_frames,
 )
 from src.entities.bullets.shogi_bullet import ShogiBullet, ThrownBoardBullet
-
-# 超サイヤ人化レーザー（金色）のパレット
-SSJ_PALETTE = ((255, 252, 210), (255, 216, 60), (255, 150, 20))
 
 if TYPE_CHECKING:
     from src.core.camera import Camera
@@ -448,25 +443,30 @@ class Boss(pygame.sprite.Sprite):
             return resources.pixelfont(size)
         return pygame.font.Font(None, size)
 
-    def _laser_warning(self, by: float, duration: float, palette) -> LaserWarningBeam:
-        # かすかな予告線＋銃口へ吸い込まれる収束ダッシュ（ボスは据え置き）。
-        return LaserWarningBeam(palette, duration,
-                                muzzle=(self.sx - 18, by), height=46)
+    def _charge_beam(self, by: float, duration: float, height: int) -> LaserBeamSprite:
+        # チャージ相（ZUNDA粒子砲 冒頭の細いビーム収束→発光核）。据え置き・見た目専用。
+        width = max(80, int(self.sx - 18))
+        return LaserBeamSprite(
+            width / 2, by, width, height,
+            palette=ZUNDA_PALETTE, lifetime=duration, warning_only=True,
+            frames=zunda_charge_frames(self.game.resources), frame_mode="progress",
+        )
 
     def _mega_beam(self, by: float) -> LaserBeamSprite:
-        # 極太・凶悪な本体レーザー（粒子砲の緑プラズマ動画フレーム）。
+        # 極太・凶悪な本体レーザー（粒子砲 本体→放電を寿命で1周）。
         width = max(80, int(self.sx - 18))
         return LaserBeamSprite(
             width / 2,
             by,
             width,
-            150,
+            210,
             palette=ZUNDA_PALETTE,
             lifetime=0.82,
             damage=28,
             warning_only=False,
             taper_time=0.20,
-            frames=load_laser_frames(self.game.resources, "beam"),
+            frames=zunda_beam_frames(self.game.resources),
+            frame_mode="progress",
         )
 
     def _super_beam(self, by: float) -> LaserBeamSprite:
@@ -476,14 +476,15 @@ class Boss(pygame.sprite.Sprite):
             width / 2,
             by,
             width,
-            260,
+            320,
             palette=ZUNDA_PALETTE,
             lifetime=1.05,
             damage=46,
             warning_only=False,
             fade_in=0.10,
             taper_time=0.24,
-            frames=load_laser_frames(self.game.resources, "beam"),
+            frames=zunda_beam_frames(self.game.resources),
+            frame_mode="progress",
         )
 
     def _laser_bullet(self, by: float, *, warning: bool = False, height: int = 46,
@@ -814,7 +815,7 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
         elif pattern == "mega_laser":
             if variant % 2 == 0:
-                enemy_bullets.add(self._laser_warning(by, 0.62, ZUNDA_PALETTE))
+                enemy_bullets.add(self._charge_beam(by, 0.62, 210))
                 for off in (-56, 56):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
                 self._shoot_delay_override = 0.62
@@ -836,16 +837,13 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage2 第二形態: 超サイヤ人の極太レーザー。チャージ中は自機を吸引。
         elif pattern == "super_laser":
             if variant % 2 == 0:
-                # チャージ: 金の予告線＋特大充電球＋自機吸引（heavy_laserを停止）。
+                # チャージ: 粒子砲チャージ相（特大）＋自機吸引（heavy_laserを停止）。
                 charge_t = 1.5
                 self.suction_y = by
                 self.suction_x = self.sx
                 self.suction_active = True
                 self._suction_timer = charge_t
-                enemy_bullets.add(self._laser_warning(by, charge_t, ZUNDA_PALETTE))
-                enemy_bullets.add(LaserChargeOrb(
-                    self, charge_t, ZUNDA_PALETTE, offset_ratio=-0.12, size=210,
-                    frames=load_laser_frames(self.game.resources, "charge")))
+                enemy_bullets.add(self._charge_beam(by, charge_t, 320))
                 if self.camera is not None:
                     self.camera.shake(2.5)
                 self._shoot_delay_override = charge_t
