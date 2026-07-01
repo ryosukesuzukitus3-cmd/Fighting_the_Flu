@@ -11,6 +11,7 @@ Examples:
   python tools/run.py stage3-alpha-mask-editor
   python tools/run.py stage3-terrain-composer
   python tools/run.py stage3-composer-report
+  python tools/run.py stage-designer
 """
 from __future__ import annotations
 
@@ -40,12 +41,16 @@ def _env(headless: bool) -> dict[str, str]:
     return env
 
 
+def _has_option(argv: list[str], name: str) -> bool:
+    return any(arg == name or arg.startswith(f"{name}=") for arg in argv)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage3-rect-preview|stage3-rect-editor|stage3-alpha-mask-editor|stage3-terrain-composer|stage3-composer-report|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
+            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage3-rect-preview|stage3-rect-editor|stage3-alpha-mask-editor|stage3-terrain-composer|stage3-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -68,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         "stage3-alpha-mask-editor": ([py, "tools/stage3_alpha_mask_editor.py", *argv], False),
         "stage3-terrain-composer": ([py, "tools/stage3_terrain_composer_preview.py", *argv], True),
         "stage3-composer-report": ([py, "tools/stage3_composer_report.py", *argv], True),
+        "stage-designer": ([py, "tools/stage_designer.py", *argv], _has_option(argv, "--capture")),
         "boss-concepts": ([py, "tools/capture_boss_concepts.py", *argv], True),
         "dialogues":  ([py, "tools/capture_dialogues.py", *argv], True),
         "dummies":    ([py, "tools/gen_dummy_portraits.py", *argv], True),
