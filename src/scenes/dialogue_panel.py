@@ -93,6 +93,22 @@ def _visible_lines(lines, chars):
     return tuple(out)
 
 
+def _wrap_line(font, text, max_w):
+    """1 論理行を max_w 以内の副行へ折り返す（日本語＝文字単位で折る）。"""
+    if not text or font.size(text)[0] <= max_w:
+        return [text]
+    out, cur = [], ""
+    for ch in text:
+        if cur and font.size(cur + ch)[0] > max_w:
+            out.append(cur)
+            cur = ch
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
 def _arrow_visible(arrow_on):
     if arrow_on is not None:
         return arrow_on
@@ -161,7 +177,12 @@ def _draw_arrow(screen, rect, alpha, arrow_on, complete):
 
 # ── 戦闘パネル（顔アイコン・省スペース） ──────────────────────────────
 
-COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 128, SCREEN_WIDTH - 52, 92)
+# 本文は 22pt（従来 26pt より一段小）。最長行 616px でも折返さず 1 行に収まり
+# （全行 ≤ 使用可能幅 624px を実測確認）、セリフは最大 2 行。パネルは最初から
+# 2 行ぶんの固定サイズにして自動拡張しない（サイズが暴れる違和感を避ける）。
+_COMBAT_BODY_SIZE = 22
+_COMBAT_PORTRAIT_SIZE = 68        # 顔アイコンは固定
+COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 144, SCREEN_WIDTH - 52, 108)
 
 
 def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
@@ -170,11 +191,22 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                       complete=None, text_transform=None, text_jitter=0,
                       show_portrait=True):
     rect = COMBAT_PANEL_RECT
-    _draw_window(screen, rect, style, alpha)
+    body = resources.pixelfont(_COMBAT_BODY_SIZE)
+    # 本文の左端と使える横幅（顔アイコンぶんを差し引く）を先に確定する。
     text_x, text_w = rect.x + 22, rect.w - 44
     portrait = speaker_portrait(speaker) if show_portrait else None
     if portrait:
-        size = rect.h - 24
+        text_x = rect.x + 14 + _COMBAT_PORTRAIT_SIZE + 20
+        text_w = rect.right - 22 - text_x
+    # 想定外に長い行だけ横幅で折り返す安全網（通常は 1 行に収まる）。
+    wrapped: list[str] = []
+    for ln in lines:
+        wrapped.extend(_wrap_line(body, ln, text_w))
+    wrapped = wrapped or [""]
+
+    _draw_window(screen, rect, style, alpha)
+    if portrait:
+        size = _COMBAT_PORTRAIT_SIZE
         img = pygame.transform.smoothscale(resources.image(portrait), (size, size)).convert_alpha()
         img.set_alpha(alpha)
         px, py = rect.x + 14, rect.y + (rect.h - size) // 2
@@ -182,12 +214,10 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
         screen.blit(img, (px, py))
         pygame.draw.rect(screen, (*speaker_color(speaker), min(235, alpha)),
                          (px - 3, py - 3, size + 6, size + 6), 2)
-        text_x = px + size + 20
-        text_w = rect.right - 22 - text_x
     _draw_name_tab(screen, resources, rect, speaker, style, alpha)
-    _draw_text(screen, resources, rect, lines, style, chars=chars, center=center,
-               valign="center", body_size=26, min_body_size=20, text_x=text_x,
-               text_w=text_w, alpha=alpha, text_transform=text_transform,
+    _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
+               valign="center", body_size=_COMBAT_BODY_SIZE, min_body_size=_COMBAT_BODY_SIZE,
+               text_x=text_x, text_w=text_w, alpha=alpha, text_transform=text_transform,
                text_color=None, text_jitter=text_jitter)
     if complete is None:
         complete = hint_text is not None

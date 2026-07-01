@@ -2,7 +2,7 @@
 
 台本 §9.1 の id/speaker/text/se/fx 構造に対応する。
 
-- Line      : インゲームに差し込む 1 行のセリフ（ボス intro/mid/defeat 用）。
+- Line      : インゲームに差し込むセリフ（ボス intro/mid/defeat 用）。1〜複数行。
 - Page      : 全画面カットシーンの 1 ページ（複数行＋話者）。プロローグ/幕間/
               エピローグ/エンドロール用。
 - StoryBeat : 物語タイムラインの 1 ノード（ゲームプレイ間に挟まる会話シーン）。
@@ -11,13 +11,30 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Line:
-    """インゲームのセリフ 1 行（画面下部ボックスに 1 行表示）。"""
+    """インゲームのセリフ（画面下部ボックスに 1〜複数行表示）。
+
+    本文は可変個で渡す（``Line(speaker, "1行目", "2行目")``）。位置引数は本文
+    専用にし、``se`` / ``fx`` はキーワード専用にする。これで ``Line(sp,"a","b")``
+    の 2 番目が誤って ``se`` に化けて表示から消える事故を恒久的に防ぐ。
+    """
     speaker: str
-    text:    str
+    lines:   tuple[str, ...]            # 表示行（1 行以上）
     se:      str | None = None          # SE エイリアス（aliases.py で解決）
     fx:      tuple[str, ...] = ()        # FX エイリアス
+
+    def __init__(self, speaker: str, *lines: str,
+                 se: str | None = None, fx: tuple[str, ...] = ()) -> None:
+        object.__setattr__(self, "speaker", speaker)
+        object.__setattr__(self, "lines", tuple(lines))
+        object.__setattr__(self, "se", se)
+        object.__setattr__(self, "fx", fx)
+
+    @property
+    def text(self) -> str:
+        """後方互換: 全行を改行連結した本文。描画は ``lines`` を使う。"""
+        return "\n".join(self.lines)
 
 
 @dataclass(frozen=True)
