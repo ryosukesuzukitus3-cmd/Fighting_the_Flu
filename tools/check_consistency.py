@@ -106,7 +106,7 @@ def check_enemies() -> None:
 
     # stage JSON の type が敵・ボス・地形エイリアスに含まれるか
     terrain_types = {
-        "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
+        "Terrain", "TerrainStrip", "TerrainPieces", "solid", "platform", "gate", "breakable_gate",
         "weapon_gate", "turret_mount", "cave_section", "corridor",
         "AuthoredTerrain", "TerrainPath",
     }
@@ -186,8 +186,16 @@ def check_stages() -> None:
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
+    piece_terrain_types = {"TerrainPieces"}
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
+    stage3_rects = json.loads((ROOT / "tools" / "stage3_terrain_rects.json").read_text(encoding="utf-8"))
+    valid_stage3_assets = {
+        f"{group}:{index}"
+        for group, group_data in stage3_rects.get("groups", {}).items()
+        for index, _rect in enumerate(group_data.get("rects", []), start=1)
+    }
+    valid_piece_collisions = {"auto", "none", "surface", "rect"}
 
     def validate_terrain_event(label: str, ev: dict) -> None:
         if ev.get("type") in rect_terrain_types:
@@ -211,6 +219,22 @@ def check_stages() -> None:
                     _fail(f"{label}(TerrainStrip): 必須フィールド '{field}' が欠如")
             if ev.get("theme", "fever_cave") not in valid_strip_themes:
                 _fail(f"{label}(TerrainStrip): 未知の theme '{ev.get('theme')}'")
+        elif ev.get("type") in piece_terrain_types:
+            if ev.get("renderer") != "stage3_composer":
+                _fail(f"{label}(TerrainPieces): renderer must be 'stage3_composer'")
+            if not isinstance(ev.get("pieces"), list):
+                _fail(f"{label}(TerrainPieces): missing 'pieces'")
+                return
+            for piece_index, piece in enumerate(ev.get("pieces", [])):
+                if not isinstance(piece, dict):
+                    _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: must be an object")
+                    continue
+                if piece.get("asset") not in valid_stage3_assets:
+                    _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: unknown asset '{piece.get('asset')}'")
+                if "x" not in piece or "y" not in piece:
+                    _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: missing x/y")
+                if piece.get("collision", "auto") not in valid_piece_collisions:
+                    _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: invalid collision")
         else:
             _fail(f"{label}: terrain section only allows terrain aliases")
 

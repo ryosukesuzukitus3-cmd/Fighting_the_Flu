@@ -29,11 +29,11 @@
 
 ## 方針
 
-JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行する。
+JSON上の地形作成APIは、当初 `TerrainStrip` から `AuthoredTerrain` へ移行する方針だった。これは乱数地形から手書き地形へ進む中間段階として有効だったが、Stage3の最終形では `TerrainPieces` へ進める。
 
 `TerrainStrip` は長期的な設計目標ではなく、既存ステージ移行用の旧形式として扱う。残す前提で考えると、乱数パラメータ型と手書き制御型という2つの思想が、composer・preview・docs・testsに漏れ続ける。
 
-ただし、完全なタイルマップやピクセル単位指定にはしない。データ作成コストが高すぎるため、まずは `top` / `bottom` の移動可能領域境界を制御点で指定する方式を採用する。
+ただし、完全なピクセル単位指定にはしない。Stage3では素材ブロック単位の配置をSSOTにし、衝突面は配置ブロックから簡略生成する。`top` / `bottom` の輪郭指定は、初期配置を自動生成する設計ツール上の補助機能として扱う。
 
 乱数を使ってよいもの:
 
@@ -49,17 +49,27 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 - ゲート、砲台台、破壊可能ブロックの意味ある配置
 - ボス前、中ボス前などのステージ展開
 
+### 2026-07-01 追記: Stage3は配置ブロックSSOTへ進める
+
+`AuthoredTerrain` は、乱数地形から手書き地形へ移るための中間段階として有効だった。ただし、制御点で上下輪郭を指定し、runtime composerが素材ブロックを自動配置する方式では、ブロック種類・座標・見切れ・役割を個別に作り込む自由度が不足する。
+
+Stage3は最終的に `AuthoredTerrain.top/bottom` をステージデータのSSOTにしない。Stage3の道中地形は `TerrainPieces` を使い、`asset` / `x` / `y` / `role` / `collision` を持つ個別ブロック配置をSSOTにする。
+
+`top` / `bottom` の輪郭指定は捨てるのではなく、設計ツール上の「自動充填して初期ブロック配置を作る」補助機能として扱う。ゲーム実行時は保存済みの `TerrainPieces.pieces` を読み、そこから描画と簡略化した衝突面を生成する。
+
+この方針では、既存Stage3の輪郭地形を綺麗に移植することより、今後の手作業で地形を作り込める自由度を優先する。他ステージとの互換性は、Stage3の品質向上を妨げる場合は優先しない。
+
 ## 残すもの
 
 `TerrainStripSegment` は、当面は内部表現として残す。
 
-`AuthoredTerrain` の制御点を `TerrainStripSegment` へ変換すれば、既存の衝突判定、表面配置、Stage3 composer描画を活かしながら、JSONの作成体験だけを手書き地形へ移行できる。
+`AuthoredTerrain` の制御点を `TerrainStripSegment` へ変換する方式は、中間段階としては既存の衝突判定、表面配置、Stage3 composer描画を活かせる。
 
 名前が実態に合わなくなってきたら、後続PRで `TerrainSegment` などの中立的な名前へ変更する。
 
-## 新しい地形形式
+## 中間地形形式
 
-`AuthoredTerrain` は、移動可能領域の上下境界を明示する。
+`AuthoredTerrain` は、移動可能領域の上下境界を明示する中間形式。
 
 ```json
 {
@@ -75,6 +85,8 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 `top` は上側地形の下端Y、`bottom` は下側地形の上端Yを表す。プレイヤーが動ける領域は `top_y` と `bottom_y` の間になる。
 
 ## PR計画
+
+この節の `AuthoredTerrain` 前提の手順は、乱数地形から脱出するための中間計画だった。2026-07-01以降のStage3本体は、`TerrainPieces` をSSOTにして進める。
 
 ### 1. 手書き地形の基盤
 
@@ -92,7 +104,7 @@ JSON上の地形作成APIは、`TerrainStrip` から `AuthoredTerrain` へ移行
 - 地形変更前に敵配置だけ詰めることは避ける
 - ゲートは単独のHP壁にせず、近くの砲台台・砲台・地形走行敵と組み合わせた戦闘セットピースにする。Stage3では、最初のゲートを上下砲台のクロスファイア、ウェポンゲートを報酬庫、終盤ゲートをCrawlerで足元から押す突破戦として扱う
 
-`tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。Stage3の `AuthoredTerrain.top/bottom` 制御点と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・保存・PNGキャプチャを行えるようにする。
+`tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。現在は Stage3の `TerrainPieces.pieces` と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・保存・PNGキャプチャを行えるようにする。
 
 ### 3. 地形パーツの役割整理
 

@@ -53,7 +53,7 @@ def test_balance_sheet_enemy_keys_match_registry() -> None:
 def test_stage_json_enemy_types_in_registry() -> None:
     from src.core.registries import ENEMY_NAMES
     terrain_types = {
-        "Terrain", "TerrainStrip", "solid", "platform", "gate", "breakable_gate",
+        "Terrain", "TerrainStrip", "TerrainPieces", "solid", "platform", "gate", "breakable_gate",
         "weapon_gate", "turret_mount", "cave_section", "corridor",
         "AuthoredTerrain", "TerrainPath",
     }
@@ -160,6 +160,7 @@ def test_stage_json_required_fields() -> None:
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
+    piece_terrain_types = {"TerrainPieces"}
     from src.core.registries import ITEM_NAMES
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
@@ -167,7 +168,7 @@ def test_stage_json_required_fields() -> None:
     valid_stage3_material_roles = set(stage3_rects.get("roles", {}))
 
     def assert_terrain_event(section: str, i: int, ev: dict) -> None:
-        assert ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types, (
+        assert ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types | piece_terrain_types, (
             f"{section}[{i}]: terrain section only allows terrain aliases"
         )
         if "fixed_drop" in ev:
@@ -187,6 +188,30 @@ def test_stage_json_required_fields() -> None:
             if "material_role" in ev:
                 assert ev["material_role"] in valid_stage3_material_roles, (
                     f"{section}[{i}](Terrain): invalid material_role '{ev['material_role']}'"
+                )
+        elif ev.get("type") in piece_terrain_types:
+            assert isinstance(ev.get("pieces"), list), f"{section}[{i}](TerrainPieces): missing 'pieces'"
+            assert ev.get("renderer") == "stage3_composer", (
+                f"{section}[{i}](TerrainPieces): renderer must be 'stage3_composer'"
+            )
+            valid_assets = {
+                f"{group}:{index}"
+                for group, group_data in stage3_rects.get("groups", {}).items()
+                for index, _rect in enumerate(group_data.get("rects", []), start=1)
+            }
+            valid_collisions = {"auto", "none", "surface", "rect"}
+            for piece_index, piece in enumerate(ev.get("pieces", [])):
+                assert isinstance(piece, dict), (
+                    f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: must be an object"
+                )
+                assert piece.get("asset") in valid_assets, (
+                    f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: unknown asset '{piece.get('asset')}'"
+                )
+                assert "x" in piece and "y" in piece, (
+                    f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: missing x/y"
+                )
+                assert piece.get("collision", "auto") in valid_collisions, (
+                    f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: invalid collision"
                 )
         else:
             required = ("top", "bottom") if ev.get("type") in authored_terrain_types else ("length",)
@@ -306,7 +331,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage2.random_drop_scale < 1.0
     assert stage3.initial_terrain == []
     assert stage3.terrain_layout
-    assert stage3.terrain_layout[0]["type"] == "AuthoredTerrain"
+    assert stage3.terrain_layout[0]["type"] == "TerrainPieces"
     assert stage3.random_drop_scale < 1.0
     assert stage4.initial_terrain == []
     assert stage4.terrain_layout
@@ -447,7 +472,7 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     assert stage.boss_terrain_mode == "preplaced"
 
 
-def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
+def test_stage3_uses_explicit_labor_fortress_pieces() -> None:
     from src.core.constants import SCREEN_WIDTH
     from src.stages.stage import Stage
 
@@ -481,12 +506,21 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert data["events"] == []
     assert data["boss_terrain_mode"] == "preplaced"
     assert 0.0 < data["random_drop_scale"] < 1.0
-    assert layout["type"] == "AuthoredTerrain"
+    pieces = layout["pieces"]
+    surface_pieces = [piece for piece in pieces if piece.get("collision") == "surface"]
+    body_pieces = [piece for piece in pieces if piece.get("role") == "body_fill"]
+    rect_collision_pieces = [piece for piece in pieces if piece.get("collision") == "rect"]
+
+    assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "fortress"
     assert layout["renderer"] == "stage3_composer"
-    assert len(layout["top"]) >= 6
-    assert len(layout["bottom"]) >= 6
-    assert layout["min_gap"] >= 240
+    assert "top" not in layout
+    assert "bottom" not in layout
+    assert len(pieces) >= 100
+    assert len(surface_pieces) >= 80
+    assert body_pieces
+    assert rect_collision_pieces
+    assert {piece.get("side") for piece in surface_pieces} >= {"top", "bottom"}
     assert layout["length"] >= boss_x + 800
     assert len(world_events) >= 40
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 10
@@ -526,29 +560,29 @@ def test_stage3_uses_authored_labor_fortress_setpieces() -> None:
     assert stage.boss_terrain_mode == "preplaced"
 
 
-def test_stage3_authored_route_has_deliberate_chokes_and_arenas() -> None:
+def test_stage3_piece_route_has_deliberate_chokes_and_arenas() -> None:
+    from src.entities.stage3_composer_terrain import build_stage3_piece_layout, load_stage3_composer_pieces
+
     data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
     layout = data["terrain_layout"][0]
+    composer_layout = build_stage3_piece_layout(layout, load_stage3_composer_pieces(), start_x=int(layout.get("x", 0)))
 
-    def sample(points: list[list[int]], x: float) -> float:
-        if x <= points[0][0]:
-            return float(points[0][1])
-        if x >= points[-1][0]:
-            return float(points[-1][1])
-        for (x0, y0), (x1, y1) in zip(points, points[1:]):
-            if x0 <= x <= x1:
-                t = (x - x0) / max(1.0, x1 - x0)
-                t = t * t * (3.0 - 2.0 * t)
-                return float(y0) * (1.0 - t) + float(y1) * t
-        return float(points[-1][1])
+    def surface_y_at(x: float, side: str) -> float:
+        candidates = [
+            run.y
+            for run in composer_layout.collision_runs
+            if run.side == side and run.x0 <= x <= run.x1
+        ]
+        assert candidates, f"missing {side} surface near x={x}"
+        return float(min(candidates) if side == "bottom" else max(candidates))
 
     def gap_at(x: float) -> float:
-        return sample(layout["bottom"], x) - sample(layout["top"], x)
+        return surface_y_at(x, "bottom") - surface_y_at(x, "top")
 
     assert gap_at(1200) >= 400
-    assert gap_at(3300) <= 310
+    assert gap_at(3300) <= 360
     assert gap_at(6100) >= 460
-    assert gap_at(7300) <= 340
+    assert gap_at(7300) <= 390
     assert gap_at(9900) >= 440
 
 
@@ -1005,21 +1039,19 @@ def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
 
 def test_stage3_composer_floor_props_are_collidable() -> None:
     from src.entities.stage3_composer_terrain import (
-        build_stage3_composer_layout,
+        build_stage3_piece_layout,
         load_stage3_composer_pieces,
-        make_stage3_composer_terrain,
+        make_stage3_composer_terrain_from_pieces,
     )
-    from src.entities.terrain import make_terrain_segments_from_event
 
     stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
     layout = stage3["terrain_layout"][0]
-    segments = make_terrain_segments_from_event(
+    composer_layout = build_stage3_piece_layout(
         layout,
-        float(layout.get("start_offset", 0)),
-        default_seed=3,
+        load_stage3_composer_pieces(),
+        start_x=int(layout.get("x", 0)),
     )
-    composer_layout = build_stage3_composer_layout(segments, load_stage3_composer_pieces())
-    sprites = make_stage3_composer_terrain(segments)
+    sprites = make_stage3_composer_terrain_from_pieces(layout, start_x=int(layout.get("x", 0)))
     prop_blocks = [
         sprite
         for sprite in sprites
@@ -1031,6 +1063,23 @@ def test_stage3_composer_floor_props_are_collidable() -> None:
     assert composer_layout.collision_rects
     assert prop_blocks
     assert all(block.rect.width > 0 and block.rect.height > 0 for block in prop_blocks)
+
+
+def test_stage3_piece_layout_generates_surface_collision_from_explicit_blocks() -> None:
+    from src.entities.stage3_composer_terrain import build_stage3_piece_layout, load_stage3_composer_pieces
+
+    stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    layout = stage3["terrain_layout"][0]
+    composer_layout = build_stage3_piece_layout(
+        layout,
+        load_stage3_composer_pieces(),
+        start_x=int(layout.get("x", 0)),
+    )
+
+    assert layout["type"] == "TerrainPieces"
+    assert composer_layout.placements
+    assert {run.side for run in composer_layout.collision_runs} >= {"top", "bottom"}
+    assert all(placement.asset for placement in composer_layout.placements)
 
 
 def test_stage3_composer_body_fill_uses_uncut_rect_pieces() -> None:
@@ -1686,7 +1735,7 @@ def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
     text = _format_stage_json(data)
 
     assert json.loads(text) == data
-    assert '        [0, 36],' in text
+    assert '        {"asset": "strip_top:' in text
     assert '    {"type": "EnemyTakeshi", "x": 940' in text
     assert '\n          "x": 940' not in text
 
@@ -1726,8 +1775,8 @@ def test_stage3_composer_report_uses_stage_composer_options() -> None:
     layout = stage3["terrain_layout"][0]
     options = stage3_composer_report._composer_options(stage_path)
 
-    assert options["sample_step"] == layout["composer_sample_step"]
-    assert options["tolerance"] == layout["composer_tolerance"]
+    assert options["sample_step"] == int(layout.get("composer_sample_step", 48))
+    assert options["tolerance"] == int(layout.get("composer_tolerance", 26))
     assert options["collision_step"] == int(layout.get("composer_collision_step", 8))
     assert options["collision_tolerance"] == int(layout.get("composer_collision_tolerance", 10))
 

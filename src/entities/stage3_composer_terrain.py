@@ -37,6 +37,9 @@ ROLE_FALLBACK_GROUPS: dict[str, tuple[str, ...]] = {
 SURFACE_ROLE_BY_SIDE = {"bottom": "floor_surface", "top": "ceiling_surface"}
 SURFACE_PLACEMENT_ROLES = frozenset({"floor_surface", "ceiling_surface", "cap"})
 PROP_PLACEMENT_ROLES = frozenset({"floor_prop", "prop"})
+SURFACE_COLLISION_ROLES = frozenset({"floor_surface", "ceiling_surface", "cap"})
+RECT_COLLISION_ROLES = PROP_PLACEMENT_ROLES
+VALID_PIECE_COLLISIONS = frozenset({"auto", "none", "surface", "rect"})
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,8 @@ class Stage3PlacedPiece:
     clip: pygame.Rect
     side: str
     role: str
+    collision: str = "auto"
+    asset: str = ""
 
 
 @dataclass(frozen=True)
@@ -333,6 +338,10 @@ def _opaque_bounds(image: pygame.Surface) -> pygame.Rect:
     return pygame.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
 
+def _asset_id(piece: Stage3ComposerPiece) -> str:
+    return f"{piece.group}:{piece.index + 1}"
+
+
 def _place_piece(
     placements: list[Stage3PlacedPiece],
     image: pygame.Surface,
@@ -342,6 +351,8 @@ def _place_piece(
     clip: pygame.Rect,
     side: str,
     role: str,
+    collision: str = "auto",
+    asset: str = "",
     allow_partial: bool = True,
 ) -> None:
     image_rect = pygame.Rect(x, y, image.get_width(), image.get_height())
@@ -350,7 +361,7 @@ def _place_piece(
     clipped = image_rect.clip(clip)
     if clipped.width <= 0 or clipped.height <= 0:
         return
-    placements.append(Stage3PlacedPiece(image, x, y, clipped, side, role))
+    placements.append(Stage3PlacedPiece(image, x, y, clipped, side, role, collision, asset))
 
 
 def _surface_band_depth(pieces: dict[str, list[Stage3ComposerPiece]]) -> int:
@@ -389,7 +400,17 @@ def _add_body_fill(
                 image = pygame.transform.flip(image, False, True)
             iw, ih = image.get_size()
             py = y if run.side == "bottom" else y - ih
-            _place_piece(placements, image, x, py, clip=clip, side=run.side, role="body_fill", allow_partial=False)
+            _place_piece(
+                placements,
+                image,
+                x,
+                py,
+                clip=clip,
+                side=run.side,
+                role="body_fill",
+                asset=_asset_id(piece),
+                allow_partial=False,
+            )
             x += max(32, iw - max(0, overlap))
         y = y + row_step if run.side == "bottom" else y - row_step
 
@@ -418,7 +439,7 @@ def _add_cap(
         else:
             image = pygame.transform.flip(image, False, True)
             y = run.y - image.get_height() + SURFACE_CAP_OVERHANG
-        _place_piece(placements, image, x, y, clip=clip, side=run.side, role=surface_role)
+        _place_piece(placements, image, x, y, clip=clip, side=run.side, role=surface_role, asset=_asset_id(piece))
         x += max(40, image.get_width() - max(0, overlap))
 
 
@@ -446,13 +467,23 @@ def _add_props(
     y = run.y - opaque.bottom + 6
     if -piece.image.get_height() < y < height:
         clip = pygame.Rect(x, y, piece.image.get_width(), piece.image.get_height())
-        _place_piece(placements, piece.image, x, y, clip=clip, side=run.side, role="floor_prop")
+        _place_piece(placements, piece.image, x, y, clip=clip, side=run.side, role="floor_prop", asset=_asset_id(piece))
 
 
-def _prop_collision_rects(placements: list[Stage3PlacedPiece]) -> list[Stage3CollisionRect]:
+def _piece_collision_mode(placement: Stage3PlacedPiece) -> str:
+    if placement.collision != "auto":
+        return placement.collision
+    if placement.role in SURFACE_COLLISION_ROLES:
+        return "surface"
+    if placement.role in RECT_COLLISION_ROLES:
+        return "rect"
+    return "none"
+
+
+def _rect_collision_rects(placements: list[Stage3PlacedPiece]) -> list[Stage3CollisionRect]:
     rects: list[Stage3CollisionRect] = []
     for placement in placements:
-        if placement.role not in PROP_PLACEMENT_ROLES:
+        if _piece_collision_mode(placement) != "rect":
             continue
         opaque = _opaque_bounds(placement.image)
         world = pygame.Rect(
@@ -484,7 +515,7 @@ def _solid_edge_local_y(image: pygame.Surface, local_x: int, side: str) -> int |
 def _composer_surface_y_at(placements: list[Stage3PlacedPiece], world_x: int, side: str) -> int | None:
     candidates: list[int] = []
     for placement in placements:
-        if placement.side != side or placement.role not in SURFACE_PLACEMENT_ROLES:
+        if placement.side != side or _piece_collision_mode(placement) != "surface":
             continue
         if not (placement.clip.left <= world_x < placement.clip.right):
             continue
@@ -626,8 +657,134 @@ def build_stage3_composer_layout(
                 tolerance=collision_tolerance,
             )
         )
-    collision_rects = _prop_collision_rects(placements)
+    collision_rects = _rect_collision_rects(placements)
     bounds = pygame.Rect(start, 0, max(0, end - start), height)
+    return Stage3ComposerLayout(
+        tuple(surface_runs),
+        tuple(placements),
+        tuple(collision_runs),
+        tuple(collision_rects),
+        surface_depth,
+        bounds,
+    )
+
+
+def _piece_by_asset(
+    pieces: dict[str, list[Stage3ComposerPiece]],
+    raw: dict[str, Any],
+) -> Stage3ComposerPiece:
+    asset = raw.get("asset")
+    if isinstance(asset, str) and ":" in asset:
+        group, index_text = asset.split(":", 1)
+        try:
+            index = int(index_text) - 1
+        except ValueError as exc:
+            raise ValueError(f"TerrainPieces asset index must be a number: {asset}") from exc
+    else:
+        group = str(raw.get("group", ""))
+        index = int(raw.get("index", 1)) - 1
+    if not group:
+        raise ValueError("TerrainPieces piece requires asset or group")
+    group_pieces = pieces.get(group)
+    if not group_pieces:
+        raise ValueError(f"TerrainPieces references unknown group: {group}")
+    if index < 0 or index >= len(group_pieces):
+        raise ValueError(f"TerrainPieces asset index out of range: {group}:{index + 1}")
+    return group_pieces[index]
+
+
+def _default_piece_side(role: str, collision: str) -> str:
+    if role == "ceiling_surface":
+        return "top"
+    if role in {"floor_surface", "floor_prop", "prop"}:
+        return "bottom"
+    if collision == "surface":
+        return "bottom"
+    return ""
+
+
+def _piece_image(piece: Stage3ComposerPiece, raw: dict[str, Any], role: str, side: str) -> pygame.Surface:
+    flip_x = bool(raw.get("flip_x", False))
+    flip_y = bool(raw.get("flip_y", role == "ceiling_surface" or (role == "body_fill" and side == "top")))
+    if not flip_x and not flip_y:
+        return piece.image
+    return pygame.transform.flip(piece.image, flip_x, flip_y)
+
+
+def _raw_piece_collision(raw: dict[str, Any]) -> str:
+    collision = str(raw.get("collision", "auto"))
+    if collision not in VALID_PIECE_COLLISIONS:
+        raise ValueError(f"TerrainPieces collision must be one of {sorted(VALID_PIECE_COLLISIONS)}: {collision}")
+    return collision
+
+
+def build_stage3_piece_layout(
+    event: dict[str, Any],
+    pieces: dict[str, list[Stage3ComposerPiece]] | None = None,
+    *,
+    start_x: int = 0,
+    height: int = SCREEN_HEIGHT,
+    collision_step: int = DEFAULT_COLLISION_STEP,
+    collision_tolerance: int = DEFAULT_COLLISION_TOLERANCE,
+) -> Stage3ComposerLayout:
+    if pieces is None:
+        pieces = load_stage3_composer_pieces()
+
+    placements: list[Stage3PlacedPiece] = []
+    for i, raw in enumerate(event.get("pieces", [])):
+        if not isinstance(raw, dict):
+            raise ValueError(f"TerrainPieces.pieces[{i}] must be an object")
+        piece = _piece_by_asset(pieces, raw)
+        role = str(raw.get("role", piece.group))
+        collision = _raw_piece_collision(raw)
+        side = str(raw.get("side", _default_piece_side(role, collision)))
+        image = _piece_image(piece, raw, role, side)
+        x = start_x + int(raw.get("x", 0))
+        y = int(raw.get("y", 0))
+        clip = pygame.Rect(x, y, image.get_width(), image.get_height())
+        _place_piece(
+            placements,
+            image,
+            x,
+            y,
+            clip=clip,
+            side=side,
+            role=role,
+            collision=collision,
+            asset=_asset_id(piece),
+            allow_partial=False,
+        )
+
+    if placements:
+        min_x = min(placement.x for placement in placements)
+        max_x = max(placement.x + placement.image.get_width() for placement in placements)
+    else:
+        min_x = int(start_x)
+        max_x = int(start_x + int(event.get("length", 0)))
+
+    if "length" in event:
+        min_x = min(min_x, int(start_x))
+        max_x = max(max_x, int(start_x + int(event["length"])))
+    bounds = pygame.Rect(min_x, 0, max(0, max_x - min_x), height)
+    surface_depth = _surface_band_depth(pieces)
+
+    collision_runs: list[Stage3CollisionRun] = []
+    for side in ("top", "bottom"):
+        collision_runs.extend(
+            _composer_collision_runs(
+                placements,
+                start_x=bounds.x,
+                end_x=bounds.right,
+                side=side,
+                sample_step=collision_step,
+                tolerance=collision_tolerance,
+            )
+        )
+    surface_runs = [
+        Stage3SurfaceRun(run.x0, run.x1, run.y, run.side)
+        for run in collision_runs
+    ]
+    collision_rects = _rect_collision_rects(placements)
     return Stage3ComposerLayout(
         tuple(surface_runs),
         tuple(placements),
@@ -859,6 +1016,31 @@ def render_stage3_composer_surface(
     return layout
 
 
+def render_stage3_piece_surface(
+    target: pygame.Surface,
+    event: dict[str, Any],
+    pieces: dict[str, list[Stage3ComposerPiece]],
+    *,
+    camera_x: float,
+    start_x: int = 0,
+    collision_step: int = DEFAULT_COLLISION_STEP,
+    collision_tolerance: int = DEFAULT_COLLISION_TOLERANCE,
+    debug_lines: bool = False,
+) -> Stage3ComposerLayout:
+    layout = build_stage3_piece_layout(
+        event,
+        pieces,
+        start_x=start_x,
+        height=target.get_height(),
+        collision_step=collision_step,
+        collision_tolerance=collision_tolerance,
+    )
+    draw_stage3_composer_layout(target, layout, camera_x=camera_x, debug_lines=debug_lines)
+    if debug_lines:
+        _draw_debug_legend(target)
+    return layout
+
+
 class Stage3ComposerVisualLayer(pygame.sprite.Sprite):
     terrain_visual_only = True
 
@@ -952,6 +1134,27 @@ def make_stage3_composer_terrain(
         collision_step=collision_step,
         collision_tolerance=collision_tolerance,
         overlap=overlap,
+    )
+    sprites: list[pygame.sprite.Sprite] = [Stage3ComposerVisualLayer(layout)]
+    sprites.extend(Stage3ComposerCollisionBlock(run) for run in layout.collision_runs)
+    sprites.extend(Stage3ComposerCollisionRectBlock(rect) for rect in layout.collision_rects)
+    return sprites
+
+
+def make_stage3_composer_terrain_from_pieces(
+    event: dict[str, Any],
+    *,
+    start_x: int = 0,
+    collision_step: int = DEFAULT_COLLISION_STEP,
+    collision_tolerance: int = DEFAULT_COLLISION_TOLERANCE,
+) -> list[pygame.sprite.Sprite]:
+    pieces = load_stage3_composer_pieces()
+    layout = build_stage3_piece_layout(
+        event,
+        pieces,
+        start_x=start_x,
+        collision_step=collision_step,
+        collision_tolerance=collision_tolerance,
     )
     sprites: list[pygame.sprite.Sprite] = [Stage3ComposerVisualLayer(layout)]
     sprites.extend(Stage3ComposerCollisionBlock(run) for run in layout.collision_runs)

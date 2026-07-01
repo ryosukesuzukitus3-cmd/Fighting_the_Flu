@@ -302,6 +302,20 @@ class EnemySpawner:
                 ))
             return True
 
+        if enemy_type == "TerrainPieces":
+            if self._terrain is not None:
+                if event.get("renderer") != "stage3_composer":
+                    return True
+                from src.entities.stage3_composer_terrain import make_stage3_composer_terrain_from_pieces
+                start_x = self._terrain_start_x(event, camera)
+                self._terrain.add(*make_stage3_composer_terrain_from_pieces(
+                    event,
+                    start_x=int(round(start_x)),
+                    collision_step=int(event.get("composer_collision_step", 8)),
+                    collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
+                ))
+            return True
+
         if enemy_type in {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "cave_section", "corridor"}:
             if self._terrain is not None:
                 from src.entities.terrain import make_terrain_segments_from_event
