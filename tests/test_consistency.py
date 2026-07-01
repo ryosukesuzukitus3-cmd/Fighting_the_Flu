@@ -1760,6 +1760,84 @@ def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
     }
 
 
+def test_stage_designer_adds_duplicates_and_deletes_terrain_pieces() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [
+            {"type": "TerrainPieces", "renderer": "stage3_composer", "pieces": []}
+        ],
+        "world_events": [],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer.mode = "terrain"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer.piece_palette_role = "floor_surface"
+    designer.piece_palette_index = 0
+
+    designer._add_piece_at(120, 240)
+    piece = designer.data["terrain_layout"][0]["pieces"][0]
+
+    assert piece["asset"].startswith("strip_top:")
+    assert piece["role"] == "floor_surface"
+    assert piece["collision"] == "surface"
+    assert piece["side"] == "bottom"
+    assert designer.selection == Selection("piece", 0)
+
+    original_asset = piece["asset"]
+    designer._cycle_piece_asset(1)
+    assert designer.data["terrain_layout"][0]["pieces"][0]["asset"] != original_asset or len(
+        designer._piece_palette_options("floor_surface")
+    ) == 1
+
+    designer._cycle_selected_piece_collision()
+    assert designer.data["terrain_layout"][0]["pieces"][0]["collision"] == "rect"
+
+    designer._duplicate_selection()
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    assert len(pieces) == 2
+    assert pieces[1]["x"] == pieces[0]["x"] + 48
+    assert pieces[1]["y"] == pieces[0]["y"] + 24
+
+    designer._delete_selection()
+    assert len(designer.data["terrain_layout"][0]["pieces"]) == 1
+
+
+def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> None:
+    from tools.stage_designer import EVENT_TEMPLATES, Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": []}], "world_events": []}
+    designer.mode = "events"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer.event_palette_index = next(i for i, (name, _template) in enumerate(EVENT_TEMPLATES) if name == "solid block")
+
+    designer._add_event_at(320, 360)
+    event = designer.data["world_events"][0]
+
+    assert event == {"type": "Terrain", "x": 320, "y": 360, "w": 140, "h": 92, "kind": "fortress_block"}
+    assert designer.selection == Selection("event", 0)
+
+    designer._duplicate_selection()
+    events = designer.data["world_events"]
+    assert len(events) == 2
+    assert events[1]["x"] == 416
+    assert events[1]["y"] == 384
+
+    designer._delete_selection()
+    assert len(designer.data["world_events"]) == 1
+
+
 def test_stage3_composer_report_opens_preview_by_default() -> None:
     from tools import stage3_composer_report
 

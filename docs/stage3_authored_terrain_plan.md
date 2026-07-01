@@ -104,7 +104,7 @@ Stage3は最終的に `AuthoredTerrain.top/bottom` をステージデータのSS
 - 地形変更前に敵配置だけ詰めることは避ける
 - ゲートは単独のHP壁にせず、近くの砲台台・砲台・地形走行敵と組み合わせた戦闘セットピースにする。Stage3では、最初のゲートを上下砲台のクロスファイア、ウェポンゲートを報酬庫、終盤ゲートをCrawlerで足元から押す突破戦として扱う
 
-`tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。現在は Stage3の `TerrainPieces.pieces` と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・保存・PNGキャプチャを行えるようにする。
+`tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。現在は Stage3の `TerrainPieces.pieces` と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・追加・削除・複製・保存・PNGキャプチャを行えるようにする。TerrainPiecesでは role/asset パレットから素材を選び、必要に応じて `collision` / `side` / `flip_x` / `flip_y` を切り替えて、最終的なブロック配置を直接編集する。
 
 ### 3. 地形パーツの役割整理
 
