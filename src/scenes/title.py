@@ -82,7 +82,7 @@ class TitleScene(Scene):
             self._idle_timer += dt
             if TITLE_IDLE and prev < _IDLE_DELAY <= self._idle_timer:
                 self._idle_index = random.randrange(len(TITLE_IDLE))
-            elif self._idle_timer >= _IDLE_DELAY + _IDLE_ROTATE:
+            elif TITLE_IDLE and self._idle_timer >= _IDLE_DELAY + _IDLE_ROTATE:
                 self._idle_timer = _IDLE_DELAY
                 self._idle_index = (self._idle_index + 1) % len(TITLE_IDLE)
         # デバッグジャンプ（python -O で除去）
