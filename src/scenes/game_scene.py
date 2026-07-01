@@ -419,6 +419,7 @@ class GameScene(
         self._player_prev_rect = self.player.rect.copy()
         if not _panel_open:
             self.player.update(dt)
+            self._apply_boss_suction(dt)
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera,
                                    self.enemies, self.enemy_bullets, self.terrain,
@@ -580,7 +581,8 @@ class GameScene(
                 and not self._boss_mid_dialogue_shown
                 and self._boss.hp / self._boss.max_hp <= 0.5):
             boss_stage_id = self._boss_stage_id()
-            mid_key = "4f2mid" if getattr(self._boss, "_form2", False) else f"{boss_stage_id}mid"
+            in_form2 = getattr(self._boss, "_form2", False)
+            mid_key = "4f2mid" if (boss_stage_id == 4 and in_form2) else f"{boss_stage_id}mid"
             if mid_key in BOSS_MID:
                 self._enqueue_boss_dialogue(BOSS_MID[mid_key], BOSS_MID_LINE_DURATION)
                 self._boss_mid_dialogue_shown = True
@@ -652,6 +654,8 @@ class GameScene(
                 self._pending_boss_stage_id = None
                 # 砲台連動ギミック用の召喚コールバックを注入
                 self._boss.summon_turret_fn = self._summon_boss_turrets
+                # 巨大レーザー発射時の画面シェイク用にカメラを注入
+                self._boss.camera = self.camera
                 self._boss_intro_state = "entering"
 
         elif state == "boss_name":
@@ -1072,8 +1076,10 @@ class GameScene(
                     break
             if self._companion.is_active:
                 for bullet in list(self.enemy_bullets):
-                    if getattr(bullet, "_terrain_bounced", False) or getattr(bullet, "warning_only", False):
-                        continue
+                    if (getattr(bullet, "_terrain_bounced", False)
+                            or getattr(bullet, "warning_only", False)
+                            or getattr(bullet, "persistent", False)):
+                        continue   # 連続レーザー（persistent）は相殺で消さない
                     if self._companion.hit_rect.colliderect(bullet.rect):
                         self._companion.take_damage()
                         bullet.kill()   # 被弾した弾は相殺
@@ -1255,6 +1261,30 @@ class GameScene(
             self._boss_dialogue_speaker = nxt.speaker
             self._boss_dialogue_text    = nxt.text
             self._boss_dialogue_timer   = getattr(self, "_boss_dialogue_line_dur", BOSS_DIALOGUE_DURATION)
+
+    def _apply_boss_suction(self, dt: float) -> None:
+        """超サイヤ人レーザーのチャージ中、自機をビーム発生点へ吸い込む。
+
+        引き込み速度は一定なので、speed up を取って自機が速いほど引きに逆らって
+        逃げやすい（＝スピード強化がそのまま回避力になる）ギミック。
+        """
+        boss = self._boss
+        if (not self._in_boss_fight or boss is None
+                or not getattr(boss, "suction_active", False)):
+            return
+        px = self.player.sx + self.player.rect.width / 2
+        py = self.player.sy + self.player.rect.height / 2
+        dx = boss.suction_x - px
+        dy = boss.suction_y - py
+        dist = math.hypot(dx, dy)
+        if dist < 1.0:
+            return
+        pull = 175.0 * dt
+        self.player.sx += (dx / dist) * pull
+        self.player.sy += (dy / dist) * pull
+        self.player.sx = max(0.0, min(SCREEN_WIDTH - self.player.rect.width, self.player.sx))
+        self.player.sy = max(0.0, min(SCREEN_HEIGHT - self.player.rect.height, self.player.sy))
+        self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))
 
     def _damage_player(self, amount: int = PLAYER_DMG_BULLET) -> None:
         if self.player.is_invincible:

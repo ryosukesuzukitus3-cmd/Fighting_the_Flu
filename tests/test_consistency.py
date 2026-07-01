@@ -1314,7 +1314,7 @@ def test_boss_phase_configs_reference_known_patterns() -> None:
         "fan5", "fan7", "aimed", "dbl_aimed", "ring8", "ring12", "ring16",
         "aimring6", "aimring8", "scatter", "cross", "spiral", "vortex2",
         "vortex3", "chaos", "burst3", "wall_gap", "fever_lunge",
-        "mega_laser", "drone_cross", "rock_fall", "shogi_file",
+        "mega_laser", "super_laser", "drone_cross", "rock_fall", "shogi_file",
         "shogi_storm", "shogi_drop", "board_throw", "mega_beam", "void_break",
         "dash_knives", "curtain",
     }
@@ -1361,14 +1361,31 @@ def test_enemy_bullet_supports_boss_special_shapes() -> None:
     assert fading.image.get_alpha() is not None and fading.image.get_alpha() < 255
 
 
-def test_broly_beam_has_warning_and_fadeout() -> None:
+def test_broly_beam_has_charge_and_taper() -> None:
     src = (ROOT / "src" / "entities" / "enemies" / "broly.py").read_text(encoding="utf-8")
 
+    # チャージ相 → 本体ビーム（粒子砲フレーム・先細りで消滅）の流れを担保する。
     assert "_fire_warning()" in src
     assert "warning_only=True" in src
     assert "_fire_charge_beam()" in src
-    assert "fade_shrink=True" in src
-    assert "_paint_charge_beam" in src
+    assert "zunda_charge_frames" in src      # ZUNDA粒子砲 冒頭のチャージ相
+    assert "zunda_beam_frames" in src        # 本体ビーム→放電フレーム
+    assert "LaserBeamSprite" in src          # 動画フレーム対応の本体ビーム
+    assert "taper_time=" in src              # 発射終了後に徐々に細くなる
+
+
+def test_laser_beam_is_persistent_and_not_cancelled_on_contact() -> None:
+    from src.entities.bullets.laser_fx import BOSS_PALETTE, LaserBeamSprite
+
+    beam = LaserBeamSprite(300.0, 200.0, 400, 60, palette=BOSS_PALETTE,
+                           lifetime=0.6, damage=20, warning_only=False)
+    # 連続レーザーは接触で相殺・消滅しない（永続フラグ）かつ地形貫通。
+    assert beam.persistent is True
+    assert beam.terrain_passthrough is True
+
+    # game_scene の相棒（カロナール）相殺ループは persistent を除外している。
+    src = (ROOT / "src" / "scenes" / "game_scene.py").read_text(encoding="utf-8")
+    assert 'getattr(bullet, "persistent", False)' in src
 
 
 def test_boss_turret_guard_blocks_core_damage() -> None:

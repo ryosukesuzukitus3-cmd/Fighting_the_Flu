@@ -560,6 +560,11 @@ CREDITS: list[Page] = [
     page(SYS, "■ MUSIC"),
     page(SYS, "/ 選曲・音響演出", "ゾル鈴木"),
 
+    page(SYS, "■ 素材協力"),
+    page(SYS, "ZUNDA粒子砲final（nc226126）"),
+    page(SYS, "レーザー・ビームの発射音1（nc104240）"),
+    page(SYS, "/ 提供", "ニコニ・コモンズ"),
+
     page(SYS, "■ SPECIAL THANKS"),
     page(SYS, "澤口"),
     page(SYS, "/ そして、この夜に付き合ってくれた あなたへ。", last=True),
