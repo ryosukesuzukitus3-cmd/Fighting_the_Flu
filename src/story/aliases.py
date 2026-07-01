@@ -14,6 +14,7 @@ BGM: dict[str, str | None] = {
     "BGM_STAGE3":   "music/bgm/とげとげタルめいろ.mp3",
     "BGM_STAGE4":   "music/bgm/決戦.mp3",
     "BGM_BOSS":     "music/bgm/決戦.mp3",
+    "BGM_BOSS_FORM2": "music/bgm/決戦.mp3",             # 仮：第2形態専用曲は後で差し替え
     "BGM_FINAL":    "music/bgm/決戦.mp3",
     "BGM_EPILOGUE": None,                              # TODO(Phase4): 専用曲ダミー
     "BGM_CLEAR":    "music/bgm/FFVI_勝利のファンファーレ.mp3",
@@ -27,6 +28,7 @@ SE: dict[str, str | None] = {
     "SE_ITEM_WEAPON":  "music/se/item_weapon_pickup.wav",
     "SE_ITEM_HEAL":    "music/se/item_heal_pickup.wav",
     "SE_ALERT":        "music/se/boss_alert.wav",
+    "SE_BOSS_TRANSFORM": "music/se/boss_alert.wav",     # 仮：形態変化スティンガー（後で差し替え）
     "SE_FIGHT":        "music/se/fight.wav",
     "SE_EXPLOSION":    "music/se/game_explosion9.mp3",
     "SE_HIT":          "music/se/hit.wav",

@@ -18,6 +18,7 @@ import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
 from src.scenes.game.config import BOSS_BGM, BOSS_MID_LINE_DURATION
+from src.story.aliases import bgm_path
 from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS
 
 
@@ -142,12 +143,19 @@ class FinalBattleDirector:
     # ── 公開: フェーズ遷移 ────────────────────────────────────────
     def on_form2_transition(self) -> None:
         scene = self.scene
-        scene.camera.shake(22.0)
-        scene._hitstop_timer = 0.14
+        # 第1→2形態の juice を第3形態と同格に：強シェイク・変身スティンガー・
+        # 覚醒バナー保持・BGM 切替（専用曲は仮配線）。
+        scene.camera.shake(26.0)
+        scene._hitstop_timer = 0.16
         scene.particles.spawn_big_explosion(scene._boss.sx, scene._boss.sy)
         scene.enemy_bullets.empty()
         scene.player._invincible_timer = max(scene.player._invincible_timer, 2.5)
         scene._form2_flash_timer = 0.5
+        scene.game.sound.play_se_alias("SE_BOSS_TRANSFORM", volume=0.85)
+        # 専用トラック未着手のため現状は決戦を継続（if_new＝再スタートしない）。
+        # 後で BGM_BOSS_FORM2 を差し替えると自動で切り替わる。
+        scene.game.sound.play_bgm_if_new(bgm_path("BGM_BOSS_FORM2"))
+        self._show_final_banner("awaken", 2.6)
         f2_key = f"{scene._boss_stage_id()}f2"
         scene._enqueue_boss_dialogue(BOSS_MID.get(f2_key, []), BOSS_MID_LINE_DURATION)
         scene._boss_mid_dialogue_shown = False
@@ -408,7 +416,7 @@ class FinalBattleDirector:
             screen,
             self.scene.game.resources,
             line.speaker,
-            (line.text,),
+            line.lines,
             page_index=idx,
             total_pages=total,
             hint_text=hint,
