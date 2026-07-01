@@ -23,8 +23,11 @@ sys.path.insert(0, str(ROOT))
 
 from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH  # noqa: E402
 from src.entities.stage3_composer_terrain import (  # noqa: E402
+    Stage3ComposerLayout,
+    build_stage3_piece_layout,
     load_stage3_composer_pieces,
     render_stage3_composer_surface,
+    render_stage3_piece_surface,
 )
 from src.entities.terrain import make_terrain_segments_from_event  # noqa: E402
 
@@ -45,7 +48,7 @@ MIN_WINDOW_W = VIEW_W + PANEL_W
 MIN_WINDOW_H = VIEW_H + TOOLBAR_H
 
 RECT_TERRAIN_TYPES = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
-TERRAIN_LAYOUT_TYPES = {"AuthoredTerrain", "TerrainPath", "TerrainStrip"}
+TERRAIN_LAYOUT_TYPES = {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "TerrainPieces"}
 ENEMY_COLOR = (255, 92, 108)
 TERRAIN_COLOR = (255, 190, 88)
 GATE_COLOR = (92, 225, 255)
@@ -88,6 +91,17 @@ def _format_point_list(key: str, points: list[Any], *, indent: int, comma: bool)
     return lines
 
 
+def _format_compact_item_list(key: str, values: list[Any], *, indent: int, comma: bool) -> list[str]:
+    if not values:
+        return [" " * indent + f"{_compact_json(key)}: []{',' if comma else ''}"]
+    lines = [" " * indent + f"{_compact_json(key)}: ["]
+    for i, value in enumerate(values):
+        suffix = "," if i < len(values) - 1 else ""
+        lines.append(" " * (indent + 2) + f"{_compact_json(value)}{suffix}")
+    lines.append(" " * indent + f"]{',' if comma else ''}")
+    return lines
+
+
 def _format_layout_object(obj: dict[str, Any], *, indent: int, comma: bool) -> list[str]:
     lines = [" " * indent + "{"]
     keys = list(obj.keys())
@@ -96,6 +110,8 @@ def _format_layout_object(obj: dict[str, Any], *, indent: int, comma: bool) -> l
         is_last = i == len(keys) - 1
         if key in {"top", "bottom"} and isinstance(value, list):
             lines.extend(_format_point_list(key, value, indent=indent + 2, comma=not is_last))
+        elif key == "pieces" and isinstance(value, list):
+            lines.extend(_format_compact_item_list(key, value, indent=indent + 2, comma=not is_last))
         else:
             lines.extend(_format_scalar(key, value, indent=indent + 2, comma=not is_last))
     lines.append(" " * indent + f"}}{',' if comma else ''}")
@@ -154,9 +170,20 @@ def _layout(data: dict[str, Any]) -> dict[str, Any]:
     return data["terrain_layout"][0]
 
 
+def _layout_start_x(layout: dict[str, Any]) -> int:
+    return int(layout.get("x", layout.get("world_x", layout.get("start_offset", 0))))
+
+
 def _stage_length(data: dict[str, Any]) -> int:
     layout = _layout(data)
     length = int(layout.get("length", 12000))
+    if layout.get("type") == "TerrainPieces":
+        piece_xs = [
+            int(piece.get("x", 0))
+            for piece in layout.get("pieces", [])
+            if isinstance(piece, dict) and "x" in piece
+        ]
+        length = max(length, max(piece_xs, default=0) + 900)
     xs = [
         int(ev.get("x", ev.get("world_x", ev.get("trigger_x", 0))))
         for ev in data.get("world_events", [])
@@ -282,7 +309,7 @@ class StageDesigner:
         self.font = pygame.font.SysFont("consolas", 16) or pygame.font.Font(None, 16)
         self.small_font = pygame.font.SysFont("consolas", 13) or pygame.font.Font(None, 13)
         self.camera_x = float(args.x)
-        self.mode = "events"
+        self.mode = str(args.mode)
         self.selection: Selection | None = None
         self.show_help = True
         self.dragging = False
@@ -318,6 +345,23 @@ class StageDesigner:
         pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
         self._terrain_cache_key = key
         self._terrain_cache = (segments, pieces)
+        return self._terrain_cache
+
+    def _piece_layout(self) -> tuple[Stage3ComposerLayout, dict[str, list[Any]]]:
+        layout = _layout(self.data)
+        key = "pieces:" + json.dumps(layout, sort_keys=True, ensure_ascii=False)
+        if self._terrain_cache is not None and self._terrain_cache_key == key:
+            return self._terrain_cache
+        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        composer_layout = build_stage3_piece_layout(
+            layout,
+            pieces,
+            start_x=_layout_start_x(layout),
+            collision_step=int(layout.get("composer_collision_step", 8)),
+            collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
+        )
+        self._terrain_cache_key = key
+        self._terrain_cache = (composer_layout, pieces)
         return self._terrain_cache
 
     def _load_backdrop(self) -> pygame.Surface:
@@ -375,11 +419,33 @@ class StageDesigner:
                     best = (Selection("terrain", i, side), dist)
         return None if best is None else best[0]
 
+    def _terrain_piece_at(self, pos: tuple[int, int]) -> Selection | None:
+        vx, vy = pos[0], pos[1] - TOOLBAR_H
+        composer_layout, _pieces = self._piece_layout()
+        best: tuple[Selection, float] | None = None
+        for i, placement in enumerate(composer_layout.placements):
+            rect = pygame.Rect(
+                int(round(placement.x - self.camera_x)),
+                placement.y,
+                placement.image.get_width(),
+                placement.image.get_height(),
+            ).inflate(6, 6)
+            if rect.collidepoint(vx, vy):
+                dist = (rect.centerx - vx) ** 2 + (rect.centery - vy) ** 2
+                if best is None or dist < best[1]:
+                    best = (Selection("piece", i), dist)
+        return None if best is None else best[0]
+
     def _select_at(self, pos: tuple[int, int]) -> None:
         self.selection = None
         if not self.view_rect.collidepoint(pos):
             return
         if self.mode == "terrain":
+            if _layout(self.data).get("type") == "TerrainPieces":
+                self.selection = self._terrain_piece_at(pos)
+                if self.selection is not None:
+                    self.message = f"Selected terrain piece #{self.selection.index + 1}"
+                return
             self.selection = self._terrain_point_at(pos)
             if self.selection is not None:
                 self.message = f"Selected {self.selection.side} point #{self.selection.index + 1}"
@@ -408,6 +474,15 @@ class StageDesigner:
         self.selection = None
         return None
 
+    def _selected_piece(self) -> dict[str, Any] | None:
+        if self.selection is None or self.selection.kind != "piece":
+            return None
+        pieces = _layout(self.data).get("pieces", [])
+        if 0 <= self.selection.index < len(pieces):
+            return pieces[self.selection.index]
+        self.selection = None
+        return None
+
     def _move_selection(self, dx: float, dy: float) -> None:
         if self.selection is None:
             return
@@ -419,6 +494,13 @@ class StageDesigner:
             if _event_x(event) is not None:
                 _set_event_x(event, (_event_x(event) or 0.0) + dx)
             _set_event_y(event, _event_y(event, self.data) + dy)
+        elif self.selection.kind == "piece":
+            piece = self._selected_piece()
+            if piece is None:
+                return
+            piece["x"] = int(round(float(piece.get("x", 0)) + dx))
+            piece["y"] = int(round(float(piece.get("y", 0)) + dy))
+            self._invalidate_terrain_cache()
         else:
             point = self._selected_point()
             if point is None:
@@ -437,6 +519,13 @@ class StageDesigner:
                 return
             _set_event_x(event, wx - self.drag_offset.x)
             _set_event_y(event, wy - self.drag_offset.y)
+        elif self.selection.kind == "piece":
+            piece = self._selected_piece()
+            if piece is None:
+                return
+            piece["x"] = int(round(wx - self.drag_offset.x))
+            piece["y"] = int(round(wy - self.drag_offset.y))
+            self._invalidate_terrain_cache()
         else:
             point = self._selected_point()
             if point is None:
@@ -485,6 +574,24 @@ class StageDesigner:
             if len(screen_points) >= 2:
                 pygame.draw.lines(target, color, False, screen_points, 1)
 
+    def _draw_terrain_pieces(self, target: pygame.Surface) -> None:
+        composer_layout, _pieces = self._piece_layout()
+        for i, placement in enumerate(composer_layout.placements):
+            rect = pygame.Rect(
+                int(round(placement.x - self.camera_x)),
+                placement.y,
+                placement.image.get_width(),
+                placement.image.get_height(),
+            )
+            if rect.right < 0 or rect.left > VIEW_W:
+                continue
+            selected = self.selection == Selection("piece", i)
+            color = POINT_BOTTOM_COLOR if placement.side == "bottom" else POINT_TOP_COLOR if placement.side == "top" else TERRAIN_COLOR
+            pygame.draw.rect(target, color, rect, 2 if selected else 1)
+            if selected:
+                label = self.small_font.render(placement.asset or placement.role, True, color)
+                target.blit(label, (rect.left, max(0, rect.top - 16)))
+
     def _draw_events(self, target: pygame.Surface) -> None:
         for i, event in enumerate(self.data.get("world_events", [])):
             rect = _event_rect(event, self.data, self.camera_x)
@@ -528,6 +635,18 @@ class StageDesigner:
                 f"y: {_event_y(event, self.data):.0f}",
                 f"keys: {', '.join(event.keys())}",
             ]
+        if self.selection.kind == "piece":
+            piece = self._selected_piece()
+            if piece is None:
+                return ["No selection"]
+            return [
+                f"piece #{self.selection.index + 1}",
+                f"asset: {piece.get('asset')}",
+                f"role: {piece.get('role')}",
+                f"x: {piece.get('x')}",
+                f"y: {piece.get('y')}",
+                f"collision: {piece.get('collision', 'auto')}",
+            ]
         point = self._selected_point()
         if point is None:
             return ["No selection"]
@@ -541,19 +660,34 @@ class StageDesigner:
         surface = pygame.Surface(self.screen.get_size())
         surface.fill((10, 13, 16))
         view = self._load_backdrop()
-        segments, pieces = self._terrain()
-        render_stage3_composer_surface(
-            view,
-            segments,
-            pieces,
-            camera_x=self.camera_x,
-            sample_step=int(_layout(self.data).get("composer_sample_step", 48)),
-            tolerance=int(_layout(self.data).get("composer_tolerance", 26)),
-            collision_step=int(_layout(self.data).get("composer_collision_step", 8)),
-            collision_tolerance=int(_layout(self.data).get("composer_collision_tolerance", 10)),
-            overlap=int(_layout(self.data).get("composer_overlap", 0)),
-        )
-        self._draw_terrain_points(view)
+        layout = _layout(self.data)
+        if layout.get("type") == "TerrainPieces":
+            _composer_layout, pieces = self._piece_layout()
+            render_stage3_piece_surface(
+                view,
+                layout,
+                pieces,
+                camera_x=self.camera_x,
+                start_x=_layout_start_x(layout),
+                collision_step=int(layout.get("composer_collision_step", 8)),
+                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
+            )
+            if self.mode == "terrain":
+                self._draw_terrain_pieces(view)
+        else:
+            segments, pieces = self._terrain()
+            render_stage3_composer_surface(
+                view,
+                segments,
+                pieces,
+                camera_x=self.camera_x,
+                sample_step=int(layout.get("composer_sample_step", 48)),
+                tolerance=int(layout.get("composer_tolerance", 26)),
+                collision_step=int(layout.get("composer_collision_step", 8)),
+                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
+                overlap=int(layout.get("composer_overlap", 0)),
+            )
+            self._draw_terrain_points(view)
         self._draw_events(view)
         surface.blit(view, self.view_rect.topleft)
 
@@ -570,7 +704,7 @@ class StageDesigner:
         y = panel.top + 12
         help_lines = [
             "Stage Designer",
-            "E events / T terrain",
+            "E events / T terrain/pieces",
             "Drag selected item",
             "Arrows move (Ctrl=10)",
             "A/D or wheel pan",
@@ -658,6 +792,11 @@ class StageDesigner:
             if event_obj is None:
                 return
             self.drag_offset.xy = (wx - (_event_x(event_obj) or wx), wy - _event_y(event_obj, self.data))
+        elif self.selection.kind == "piece":
+            piece = self._selected_piece()
+            if piece is None:
+                return
+            self.drag_offset.xy = (wx - float(piece.get("x", 0)), wy - float(piece.get("y", 0)))
         else:
             point = self._selected_point()
             if point is None:
@@ -734,6 +873,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rects", default=str(DEFAULT_RECTS), help="Stage3 rect config")
     parser.add_argument("--mask-dir", default=str(DEFAULT_MASK_DIR), help="Stage3 alpha mask directory")
     parser.add_argument("--x", type=float, default=0.0, help="initial camera x")
+    parser.add_argument("--mode", choices=("events", "terrain"), default="events", help="initial editor mode")
     parser.add_argument("--window-w", type=int, default=MIN_WINDOW_W)
     parser.add_argument("--window-h", type=int, default=MIN_WINDOW_H)
     parser.add_argument("--capture", default=None, help="render one PNG and exit")

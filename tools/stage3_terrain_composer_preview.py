@@ -21,6 +21,7 @@ import pygame
 from src.entities.stage3_composer_terrain import (
     load_stage3_composer_pieces,
     render_stage3_composer_surface,
+    render_stage3_piece_surface,
 )
 from stage3_alpha_mask_common import DEFAULT_MASK_DIR
 
@@ -37,16 +38,23 @@ def _resolve(path: str | Path, *, base: Path = ROOT) -> Path:
     return p if p.is_absolute() else base / p
 
 
-def _stage3_segments(stage_path: Path) -> list[Any]:
-    from src.entities.terrain import make_terrain_segments_from_event
-
+def _stage3_layout(stage_path: Path) -> dict[str, Any]:
     data = json.loads(stage_path.read_text(encoding="utf-8"))
     layouts = data.get("terrain_layout", [])
     if not layouts:
         raise ValueError(f"{stage_path} does not contain terrain_layout")
     layout = layouts[0]
-    if layout.get("type") not in {"AuthoredTerrain", "TerrainPath", "TerrainStrip"}:
-        raise ValueError("stage3 terrain composer expects continuous terrain layout")
+    if layout.get("type") not in {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "TerrainPieces"}:
+        raise ValueError("stage3 terrain composer expects supported terrain layout")
+    return layout
+
+
+def _stage3_segments(stage_path: Path) -> list[Any]:
+    from src.entities.terrain import make_terrain_segments_from_event
+
+    layout = _stage3_layout(stage_path)
+    if layout.get("type") == "TerrainPieces":
+        raise ValueError("TerrainPieces does not have continuous terrain segments")
     start_x = float(layout.get("start_offset", 0))
     return make_terrain_segments_from_event(layout, start_x, default_seed=303)
 
@@ -82,7 +90,8 @@ def _draw_frame_label(target: pygame.Surface, text: str) -> None:
 
 
 def _render_view(
-    segments: list[Any],
+    layout: dict[str, Any],
+    segments: list[Any] | None,
     pieces: dict[str, list[Any]],
     *,
     camera_x: float,
@@ -96,18 +105,30 @@ def _render_view(
     debug_lines: bool,
 ) -> pygame.Surface:
     surface = _load_backdrop(width, height)
-    render_stage3_composer_surface(
-        surface,
-        segments,
-        pieces,
-        camera_x=camera_x,
-        sample_step=sample_step,
-        tolerance=tolerance,
-        collision_step=collision_step,
-        collision_tolerance=collision_tolerance,
-        overlap=overlap,
-        debug_lines=debug_lines,
-    )
+    if layout.get("type") == "TerrainPieces":
+        render_stage3_piece_surface(
+            surface,
+            layout,
+            pieces,
+            camera_x=camera_x,
+            start_x=int(layout.get("x", layout.get("world_x", 0))),
+            collision_step=collision_step,
+            collision_tolerance=collision_tolerance,
+            debug_lines=debug_lines,
+        )
+    else:
+        render_stage3_composer_surface(
+            surface,
+            segments or [],
+            pieces,
+            camera_x=camera_x,
+            sample_step=sample_step,
+            tolerance=tolerance,
+            collision_step=collision_step,
+            collision_tolerance=collision_tolerance,
+            overlap=overlap,
+            debug_lines=debug_lines,
+        )
     _draw_frame_label(surface, f"stage3 composer preview  x={int(camera_x)}")
     return surface
 
@@ -210,7 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         out = _resolve(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
 
-        segments = _stage3_segments(stage_path)
+        layout = _stage3_layout(stage_path)
+        segments = None if layout.get("type") == "TerrainPieces" else _stage3_segments(stage_path)
         pieces = load_stage3_composer_pieces(
             rects_path,
             mask_dir=mask_dir,
@@ -220,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         paths: list[Path] = []
         for i, camera_x in enumerate(camera_xs):
             image = _render_view(
+                layout,
                 segments,
                 pieces,
                 camera_x=camera_x,

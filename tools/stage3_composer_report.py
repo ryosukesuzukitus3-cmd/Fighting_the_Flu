@@ -31,6 +31,7 @@ from src.core.game import Game  # noqa: E402
 from src.entities.stage3_composer_terrain import (  # noqa: E402
     load_stage3_composer_pieces,
     render_stage3_composer_surface,
+    render_stage3_piece_surface,
 )
 from src.entities.terrain_query import iter_collidable_terrain  # noqa: E402
 from src.scenes.game_scene import GameScene  # noqa: E402
@@ -57,8 +58,8 @@ def _stage3_layout(stage_path: Path) -> dict[str, Any]:
     if not layouts:
         raise ValueError(f"{stage_path} does not contain terrain_layout")
     layout = layouts[0]
-    if layout.get("type") not in {"AuthoredTerrain", "TerrainPath", "TerrainStrip"}:
-        raise ValueError("Stage3 composer report expects continuous terrain layout")
+    if layout.get("type") not in {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "TerrainPieces"}:
+        raise ValueError("Stage3 composer report expects supported stage3 terrain layout")
     return layout
 
 
@@ -181,20 +182,33 @@ def _composer_captures(
     rects_path: Path,
     mask_dir: Path,
 ) -> dict[float, Path]:
-    segments = _stage3_segments(stage_path)
+    layout = _stage3_layout(stage_path)
+    segments = None if layout.get("type") == "TerrainPieces" else _stage3_segments(stage_path)
     composer_options = _composer_options(stage_path)
     pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
     captures: dict[float, Path] = {}
     for camera_x in sorted(camera_xs):
         surface = _load_backdrop(SCREEN_WIDTH, SCREEN_HEIGHT)
-        render_stage3_composer_surface(
-            surface,
-            segments,
-            pieces,
-            camera_x=camera_x,
-            debug_lines=True,
-            **composer_options,
-        )
+        if layout.get("type") == "TerrainPieces":
+            render_stage3_piece_surface(
+                surface,
+                layout,
+                pieces,
+                camera_x=camera_x,
+                start_x=int(layout.get("x", layout.get("world_x", 0))),
+                collision_step=composer_options["collision_step"],
+                collision_tolerance=composer_options["collision_tolerance"],
+                debug_lines=True,
+            )
+        else:
+            render_stage3_composer_surface(
+                surface,
+                segments,
+                pieces,
+                camera_x=camera_x,
+                debug_lines=True,
+                **composer_options,
+            )
         _draw_label(surface, f"composer preview  x={int(camera_x)}")
         path = out_dir / f"x{int(camera_x):05d}_composer.png"
         pygame.image.save(surface, str(path))

@@ -608,9 +608,9 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | ○ | ステージ開始からの経過秒数（出現タイミング） |
-| `type` | ○ | 敵の種別（EnemyVirus / EnemyTakeshi / EnemyBroly / EnemyPachemon / EnemyBilly / EnemyTurret / EnemyCrawler / EnemyDebrisLarge / EnemyDebrisShard / Boss / **Terrain** / **AuthoredTerrain** / **TerrainStrip**） |
-| `count` | △ | 出現数（Terrain / AuthoredTerrain / TerrainStrip では不要） |
-| `formation` | △ | 編隊の並び方（`line` / `v_shape` / `random` / `single`）。`y` / `surface` 指定時・Terrain / AuthoredTerrain / TerrainStrip では不要 |
+| `type` | ○ | 敵の種別（EnemyVirus / EnemyTakeshi / EnemyBroly / EnemyPachemon / EnemyBilly / EnemyTurret / EnemyCrawler / EnemyDebrisLarge / EnemyDebrisShard / Boss / **Terrain** / **TerrainPieces** / **AuthoredTerrain** / **TerrainStrip**） |
+| `count` | △ | 出現数（Terrain / TerrainPieces / AuthoredTerrain / TerrainStrip では不要） |
+| `formation` | △ | 編隊の並び方（`line` / `v_shape` / `random` / `single`）。`y` / `surface` 指定時・Terrain / TerrainPieces / AuthoredTerrain / TerrainStrip では不要 |
 | `y` | — | 出現Y座標を固定（指定時は formation 省略可） |
 | `surface` | — | 地形表面に吸着して出現（`top` / `bottom`）。砲台などの足場配置に使う |
 | `surface_offset` / `surface_step` | — | `surface` 指定時の表面からの中心オフセット・複数出現時の横間隔 |
@@ -629,7 +629,7 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `count` | — | 出現数（既定1） |
 | `formation` | △ | `line` / `v_shape` / `random`。`y` / `surface` 指定時は省略可 |
 | `y` | — | 配置Y座標を固定 |
-| `surface` | — | `top` / `bottom`。AuthoredTerrain / TerrainStrip や固定地形ブロックの表面に吸着する |
+| `surface` | — | `top` / `bottom`。TerrainPieces / AuthoredTerrain / TerrainStrip や固定地形ブロックの表面に吸着する |
 | `preload` / `spawn_margin` | — | 画面右端から何px手前で生成するか（既定80px） |
 | `fixed_drop` | — | 撃破時に必ず出すアイテム名。中ボスなど、ご褒美配置の確定報酬に使う |
 
@@ -638,7 +638,8 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 `terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
 固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `weapon_gate` / `turret_mount` を使える。`gate` / `breakable_gate` / `weapon_gate` は既定で破壊可能になる。
 `weapon_gate` は報酬用の血栓ゲートで、未指定でも `fixed_drop: "WeaponItem"` として扱われ、内部に青白い報酬コアを描く。
-連続地形の新規作成は `AuthoredTerrain` を優先する。`AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する形式で、ステージ設計の主導権を乱数から手書きデータへ戻すための正式ルートとする。
+Stage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
+`AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する中間形式。輪郭から自動充填して初期ブロック配置を作る補助用途としては残すが、Stage3の最終地形SSOTにはしない。
 `TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
 #### 地形イベント（`type: "Terrain"`）
@@ -659,6 +660,31 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | `hp` | — | 破壊可能地形のHP |
 | `drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
 | `fixed_drop` | — | 破壊時に必ず出すアイテム名。血栓ゲートなど、ご褒美配置の確定報酬に使う |
+
+#### 明示ブロック地形イベント（`type: "TerrainPieces"`）
+
+Stage3の道中地形で使う、素材ブロック配置を直接保持する形式。`pieces` の各要素が1つの地形素材を表し、runtimeは保存済みブロックから描画と簡略化した衝突面を生成する。
+
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
+| `type` | ○ | `"TerrainPieces"` |
+| `theme` | ○ | 見た目テーマ。Stage3では `"fortress"` |
+| `renderer` | ○ | Stage3では `"stage3_composer"` |
+| `length` | ○ | ステージ地形の横幅（px） |
+| `x` / `world_x` | — | `pieces[].x` へ加算する基準X。Stage3道中では通常0 |
+| `pieces` | ○ | 明示配置ブロック配列 |
+
+`pieces` の要素:
+
+| フィールド | 必須 | 説明 |
+|---|---|---|
+| `asset` | ○ | `tools/stage3_terrain_rects.json` の `group:index`。例: `"strip_top:2"` |
+| `x` / `y` | ○ | 素材左上のワールド座標 |
+| `role` | ○ | `floor_surface` / `ceiling_surface` / `body_fill` / `floor_prop` などの用途 |
+| `collision` | ○ | `"surface"` / `"rect"` / `"none"` / `"auto"`。床・天井は `surface`、小物障害物は `rect`、内部充填は `none` |
+| `side` | — | `top` / `bottom`。surface衝突や地形走行敵の表面判定に使う |
+| `flip_x` / `flip_y` | — | 素材を反転して描画する。天井用surfaceでは `flip_y: true` を使う |
 
 #### 手書き連続地形イベント（`type: "AuthoredTerrain"`）
 
