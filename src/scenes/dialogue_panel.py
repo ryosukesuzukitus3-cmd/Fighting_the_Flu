@@ -177,11 +177,12 @@ def _draw_arrow(screen, rect, alpha, arrow_on, complete):
 
 # ── 戦闘パネル（顔アイコン・省スペース） ──────────────────────────────
 
-COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 128, SCREEN_WIDTH - 52, 92)
-_COMBAT_PORTRAIT_SIZE = 68        # 顔アイコンは固定（パネルが伸びても一定）
-_COMBAT_LINE_H = 43               # pixelfont(26) の行高（38）＋行間 5
-_COMBAT_PAD_TOP = 18
-_COMBAT_PAD_BOTTOM = 14
+# 本文は 22pt（従来 26pt より一段小）。最長行 616px でも折返さず 1 行に収まり
+# （全行 ≤ 使用可能幅 624px を実測確認）、セリフは最大 2 行。パネルは最初から
+# 2 行ぶんの固定サイズにして自動拡張しない（サイズが暴れる違和感を避ける）。
+_COMBAT_BODY_SIZE = 22
+_COMBAT_PORTRAIT_SIZE = 68        # 顔アイコンは固定
+COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 144, SCREEN_WIDTH - 52, 108)
 
 
 def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
@@ -189,23 +190,19 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                       alpha=255, center=False, arrow_on=None, chars=None,
                       complete=None, text_transform=None, text_jitter=0,
                       show_portrait=True):
-    base = COMBAT_PANEL_RECT
-    body = resources.pixelfont(26)
+    rect = COMBAT_PANEL_RECT
+    body = resources.pixelfont(_COMBAT_BODY_SIZE)
     # 本文の左端と使える横幅（顔アイコンぶんを差し引く）を先に確定する。
-    text_x, text_w = base.x + 22, base.w - 44
+    text_x, text_w = rect.x + 22, rect.w - 44
     portrait = speaker_portrait(speaker) if show_portrait else None
     if portrait:
-        text_x = base.x + 14 + _COMBAT_PORTRAIT_SIZE + 20
-        text_w = base.right - 22 - text_x
-    # 長い行は横幅に合わせて折り返し、行数に応じてパネルを上へ伸ばす。
-    # （単行はこれまで通り 92px・同位置。複数行/長行のみ上方向に成長する）
+        text_x = rect.x + 14 + _COMBAT_PORTRAIT_SIZE + 20
+        text_w = rect.right - 22 - text_x
+    # 想定外に長い行だけ横幅で折り返す安全網（通常は 1 行に収まる）。
     wrapped: list[str] = []
     for ln in lines:
         wrapped.extend(_wrap_line(body, ln, text_w))
     wrapped = wrapped or [""]
-    content_h = _COMBAT_PAD_TOP + len(wrapped) * _COMBAT_LINE_H + _COMBAT_PAD_BOTTOM
-    height = max(base.h, content_h)
-    rect = pygame.Rect(base.x, base.bottom - height, base.w, height)
 
     _draw_window(screen, rect, style, alpha)
     if portrait:
@@ -219,8 +216,8 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                          (px - 3, py - 3, size + 6, size + 6), 2)
     _draw_name_tab(screen, resources, rect, speaker, style, alpha)
     _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
-               valign="center", body_size=26, min_body_size=20, text_x=text_x,
-               text_w=text_w, alpha=alpha, text_transform=text_transform,
+               valign="center", body_size=_COMBAT_BODY_SIZE, min_body_size=_COMBAT_BODY_SIZE,
+               text_x=text_x, text_w=text_w, alpha=alpha, text_transform=text_transform,
                text_color=None, text_jitter=text_jitter)
     if complete is None:
         complete = hint_text is not None
