@@ -1848,6 +1848,84 @@ def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> Non
     assert designer.data["world_events"][-1]["x"] == 500
 
 
+def test_stage_designer_formats_and_autofills_guide_points() -> None:
+    from tools.stage_designer import StageDesigner, _format_stage_json
+
+    data = {
+        "stage_id": 3,
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "theme": "fortress",
+            "renderer": "stage3_composer",
+            "composer_sample_step": 48,
+            "composer_tolerance": 26,
+            "composer_collision_step": 8,
+            "composer_collision_tolerance": 10,
+            "guide_top": [[0, 58], [240, 78], [480, 52]],
+            "guide_bottom": [[0, 520], [240, 488], [480, 510]],
+            "pieces": [{"asset": "strip_top:1", "x": 120, "y": 430, "role": "floor_surface", "collision": "surface", "side": "bottom"}],
+        }],
+        "world_events": [],
+    }
+
+    text = _format_stage_json(data)
+    assert '"guide_top": [' in text
+    assert "        [0, 58]," in text
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = copy = json.loads(json.dumps(data))
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    designer._auto_fill_from_guides()
+
+    layout = copy["terrain_layout"][0]
+    pieces = layout["pieces"]
+    assert designer.dirty is True
+    assert designer.undo_stack
+    assert len(pieces) > 1
+    assert any(piece["role"] == "floor_surface" for piece in pieces)
+    assert any(piece.get("side") == "top" for piece in pieces)
+    assert not any(piece.get("asset") == "strip_top:1" and piece.get("x") == 120 for piece in pieces)
+
+
+def test_stage_designer_event_preview_positions_show_formations() -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "pieces": [],
+            "guide_top": [[0, 60], [500, 60]],
+            "guide_bottom": [[0, 520], [500, 520]],
+        }],
+        "world_events": [],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    line = designer._event_preview_positions({"type": "EnemyTakeshi", "x": 200, "count": 3, "formation": "line"})
+    v_shape = designer._event_preview_positions({"type": "EnemyPachemon", "x": 200, "count": 3, "formation": "v_shape"})
+    surface = designer._event_preview_positions({"type": "EnemyCrawler", "x": 200, "count": 2, "surface": "bottom", "surface_offset": 22})
+
+    assert len(line) == 3
+    assert line[0][0] == line[1][0] == line[2][0]
+    assert line[0][1] < line[1][1] < line[2][1]
+    assert len(v_shape) == 3
+    assert v_shape[0][1] < v_shape[1][1] < v_shape[2][1]
+    assert len(surface) == 2
+    assert all(y == 498 for _x, y in surface)
+
+
 def test_stage3_composer_report_opens_preview_by_default() -> None:
     from tools import stage3_composer_report
 
