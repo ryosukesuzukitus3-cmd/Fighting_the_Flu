@@ -61,12 +61,23 @@ def play_beats(game, beats: Iterable[StoryBeat], on_done: Callable[[], None]) ->
 
 
 def start_stage(game, stage_id: int) -> None:
-    """stage_id の直前ビート群を再生してから GameScene(stage_id) へ遷移する。"""
+    """stage_id の直前ビート群を再生してから GameScene(stage_id) へ遷移する。
+
+    STAGE1 開始前・初回のみ、対話型チュートリアル（準備運動）を挟む。
+    """
     def launch() -> None:
         from src.scenes.game_scene import GameScene
         game.change_scene(GameScene(game, stage_id=stage_id))
 
-    play_beats(game, intro_beats(stage_id), launch)
+    def after_intro() -> None:
+        if stage_id == 1 and not game.story.tutorial_done:
+            game.story.tutorial_done = True
+            from src.scenes.tutorial_scene import TutorialScene
+            game.change_scene(TutorialScene(game, on_complete=launch, with_offer=True))
+        else:
+            launch()
+
+    play_beats(game, intro_beats(stage_id), after_intro)
 
 
 def play_epilogue(game, on_done: Callable[[], None]) -> None:

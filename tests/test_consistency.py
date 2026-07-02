@@ -863,7 +863,8 @@ def test_story_speakers_are_registered() -> None:
     used: set[str] = set()
     for grp in (list(script.BOSS_INTRO.values()) + list(script.BOSS_MID.values())
                 + list(script.BOSS_DEFEAT.values())
-                + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())):
+                + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())
+                + list(script.TUTORIAL.values())):
         used.update(ln.speaker for ln in grp)
     # 全画面会話の話者は STORY_BEATS のページから収集する。
     for beat in script.STORY_BEATS:

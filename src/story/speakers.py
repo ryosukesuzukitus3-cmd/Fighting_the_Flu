@@ -22,6 +22,9 @@ BOSS4          = "棋理の化身　藤井竜王"
 BOSS4_FORM2    = "赤眼の真・藤井四段"
 BOSS_SAWAGUCHI = "投了王サワグチ"
 
+# チュートリアル専用（練習用の的。registries には載せない）
+TUTORIAL_DUMMY = "練習用インフル人形"
+
 
 # ダミーポートレート（tools/gen_dummy_portraits.py で生成。専用素材が来たら差し替え）
 _KARONARU_PORTRAIT     = "graphic/portrait_karonaru_dummy.png"
@@ -54,6 +57,7 @@ SPEAKERS: dict[str, Speaker] = {
     BOSS4:          Speaker(BOSS4,          BOSS4,                 (255, 110, 90), "graphic/enemy_fujii4dan.png"),
     BOSS4_FORM2:    Speaker(BOSS4_FORM2,    BOSS4_FORM2,           (255, 60, 60),  "graphic/藤井四段第二形態_もう一度.png"),
     BOSS_SAWAGUCHI: Speaker(BOSS_SAWAGUCHI, BOSS_SAWAGUCHI,        (200, 60, 200), "graphic/sawaguchi_49_64.png"),
+    TUTORIAL_DUMMY: Speaker(TUTORIAL_DUMMY, TUTORIAL_DUMMY,        (150, 200, 140), "graphic/enemy_バイキンマン68x80.png"),
 }
 
 # テキスト本体の既定色（ネームプレートとは別。読みやすさ優先で統一）
