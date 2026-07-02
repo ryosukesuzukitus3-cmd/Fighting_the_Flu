@@ -1849,7 +1849,7 @@ def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> Non
 
 
 def test_stage_designer_formats_and_autofills_guide_points() -> None:
-    from tools.stage_designer import StageDesigner, _format_stage_json
+    from tools.stage_designer import Selection, StageDesigner, _format_stage_json
 
     data = {
         "stage_id": 3,
@@ -1882,7 +1882,10 @@ def test_stage_designer_formats_and_autofills_guide_points() -> None:
     designer.undo_stack = []
     designer._terrain_cache_key = None
     designer._terrain_cache = None
+    designer.selection = None
 
+    designer._guide_lines()
+    designer.selection = Selection("guide_line", 1)
     designer._auto_fill_from_guides()
 
     layout = copy["terrain_layout"][0]
@@ -1891,7 +1894,7 @@ def test_stage_designer_formats_and_autofills_guide_points() -> None:
     assert designer.undo_stack
     assert len(pieces) > 1
     assert any(piece["role"] == "floor_surface" for piece in pieces)
-    assert any(piece.get("side") == "top" for piece in pieces)
+    assert all(piece.get("side") == "bottom" for piece in pieces)
     assert not any(piece.get("asset") == "strip_top:1" and piece.get("x") == 120 for piece in pieces)
 
 
@@ -1924,6 +1927,91 @@ def test_stage_designer_event_preview_positions_show_formations() -> None:
     assert v_shape[0][1] < v_shape[1][1] < v_shape[2][1]
     assert len(surface) == 2
     assert all(y == 498 for _x, y in surface)
+
+
+def test_stage_designer_selects_visible_event_previews_without_flattening_formations() -> None:
+    from tools.stage_designer import Selection, StageDesigner, TOOLBAR_H
+
+    pygame.display.set_mode((1, 1))
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "pieces": [],
+            "guide_top": [[0, 60], [1000, 60]],
+            "guide_bottom": [[0, 520], [1000, 520]],
+        }],
+        "world_events": [
+            {"type": "EnemyDebrisLarge", "x": 200, "count": 1, "formation": "single"},
+            {"type": "EnemyTakeshi", "x": 400, "count": 3, "formation": "line"},
+        ],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._event_image_cache = {}
+    designer.camera_x = 0.0
+    designer.camera_y = 0.0
+    designer.zoom = 1.0
+    designer.mode = "events"
+    designer.selection = None
+    designer.message = ""
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.dirty = False
+
+    debris_pos = designer._event_preview_positions(designer.data["world_events"][0])[0]
+    designer._select_at((int(debris_pos[0]), int(debris_pos[1] + TOOLBAR_H)))
+    assert designer.selection == Selection("event", 0)
+
+    designer.selection = Selection("event", 1)
+    before = designer._event_preview_positions(designer.data["world_events"][1])
+    designer._set_selection_world_pos(460, 340)
+    event = designer.data["world_events"][1]
+    after = designer._event_preview_positions(event)
+
+    assert event["x"] == 460
+    assert "y" not in event
+    assert before[0][1] < before[1][1] < before[2][1]
+    assert after[0][1] < after[1][1] < after[2][1]
+
+
+def test_stage_designer_guide_lines_can_be_created_edited_and_retyped() -> None:
+    from tools.stage_designer import Selection, StageDesigner, TOOLBAR_H
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": []}], "world_events": []}
+    designer.guide_side = "bottom"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer.camera_x = 0.0
+    designer.camera_y = 0.0
+    designer.zoom = 1.0
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.drag_start_world = pygame.Vector2(0, 0)
+    designer.dragging = False
+
+    designer._handle_guide_mouse_down((100, TOOLBAR_H + 420))
+    designer._handle_guide_mouse_down((100, TOOLBAR_H + 430))
+    designer._handle_guide_mouse_down((220, TOOLBAR_H + 450))
+
+    line = designer.data["terrain_layout"][0]["guide_lines"][0]
+    assert line["side"] == "bottom"
+    assert line["points"] == [[100, 430], [220, 450]]
+
+    designer.dragging = False
+    designer._handle_guide_mouse_down((160, TOOLBAR_H + 440))
+    assert designer.selection == Selection("guide_line", 0)
+
+    designer.selection = Selection("guide_line", 0)
+    designer._toggle_selected_guide_side()
+    assert line["side"] == "top"
+
+    designer.selection = Selection("guide_point", 0, sub_index=0)
+    designer._delete_selection()
+    assert line["points"] == [[220, 450]]
 
 
 def test_stage3_composer_report_opens_preview_by_default() -> None:

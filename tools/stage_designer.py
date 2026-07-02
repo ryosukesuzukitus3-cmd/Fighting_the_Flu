@@ -30,6 +30,9 @@ from src.entities.stage3_composer_terrain import (  # noqa: E402
     load_stage3_composer_pieces,
     render_stage3_composer_surface,
 )
+from src.entities.enemies.crawler import EnemyCrawler  # noqa: E402
+from src.entities.enemies.debris import _rock_sprite  # noqa: E402
+from src.entities.enemies.turret import EnemyTurret  # noqa: E402
 from src.entities.terrain import Terrain, make_terrain_segments_from_event  # noqa: E402
 
 try:  # noqa: E402
@@ -48,6 +51,9 @@ PALETTE_W = 430
 INFO_W = 360
 MIN_WINDOW_W = VIEW_W + PALETTE_W + INFO_W
 MIN_WINDOW_H = VIEW_H + TOOLBAR_H
+PALETTE_COLS = 3
+MIN_ZOOM = 0.25
+MAX_ZOOM = 2.5
 
 RECT_TERRAIN_TYPES = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
 TERRAIN_LAYOUT_TYPES = {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "TerrainPieces"}
@@ -75,13 +81,21 @@ PIECE_SIDE_ORDER = ["bottom", "top"]
 AUTO_FILL_REPLACE_ROLES = {"floor_surface", "ceiling_surface", "body_fill"}
 
 EVENT_TEMPLATES: list[tuple[str, dict[str, Any]]] = [
+    ("virus line", {"type": "EnemyVirus", "x": 0, "count": 3, "formation": "line"}),
+    ("virus v", {"type": "EnemyVirus", "x": 0, "count": 5, "formation": "v_shape"}),
     ("takeshi", {"type": "EnemyTakeshi", "x": 0, "count": 1, "formation": "single"}),
+    ("takeshi line", {"type": "EnemyTakeshi", "x": 0, "count": 3, "formation": "line"}),
     ("pachemon", {"type": "EnemyPachemon", "x": 0, "count": 1, "formation": "single"}),
+    ("pachemon v", {"type": "EnemyPachemon", "x": 0, "count": 3, "formation": "v_shape"}),
     ("crawler bottom", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
+    ("crawler top", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
     ("turret bottom", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
+    ("turret top", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
     ("broly", {"type": "EnemyBroly", "x": 0, "count": 1, "formation": "single"}),
     ("debris large", {"type": "EnemyDebrisLarge", "x": 0, "count": 1, "formation": "single"}),
     ("cough sprayer", {"type": "EnemyCoughSprayer", "x": 0, "count": 1, "y": 300}),
+    ("spore splitter", {"type": "EnemySporeSplitter", "x": 0, "count": 1, "y": 300, "fixed_drop": "WeaponItem"}),
+    ("billy", {"type": "EnemyBilly", "x": 0, "count": 1, "y": 300}),
     ("solid block", {"type": "Terrain", "x": 0, "y": 360, "w": 140, "h": 92, "kind": "fortress_block"}),
     ("ceiling block", {"type": "Terrain", "x": 0, "y": 0, "w": 132, "h": 92, "kind": "fortress_block", "surface_anchor": "ceiling"}),
     ("turret mount", {"type": "turret_mount", "x": 0, "y": 360, "w": 260, "h": 46, "kind": "fortress_block"}),
@@ -97,6 +111,15 @@ EVENT_IMAGE_PATHS = {
     "EnemyBilly": "graphic/enemy_billy-herrington.jpg",
     "EnemyCoughSprayer": "graphic/enemy_cough_sprayer.png",
     "EnemySporeSplitter": "graphic/enemy_spore_splitter.png",
+}
+
+EVENT_IMAGE_SCALES = {
+    "EnemyVirus": 0.77,
+    "EnemyTakeshi": 0.70,
+    "EnemyPachemon": 0.70,
+    "EnemyBroly": 0.70,
+    "EnemyCoughSprayer": 2.0,
+    "EnemySporeSplitter": 2.0,
 }
 
 
@@ -134,6 +157,25 @@ def _format_point_list(key: str, points: list[Any], *, indent: int, comma: bool)
     return lines
 
 
+def _format_guide_lines(key: str, guide_lines: list[Any], *, indent: int, comma: bool) -> list[str]:
+    if not guide_lines:
+        return [" " * indent + f"{_compact_json(key)}: []{',' if comma else ''}"]
+    lines = [" " * indent + f"{_compact_json(key)}: ["]
+    for i, line in enumerate(guide_lines):
+        suffix = "," if i < len(guide_lines) - 1 else ""
+        if isinstance(line, dict):
+            side = str(line.get("side", "bottom"))
+            points = line.get("points", [])
+            lines.append(
+                " " * (indent + 2)
+                + f"{{\"side\": {_compact_json(side)}, \"points\": {_compact_json(points)}}}{suffix}"
+            )
+        else:
+            lines.append(" " * (indent + 2) + f"{_compact_json(line)}{suffix}")
+    lines.append(" " * indent + f"]{',' if comma else ''}")
+    return lines
+
+
 def _format_compact_item_list(key: str, values: list[Any], *, indent: int, comma: bool) -> list[str]:
     if not values:
         return [" " * indent + f"{_compact_json(key)}: []{',' if comma else ''}"]
@@ -155,6 +197,8 @@ def _format_layout_object(obj: dict[str, Any], *, indent: int, comma: bool) -> l
             lines.extend(_format_point_list(key, value, indent=indent + 2, comma=not is_last))
         elif key == "pieces" and isinstance(value, list):
             lines.extend(_format_compact_item_list(key, value, indent=indent + 2, comma=not is_last))
+        elif key == "guide_lines" and isinstance(value, list):
+            lines.extend(_format_guide_lines(key, value, indent=indent + 2, comma=not is_last))
         elif key in {"guide_top", "guide_bottom"} and isinstance(value, list):
             lines.extend(_format_point_list(key, value, indent=indent + 2, comma=not is_last))
         else:
@@ -343,6 +387,41 @@ def _piece_defaults(role: str) -> dict[str, Any]:
     return {"role": role, "collision": "none", "side": "bottom"}
 
 
+def _clean_guide_points(points: list[Any]) -> list[list[int]]:
+    by_x: dict[int, list[int]] = {}
+    for point in points:
+        if not isinstance(point, list) or len(point) < 2:
+            continue
+        x = int(round(float(point[0])))
+        y = int(round(max(0.0, min(float(SCREEN_HEIGHT), float(point[1])))))
+        by_x[x] = [x, y]
+    return [by_x[x] for x in sorted(by_x)]
+
+
+def _distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    dx = bx - ax
+    dy = by - ay
+    length_sq = dx * dx + dy * dy
+    if length_sq <= 0.0001:
+        return ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length_sq))
+    cx = ax + t * dx
+    cy = ay + t * dy
+    return ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+
+
+def _event_can_edit_y(event: dict[str, Any]) -> bool:
+    if event.get("type") == "BossGate":
+        return False
+    if event.get("surface") in {"top", "bottom"} and "y" not in event:
+        return False
+    if "y" in event:
+        return True
+    formation = str(event.get("formation", ""))
+    count = max(1, int(event.get("count", 1)))
+    return count <= 1 or formation in {"", "single"}
+
+
 def _fit_surface(source: pygame.Surface, max_w: int, max_h: int) -> pygame.Surface:
     scale = min(max_w / max(1, source.get_width()), max_h / max(1, source.get_height()))
     scale = min(1.0, scale)
@@ -419,6 +498,7 @@ class Selection:
     kind: str
     index: int
     side: str = ""
+    sub_index: int = -1
 
 
 class StageDesigner:
@@ -452,6 +532,7 @@ class StageDesigner:
         self.event_palette_index = 0
         self.piece_palette_role = "floor_surface"
         self.piece_palette_index = 0
+        self.guide_mode = False
         self.guide_side = "bottom"
         self.palette_scroll_y = 0.0
         self.max_palette_scroll_y = 0.0
@@ -556,9 +637,48 @@ class StageDesigner:
             return [
                 f"piece role: {self._current_piece_role()}",
                 f"piece asset: {asset}",
-                f"guide side: {self.guide_side}",
+                f"guide mode: {self.guide_mode}",
+                f"new guide side: {self.guide_side}",
             ]
-        return [f"event palette: {_event_template_name(self.event_palette_index)}"]
+        return [f"event palette: {_event_template_name(self.event_palette_index)}", f"guide mode: {self.guide_mode}"]
+
+    def _palette_entries(self) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = [
+            {"kind": "event", "template_index": i}
+            for i, _template in enumerate(EVENT_TEMPLATES)
+        ]
+        for role in self._piece_roles():
+            for piece in self._piece_palette_options(role):
+                entries.append({"kind": "piece", "role": role, "asset": _piece_asset_id(piece)})
+        return entries
+
+    def _palette_payload_key(self, payload: dict[str, Any]) -> tuple[Any, ...]:
+        if payload.get("kind") == "event":
+            return ("event", int(payload.get("template_index", 0)))
+        return ("piece", str(payload.get("role", "")), str(payload.get("asset", "")))
+
+    def _current_palette_payload(self) -> dict[str, Any]:
+        if self.mode == "events":
+            return {"kind": "event", "template_index": self.event_palette_index}
+        piece = self._current_piece_asset()
+        return {
+            "kind": "piece",
+            "role": self._current_piece_role(),
+            "asset": _piece_asset_id(piece) if piece is not None else "",
+        }
+
+    def _move_palette_cursor(self, dx: int, dy: int) -> None:
+        entries = self._palette_entries()
+        if not entries:
+            self.message = "Palette is empty"
+            return
+        current_key = self._palette_payload_key(self._current_palette_payload())
+        try:
+            index = [self._palette_payload_key(entry) for entry in entries].index(current_key)
+        except ValueError:
+            index = 0
+        next_index = max(0, min(len(entries) - 1, index + dx + dy * PALETTE_COLS))
+        self._select_palette_payload(entries[next_index])
 
     def _event_image(self, event: dict[str, Any], *, max_w: int = 64, max_h: int = 52) -> pygame.Surface:
         etype = str(event.get("type", ""))
@@ -571,6 +691,15 @@ class StageDesigner:
         if rel_path:
             try:
                 image = pygame.image.load(str(ROOT / "assets" / rel_path)).convert_alpha()
+                scale = EVENT_IMAGE_SCALES.get(etype)
+                if scale:
+                    image = pygame.transform.smoothscale(
+                        image,
+                        (
+                            max(1, int(image.get_width() * scale)),
+                            max(1, int(image.get_height() * scale)),
+                        ),
+                    )
             except pygame.error:
                 try:
                     image = pygame.image.load(str(ROOT / "assets" / rel_path)).convert()
@@ -578,11 +707,11 @@ class StageDesigner:
                 except pygame.error:
                     image = None
         if image is None and etype == "EnemyTurret":
-            image = _simple_turret_sprite(str(event.get("surface", "bottom")))
+            image = EnemyTurret._make_sprite(str(event.get("surface", "bottom")))
         if image is None and etype == "EnemyCrawler":
-            image = _simple_crawler_sprite(str(event.get("surface", "bottom")))
+            image = EnemyCrawler._make_sprite(str(event.get("surface", "bottom")))
         if image is None and etype in {"EnemyDebrisLarge", "EnemyDebrisShard"}:
-            image = _simple_debris_sprite()
+            image = _rock_sprite(84 if etype == "EnemyDebrisLarge" else 30, 17, (82, 80, 92))
         if image is None and etype in RECT_TERRAIN_TYPES:
             w = max(24, int(event.get("w", 72)))
             h = max(24, int(event.get("h", 54)))
@@ -646,11 +775,14 @@ class StageDesigner:
         visible_w, visible_h = self._visible_world_size()
         max_x = max(0, _stage_length(self.data) - visible_w)
         self.camera_x = max(-180.0, min(float(max_x + 180), self.camera_x))
-        self.camera_y = max(0.0, min(max(0.0, float(SCREEN_HEIGHT - visible_h)), self.camera_y))
+        if visible_h >= SCREEN_HEIGHT:
+            self.camera_y = (float(SCREEN_HEIGHT) - float(visible_h)) / 2.0
+        else:
+            self.camera_y = max(0.0, min(float(SCREEN_HEIGHT - visible_h), self.camera_y))
 
     def _set_zoom(self, next_zoom: float, anchor_pos: tuple[int, int] | None = None) -> None:
         old_zoom = self.zoom
-        next_zoom = max(0.5, min(2.5, next_zoom))
+        next_zoom = max(MIN_ZOOM, min(MAX_ZOOM, next_zoom))
         if abs(next_zoom - old_zoom) < 0.001:
             return
         anchor = anchor_pos if anchor_pos is not None and self.view_rect.collidepoint(anchor_pos) else (VIEW_W // 2, TOOLBAR_H + VIEW_H // 2)
@@ -669,11 +801,13 @@ class StageDesigner:
 
     def _event_at(self, pos: tuple[int, int]) -> int | None:
         wx, wy = self._screen_to_world(pos)
-        tolerance = max(4, int(round(10 / self.zoom)))
+        tolerance = max(5, int(round(8 / self.zoom)))
         best: tuple[int, float] | None = None
         for i, event in enumerate(self.data.get("world_events", [])):
-            rect = _event_rect(event, self.data, 0).inflate(tolerance, tolerance)
-            if rect.collidepoint(wx, wy):
+            rects = [rect.inflate(tolerance, tolerance) for rect in self._event_preview_world_rects(event)]
+            for rect in rects:
+                if not rect.collidepoint(wx, wy):
+                    continue
                 dist = (rect.centerx - wx) ** 2 + (rect.centery - wy) ** 2
                 if best is None or dist < best[1]:
                     best = (i, dist)
@@ -689,6 +823,13 @@ class StageDesigner:
         points = layout.get("top" if side == "top" else "bottom", [])
         if not points:
             points = layout.get("guide_top" if side == "top" else "guide_bottom", [])
+        if not points:
+            guide_points = [
+                line.get("points", [])
+                for line in layout.get("guide_lines", [])
+                if isinstance(line, dict) and line.get("side", "bottom") == side
+            ]
+            points = guide_points[0] if guide_points else []
         if points:
             return _interp(points, world_x, 80.0 if side == "top" else SCREEN_HEIGHT - 80.0)
         return None
@@ -705,7 +846,21 @@ class StageDesigner:
             return sy + offset if surface == "top" else sy - offset
         if event.get("type") == "BossGate":
             return 48.0
-        return SCREEN_HEIGHT / 2
+        safe_top, safe_bottom = self._safe_y_bounds(world_x)
+        return (safe_top + safe_bottom) / 2.0
+
+    def _safe_y_bounds(self, world_x: float, *, margin: float = 60.0) -> tuple[float, float]:
+        top = float(margin)
+        bottom = float(SCREEN_HEIGHT - margin)
+        top_y = self._terrain_surface_y_at(world_x, "top")
+        bottom_y = self._terrain_surface_y_at(world_x, "bottom")
+        if top_y is not None:
+            top = max(top, top_y + margin)
+        if bottom_y is not None:
+            bottom = min(bottom, bottom_y - margin)
+        if bottom <= top:
+            return float(margin), float(SCREEN_HEIGHT - margin)
+        return top, bottom
 
     def _event_preview_positions(self, event: dict[str, Any]) -> list[tuple[float, float]]:
         count = max(1, int(event.get("count", 1)))
@@ -719,19 +874,31 @@ class StageDesigner:
             step = float(event.get("surface_step", event.get("step", 44)))
             return [(base_x + i * step, float(event["y"])) for i in range(count)]
         formation = str(event.get("formation", "single"))
-        center_y = SCREEN_HEIGHT / 2
+        safe_top, safe_bottom = self._safe_y_bounds(base_x)
+        center_y = (safe_top + safe_bottom) / 2.0
         if formation == "line":
-            step_y = 44
-            return [(base_x, center_y + (i - (count - 1) / 2) * step_y) for i in range(count)]
+            step_y = (safe_bottom - safe_top) / max(count - 1, 1)
+            return [(base_x, float(safe_top + i * step_y)) for i in range(count)]
         if formation == "v_shape":
+            amp = min(60.0, max(24.0, (safe_bottom - safe_top) * 0.25))
             return [
                 (
                     base_x + abs(i - count // 2) * 50,
-                    center_y + (i - count // 2) * 42,
+                    max(safe_top, min(safe_bottom, center_y + (i - count // 2) * amp)),
                 )
                 for i in range(count)
             ]
-        return [(base_x + i * 44, center_y + ((i % 3) - 1) * 34) for i in range(count)]
+        span = max(1.0, safe_bottom - safe_top)
+        return [(base_x + i * 40, safe_top + ((i * 73) % int(span))) for i in range(count)]
+
+    def _event_preview_world_rects(self, event: dict[str, Any]) -> list[pygame.Rect]:
+        if event.get("type") in RECT_TERRAIN_TYPES or event.get("type") == "BossGate":
+            return [_event_rect(event, self.data, 0)]
+        preview = self._event_image(event, max_w=58, max_h=52)
+        rects = []
+        for wx, wy in self._event_preview_positions(event):
+            rects.append(preview.get_rect(center=(int(round(wx)), int(round(wy)))))
+        return rects
 
     def _terrain_point_at(self, pos: tuple[int, int]) -> Selection | None:
         wx, wy = self._screen_to_world(pos)
@@ -823,38 +990,141 @@ class StageDesigner:
         self.selection = None
         return None
 
-    def _guide_points(self, side: str) -> list[Any]:
-        key = "guide_top" if side == "top" else "guide_bottom"
+    def _guide_lines(self) -> list[dict[str, Any]]:
         layout = _layout(self.data)
-        points = layout.setdefault(key, [])
-        if not isinstance(points, list):
-            layout[key] = []
-            points = layout[key]
-        return points
+        lines = layout.get("guide_lines")
+        if not isinstance(lines, list):
+            lines = []
+        if not lines:
+            for key, side in (("guide_top", "top"), ("guide_bottom", "bottom")):
+                points = _clean_guide_points(layout.get(key, []))
+                if points:
+                    lines.append({"side": side, "points": points})
+            if lines:
+                layout["guide_lines"] = lines
+                layout.pop("guide_top", None)
+                layout.pop("guide_bottom", None)
+        layout["guide_lines"] = lines
+        return lines
 
-    def _add_guide_point(self, wx: float, wy: float) -> None:
+    def _selected_guide_line_index(self) -> int | None:
+        if self.selection is None or self.selection.kind not in {"guide_line", "guide_point"}:
+            return None
+        lines = self._guide_lines()
+        if 0 <= self.selection.index < len(lines):
+            return self.selection.index
+        return None
+
+    def _selected_guide_line(self) -> dict[str, Any] | None:
+        index = self._selected_guide_line_index()
+        if index is None:
+            return None
+        return self._guide_lines()[index]
+
+    def _guide_point_at(self, pos: tuple[int, int]) -> Selection | None:
+        wx, wy = self._screen_to_world(pos)
+        tolerance = max(7.0, 8.0 / self.zoom)
+        best: tuple[Selection, float] | None = None
+        for line_i, line in enumerate(self._guide_lines()):
+            for point_i, point in enumerate(line.get("points", [])):
+                if not isinstance(point, list) or len(point) < 2:
+                    continue
+                dx = float(point[0]) - wx
+                dy = float(point[1]) - wy
+                dist = dx * dx + dy * dy
+                if dist <= tolerance * tolerance and (best is None or dist < best[1]):
+                    best = (Selection("guide_point", line_i, sub_index=point_i), dist)
+        return None if best is None else best[0]
+
+    def _guide_line_at(self, pos: tuple[int, int]) -> Selection | None:
+        wx, wy = self._screen_to_world(pos)
+        tolerance = max(8.0, 10.0 / self.zoom)
+        best: tuple[Selection, float] | None = None
+        for line_i, line in enumerate(self._guide_lines()):
+            points = _clean_guide_points(line.get("points", []))
+            for point_a, point_b in zip(points, points[1:]):
+                dist = _distance_to_segment(
+                    wx,
+                    wy,
+                    float(point_a[0]),
+                    float(point_a[1]),
+                    float(point_b[0]),
+                    float(point_b[1]),
+                )
+                if dist <= tolerance and (best is None or dist < best[1]):
+                    best = (Selection("guide_line", line_i), dist)
+        return None if best is None else best[0]
+
+    def _add_guide_point_to_line(self, line_index: int, wx: float, wy: float) -> None:
         self._push_undo()
-        points = self._guide_points(self.guide_side)
-        points.append([int(round(wx)), int(round(max(0.0, min(float(SCREEN_HEIGHT), wy))))])
-        points.sort(key=lambda point: float(point[0]) if isinstance(point, list) and point else 0.0)
+        lines = self._guide_lines()
+        if not (0 <= line_index < len(lines)):
+            return
+        point = [int(round(wx)), int(round(max(0.0, min(float(SCREEN_HEIGHT), wy))))]
+        points = _clean_guide_points([*lines[line_index].get("points", []), point])
+        lines[line_index]["points"] = points
+        point_index = next((i for i, p in enumerate(points) if p[0] == point[0]), len(points) - 1)
+        self.selection = Selection("guide_point", line_index, sub_index=point_index)
         self.dirty = True
-        self.message = f"Added {self.guide_side} guide point"
+        self.message = f"Added guide point to {lines[line_index].get('side', 'bottom')} line"
+
+    def _create_guide_line(self, wx: float, wy: float) -> None:
+        self._push_undo()
+        layout = _layout(self.data)
+        line = {
+            "side": self.guide_side,
+            "points": [[int(round(wx)), int(round(max(0.0, min(float(SCREEN_HEIGHT), wy))))]],
+        }
+        lines = self._guide_lines()
+        lines.append(line)
+        layout["guide_lines"] = lines
+        self.selection = Selection("guide_point", len(lines) - 1, sub_index=0)
+        self.dirty = True
+        self.message = f"Created {self.guide_side} guide line"
+
+    def _toggle_selected_guide_side(self) -> None:
+        line = self._selected_guide_line()
+        if line is None:
+            self.guide_side = "top" if self.guide_side == "bottom" else "bottom"
+            self.message = f"New guide side: {self.guide_side}"
+            return
+        self._push_undo()
+        line["side"] = "top" if line.get("side", "bottom") == "bottom" else "bottom"
+        self.guide_side = str(line["side"])
+        self.dirty = True
+        self.message = f"Guide line side: {line['side']}"
 
     def _auto_fill_from_guides(self) -> None:
         layout = _layout(self.data)
         if layout.get("type") != "TerrainPieces":
             self.message = "TerrainPieces layout is required"
             return
-        top = [p for p in self._guide_points("top") if isinstance(p, list) and len(p) >= 2]
-        bottom = [p for p in self._guide_points("bottom") if isinstance(p, list) and len(p) >= 2]
-        if len(top) < 2 or len(bottom) < 2:
-            self.message = "Need 2+ guide points for top and bottom"
+        line = self._selected_guide_line()
+        if line is None:
+            lines = self._guide_lines()
+            if len(lines) == 1:
+                line = lines[0]
+                self.selection = Selection("guide_line", 0)
+            else:
+                self.message = "Select one guide line before auto-fill"
+                return
+        side = "top" if line.get("side") == "top" else "bottom"
+        points = _clean_guide_points(line.get("points", []))
+        if len(points) < 2:
+            self.message = "Need 2+ unique guide x points"
             return
-        start = int(min(float(p[0]) for p in [*top, *bottom]))
-        end = int(max(float(p[0]) for p in [*top, *bottom]))
+        start = int(points[0][0])
+        end = int(points[-1][0])
         if end <= start:
             self.message = "Guide range is empty"
             return
+        local_points = [[int(round(float(p[0]) - start)), int(round(float(p[1])))] for p in points]
+        if side == "top":
+            top = local_points
+            bottom = [[0, SCREEN_HEIGHT], [end - start, SCREEN_HEIGHT]]
+        else:
+            top = [[0, 0], [end - start, 0]]
+            bottom = local_points
         authored = {
             "type": "AuthoredTerrain",
             "theme": str(layout.get("theme", "fortress")),
@@ -862,8 +1132,8 @@ class StageDesigner:
             "segment_w": int(layout.get("composer_sample_step", 48)),
             "min_gap": 180,
             "curve": "smooth",
-            "top": [[int(round(float(p[0]) - start)), int(round(float(p[1])))] for p in top],
-            "bottom": [[int(round(float(p[0]) - start)), int(round(float(p[1])))] for p in bottom],
+            "top": top,
+            "bottom": bottom,
         }
         pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
         segments = make_terrain_segments_from_event(authored, start, default_seed=int(self.data.get("stage_id", 3)))
@@ -881,6 +1151,8 @@ class StageDesigner:
         generated = []
         for placement in composer.placements:
             if placement.role not in AUTO_FILL_REPLACE_ROLES:
+                continue
+            if placement.side != side:
                 continue
             raw: dict[str, Any] = {
                 "asset": placement.asset,
@@ -904,6 +1176,7 @@ class StageDesigner:
             if (
                 not isinstance(piece, dict)
                 or str(piece.get("role", "")) not in AUTO_FILL_REPLACE_ROLES
+                or str(piece.get("side", "bottom")) != side
                 or not (start <= int(piece.get("x", -999999)) <= end)
             )
         ]
@@ -911,7 +1184,7 @@ class StageDesigner:
         self.selection = None
         self._invalidate_terrain_cache()
         self.dirty = True
-        self.message = f"Auto-filled {len(generated)} pieces ({start}-{end})"
+        self.message = f"Auto-filled {len(generated)} {side} pieces ({start}-{end})"
 
     def _add_event_template_at(self, index: int, wx: float, wy: float) -> None:
         self._push_undo()
@@ -994,6 +1267,20 @@ class StageDesigner:
                 removed = pieces.pop(self.selection.index)
                 self._invalidate_terrain_cache()
                 self.message = f"Deleted piece: {removed.get('asset')}"
+        elif self.selection.kind == "guide_point":
+            lines = self._guide_lines()
+            if 0 <= self.selection.index < len(lines):
+                points = lines[self.selection.index].get("points", [])
+                if 0 <= self.selection.sub_index < len(points):
+                    points.pop(self.selection.sub_index)
+                    if not points:
+                        lines.pop(self.selection.index)
+                    self.message = "Deleted guide point"
+        elif self.selection.kind == "guide_line":
+            lines = self._guide_lines()
+            if 0 <= self.selection.index < len(lines):
+                lines.pop(self.selection.index)
+                self.message = "Deleted guide line"
         else:
             points = _layout(self.data).get(self.selection.side, [])
             if 0 <= self.selection.index < len(points):
@@ -1003,7 +1290,7 @@ class StageDesigner:
         self.selection = None
         self.dirty = True
 
-    def _duplicate_selection(self) -> None:
+    def _duplicate_selection(self, *, offset: bool = True) -> None:
         if self.selection is None:
             self.message = "Nothing selected"
             return
@@ -1013,9 +1300,9 @@ class StageDesigner:
             if not (0 <= self.selection.index < len(events)):
                 return
             clone = copy.deepcopy(events[self.selection.index])
-            if _event_x(clone) is not None:
+            if offset and _event_x(clone) is not None:
                 _set_event_x(clone, (_event_x(clone) or 0.0) + 96)
-            if clone.get("surface") not in {"top", "bottom"} and "y" in clone:
+            if offset and clone.get("surface") not in {"top", "bottom"} and "y" in clone:
                 clone["y"] = int(round(min(float(SCREEN_HEIGHT), float(clone["y"]) + 24)))
             events.insert(self.selection.index + 1, clone)
             self.selection = Selection("event", self.selection.index + 1)
@@ -1025,8 +1312,9 @@ class StageDesigner:
             if not (0 <= self.selection.index < len(pieces)):
                 return
             clone = copy.deepcopy(pieces[self.selection.index])
-            clone["x"] = int(round(float(clone.get("x", 0)) + 48))
-            clone["y"] = int(round(float(clone.get("y", 0)) + 24))
+            if offset:
+                clone["x"] = int(round(float(clone.get("x", 0)) + 48))
+                clone["y"] = int(round(float(clone.get("y", 0)) + 24))
             pieces.insert(self.selection.index + 1, clone)
             self.selection = Selection("piece", self.selection.index + 1)
             self._invalidate_terrain_cache()
@@ -1084,10 +1372,7 @@ class StageDesigner:
         self.message = self._piece_palette_summary()
 
     def _cycle_palette(self, delta: int) -> None:
-        if self.mode == "terrain":
-            self._cycle_piece_asset(delta)
-        else:
-            self._cycle_event_palette(delta)
+        self._move_palette_cursor(delta, 0)
 
     def _cycle_selected_piece_collision(self) -> None:
         piece = self._selected_piece()
@@ -1141,7 +1426,8 @@ class StageDesigner:
                 return
             if _event_x(event) is not None:
                 _set_event_x(event, (_event_x(event) or 0.0) + dx)
-            _set_event_y(event, _event_y(event, self.data) + dy)
+            if _event_can_edit_y(event):
+                _set_event_y(event, _event_y(event, self.data) + dy)
         elif self.selection.kind == "piece":
             piece = self._selected_piece()
             if piece is None:
@@ -1149,6 +1435,18 @@ class StageDesigner:
             piece["x"] = int(round(float(piece.get("x", 0)) + dx))
             piece["y"] = int(round(float(piece.get("y", 0)) + dy))
             self._invalidate_terrain_cache()
+        elif self.selection.kind == "guide_point":
+            line = self._selected_guide_line()
+            if line is None:
+                return
+            points = line.get("points", [])
+            if not (0 <= self.selection.sub_index < len(points)):
+                return
+            point = points[self.selection.sub_index]
+            point[0] = int(round(float(point[0]) + dx))
+            point[1] = int(round(max(0.0, min(float(SCREEN_HEIGHT), float(point[1]) + dy))))
+            line["points"] = _clean_guide_points(points)
+            self.selection.sub_index = min(self.selection.sub_index, len(line["points"]) - 1)
         else:
             point = self._selected_point()
             if point is None:
@@ -1166,7 +1464,8 @@ class StageDesigner:
             if event is None:
                 return
             _set_event_x(event, wx - self.drag_offset.x)
-            _set_event_y(event, wy - self.drag_offset.y)
+            if _event_can_edit_y(event):
+                _set_event_y(event, wy - self.drag_offset.y)
         elif self.selection.kind == "piece":
             piece = self._selected_piece()
             if piece is None:
@@ -1174,6 +1473,24 @@ class StageDesigner:
             piece["x"] = int(round(wx - self.drag_offset.x))
             piece["y"] = int(round(wy - self.drag_offset.y))
             self._invalidate_terrain_cache()
+        elif self.selection.kind == "guide_point":
+            line = self._selected_guide_line()
+            if line is None:
+                return
+            points = line.get("points", [])
+            if not (0 <= self.selection.sub_index < len(points)):
+                return
+            points[self.selection.sub_index] = [
+                int(round(wx - self.drag_offset.x)),
+                int(round(max(0.0, min(float(SCREEN_HEIGHT), wy - self.drag_offset.y)))),
+            ]
+            line["points"] = _clean_guide_points(points)
+            x = points[self.selection.sub_index][0] if 0 <= self.selection.sub_index < len(points) else None
+            if x is not None:
+                for i, point in enumerate(line["points"]):
+                    if point[0] == x:
+                        self.selection.sub_index = i
+                        break
         else:
             point = self._selected_point()
             if point is None:
@@ -1243,22 +1560,25 @@ class StageDesigner:
                 target.blit(label, (rect.left, max(0, rect.top - 16)))
 
     def _draw_guides(self, target: pygame.Surface) -> None:
-        layout = _layout(self.data)
-        for side, color in (("top", POINT_TOP_COLOR), ("bottom", POINT_BOTTOM_COLOR)):
-            points = [
-                point for point in layout.get("guide_top" if side == "top" else "guide_bottom", [])
-                if isinstance(point, list) and len(point) >= 2
-            ]
+        for line_i, line in enumerate(self._guide_lines()):
+            side = "top" if line.get("side") == "top" else "bottom"
+            color = POINT_TOP_COLOR if side == "top" else POINT_BOTTOM_COLOR
+            selected_line = self.selection is not None and self.selection.kind in {"guide_line", "guide_point"} and self.selection.index == line_i
+            points = _clean_guide_points(line.get("points", []))
             screen_points: list[tuple[int, int]] = []
             for point in points:
                 sx, sy = self._world_to_screen(float(point[0]), float(point[1]))
                 screen_points.append((sx, sy - TOOLBAR_H))
             if len(screen_points) >= 2:
-                pygame.draw.lines(target, color, False, screen_points, 2)
-            for sx, sy in screen_points:
-                radius = 6 if side == self.guide_side else 4
+                pygame.draw.lines(target, color, False, screen_points, 4 if selected_line else 2)
+            for point_i, (sx, sy) in enumerate(screen_points):
+                selected_point = selected_line and self.selection is not None and self.selection.kind == "guide_point" and self.selection.sub_index == point_i
+                radius = 7 if selected_point else 6 if selected_line else 4
                 pygame.draw.circle(target, color, (sx, sy), radius)
-                pygame.draw.circle(target, (5, 10, 12), (sx, sy), radius, 1)
+                pygame.draw.circle(target, (5, 10, 12), (sx, sy), radius, 2 if selected_point else 1)
+            if screen_points and (selected_line or self.guide_mode):
+                label = self.small_font.render(f"{side} guide {line_i + 1}", True, color)
+                target.blit(label, (screen_points[0][0] + 8, max(0, screen_points[0][1] - 18)))
 
     def _draw_events(self, target: pygame.Surface) -> None:
         for i, event in enumerate(self.data.get("world_events", [])):
@@ -1364,6 +1684,30 @@ class StageDesigner:
                 f"y: {piece.get('y')}",
                 f"collision: {piece.get('collision', 'auto')}",
             ]
+        if self.selection.kind == "guide_line":
+            line = self._selected_guide_line()
+            if line is None:
+                return ["No selection"]
+            return [
+                f"guide line #{self.selection.index + 1}",
+                f"side: {line.get('side', 'bottom')}",
+                f"points: {len(line.get('points', []))}",
+            ]
+        if self.selection.kind == "guide_point":
+            line = self._selected_guide_line()
+            if line is None:
+                return ["No selection"]
+            points = line.get("points", [])
+            if not (0 <= self.selection.sub_index < len(points)):
+                return ["No selection"]
+            point = points[self.selection.sub_index]
+            return [
+                f"guide point #{self.selection.sub_index + 1}",
+                f"line: {self.selection.index + 1}",
+                f"side: {line.get('side', 'bottom')}",
+                f"x: {point[0]}",
+                f"y: {point[1]}",
+            ]
         point = self._selected_point()
         if point is None:
             return ["No selection"]
@@ -1417,7 +1761,7 @@ class StageDesigner:
         target.set_clip(panel)
         x0 = panel.left + 12
         y = panel.top + 12 - int(round(self.palette_scroll_y))
-        cols = 3
+        cols = PALETTE_COLS
         gap = 8
         cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
 
@@ -1488,15 +1832,16 @@ class StageDesigner:
             "Stage Designer",
             "Drag palette item onto stage",
             "Click stage item to select",
-            "Alt+Click add guide point",
-            "G guide side / P auto-fill",
-            "Arrows pan stage",
-            "Shift+Arrows move selection",
+            "Arrows move palette/selection",
+            "G guide mode / U guide side",
+            "Guide: click add/select",
+            "P auto-fill selected guide",
             "Shift-drag axis lock",
             "Ctrl-drag copy",
             "Ctrl+Wheel zoom",
-            "N add / Del delete / Ins dup",
-            "[ ] palette / R role",
+            "Wheel pan stage/palette",
+            "Del delete selection",
+            "[ ] palette",
             "M collision / X side / F/Y flip",
             "S save / Ctrl+Z undo",
             "C capture / H help",
@@ -1544,7 +1889,8 @@ class StageDesigner:
         surface = pygame.Surface(self.screen.get_size())
         surface.fill((10, 13, 16))
         visible_w, visible_h = self._visible_world_size()
-        canvas_h = max(SCREEN_HEIGHT, int(round(self.camera_y)) + visible_h)
+        crop_y = max(0, int(round(self.camera_y)))
+        canvas_h = max(SCREEN_HEIGHT, crop_y + visible_h)
         world_view = self._load_backdrop(visible_w, canvas_h)
         layout = _layout(self.data)
         if layout.get("type") == "TerrainPieces":
@@ -1563,9 +1909,9 @@ class StageDesigner:
                 collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
                 overlap=int(layout.get("composer_overlap", 0)),
             )
-        crop = pygame.Rect(0, int(round(self.camera_y)), visible_w, visible_h)
+        crop = pygame.Rect(0, crop_y, visible_w, visible_h)
         view = pygame.Surface((visible_w, visible_h), pygame.SRCALPHA)
-        view.blit(world_view, (0, 0), crop)
+        view.blit(world_view, (0, max(0, int(round(-self.camera_y)))), crop)
         if self.zoom != 1.0:
             view = pygame.transform.smoothscale(view, (VIEW_W, VIEW_H))
         if layout.get("type") == "TerrainPieces":
@@ -1601,7 +1947,6 @@ class StageDesigner:
     def _handle_key(self, event: pygame.event.Event) -> bool:
         mods = pygame.key.get_mods()
         step = 10 if mods & pygame.KMOD_CTRL else 1
-        pan_step = 180 if mods & pygame.KMOD_CTRL else 48
         if event.key == pygame.K_ESCAPE:
             return False
         if event.key == pygame.K_e:
@@ -1622,55 +1967,49 @@ class StageDesigner:
         elif event.key == pygame.K_h:
             self.show_help = not self.show_help
         elif event.key == pygame.K_g:
-            self.guide_side = "top" if self.guide_side == "bottom" else "bottom"
-            self.message = f"Guide side: {self.guide_side}"
+            self.guide_mode = not self.guide_mode
+            self.selection = None
+            self.message = "Guide mode: on" if self.guide_mode else "Guide mode: off"
+        elif event.key == pygame.K_u:
+            self._toggle_selected_guide_side()
         elif event.key == pygame.K_p:
             self._auto_fill_from_guides()
-        elif event.key == pygame.K_n:
-            self._add_from_palette()
         elif event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
             self._delete_selection()
-        elif event.key == pygame.K_INSERT:
-            self._duplicate_selection()
         elif event.key == pygame.K_LEFTBRACKET:
             self._cycle_palette(-1)
         elif event.key == pygame.K_RIGHTBRACKET:
             self._cycle_palette(1)
-        elif event.key == pygame.K_r:
-            if self.mode == "terrain":
-                self._cycle_piece_role(1)
         elif event.key == pygame.K_m:
-            if self.mode == "terrain":
-                self._cycle_selected_piece_collision()
+            self._cycle_selected_piece_collision()
         elif event.key == pygame.K_x:
-            if self.mode == "terrain":
-                self._cycle_selected_piece_side()
+            self._cycle_selected_piece_side()
         elif event.key == pygame.K_f:
-            if self.mode == "terrain":
+            if self.selection is not None and self.selection.kind == "piece":
                 self._toggle_selected_piece_flip("x")
         elif event.key == pygame.K_y:
-            if self.mode == "terrain":
+            if self.selection is not None and self.selection.kind == "piece":
                 self._toggle_selected_piece_flip("y")
         elif event.key == pygame.K_LEFT:
-            if mods & pygame.KMOD_SHIFT:
+            if self.selection is not None:
                 self._move_selection(-step, 0)
             else:
-                self._pan_camera(-pan_step)
+                self._move_palette_cursor(-1, 0)
         elif event.key == pygame.K_RIGHT:
-            if mods & pygame.KMOD_SHIFT:
+            if self.selection is not None:
                 self._move_selection(step, 0)
             else:
-                self._pan_camera(pan_step)
+                self._move_palette_cursor(1, 0)
         elif event.key == pygame.K_UP:
-            if mods & pygame.KMOD_SHIFT:
+            if self.selection is not None:
                 self._move_selection(0, -step)
             else:
-                self._pan_camera(0, -pan_step)
+                self._move_palette_cursor(0, -1)
         elif event.key == pygame.K_DOWN:
-            if mods & pygame.KMOD_SHIFT:
+            if self.selection is not None:
                 self._move_selection(0, step)
             else:
-                self._pan_camera(0, pan_step)
+                self._move_palette_cursor(0, 1)
         elif event.key == pygame.K_a:
             self._pan_camera(-(90 if mods & pygame.KMOD_CTRL else 24))
         elif event.key == pygame.K_d:
@@ -1704,9 +2043,8 @@ class StageDesigner:
             return
         if event.button != 1:
             return
-        if self.view_rect.collidepoint(event.pos) and pygame.key.get_mods() & pygame.KMOD_ALT:
-            wx, wy = self._screen_to_world(event.pos)
-            self._add_guide_point(wx, wy)
+        if self.guide_mode and self.view_rect.collidepoint(event.pos):
+            self._handle_guide_mouse_down(event.pos)
             return
         self._select_at(event.pos)
         if self.selection is None:
@@ -1714,28 +2052,68 @@ class StageDesigner:
         wx, wy = self._screen_to_world(event.pos)
         copied_for_drag = False
         if pygame.key.get_mods() & pygame.KMOD_CTRL:
-            self._duplicate_selection()
+            self._duplicate_selection(offset=False)
             copied_for_drag = True
         if self.selection.kind == "event":
             event_obj = self._selected_event()
             if event_obj is None:
                 return
             event_x = _event_x(event_obj) or wx
-            self.drag_offset.xy = (wx - event_x, wy - self._event_anchor_y(event_obj, event_x))
+            event_y = self._event_anchor_y(event_obj, event_x)
+            self.drag_offset.xy = (0.0, 0.0) if copied_for_drag else (wx - event_x, wy - event_y)
+            self.drag_start_world.xy = (wx, event_y if copied_for_drag else wy)
         elif self.selection.kind == "piece":
             piece = self._selected_piece()
             if piece is None:
                 return
-            self.drag_offset.xy = (wx - float(piece.get("x", 0)), wy - float(piece.get("y", 0)))
+            piece_x = float(piece.get("x", 0))
+            piece_y = float(piece.get("y", 0))
+            self.drag_offset.xy = (0.0, 0.0) if copied_for_drag else (wx - piece_x, wy - piece_y)
+            self.drag_start_world.xy = (wx, piece_y if copied_for_drag else wy)
         else:
             point = self._selected_point()
             if point is None:
                 return
             self.drag_offset.xy = (wx - float(point[0]), wy - float(point[1]))
-        self.drag_start_world.xy = (wx, wy)
+            self.drag_start_world.xy = (wx, wy)
         if not copied_for_drag:
             self._push_undo()
         self.dragging = True
+
+    def _handle_guide_mouse_down(self, pos: tuple[int, int]) -> None:
+        point_selection = self._guide_point_at(pos)
+        if point_selection is not None:
+            self.selection = point_selection
+            line = self._selected_guide_line()
+            if line is None:
+                return
+            points = line.get("points", [])
+            if not (0 <= point_selection.sub_index < len(points)):
+                return
+            point = points[point_selection.sub_index]
+            wx, wy = self._screen_to_world(pos)
+            self.drag_offset.xy = (wx - float(point[0]), wy - float(point[1]))
+            self.drag_start_world.xy = (wx, wy)
+            self._push_undo()
+            self.dragging = True
+            self.message = f"Selected guide point #{point_selection.sub_index + 1}"
+            return
+
+        line_selection = self._guide_line_at(pos)
+        if line_selection is not None:
+            self.selection = line_selection
+            line = self._selected_guide_line()
+            side = str(line.get("side", "bottom")) if line else "bottom"
+            self.guide_side = side
+            self.message = f"Selected {side} guide line #{line_selection.index + 1}"
+            return
+
+        wx, wy = self._screen_to_world(pos)
+        line_index = self._selected_guide_line_index()
+        if line_index is None:
+            self._create_guide_line(wx, wy)
+        else:
+            self._add_guide_point_to_line(line_index, wx, wy)
 
     def _handle_mouse_motion(self, event: pygame.event.Event) -> None:
         self._update_cursor_world(event.pos)
@@ -1781,13 +2159,13 @@ class StageDesigner:
         elif event.type == pygame.MOUSEWHEEL:
             mouse_pos = tuple(int(v) for v in self.last_mouse_pos)
             mods = pygame.key.get_mods()
-            if mods & pygame.KMOD_CTRL and self.view_rect.collidepoint(mouse_pos):
+            if mods & pygame.KMOD_CTRL and event.y != 0 and self.view_rect.collidepoint(mouse_pos):
                 factor = 1.12 if event.y > 0 else 1 / 1.12
                 self._set_zoom(self.zoom * factor, mouse_pos)
             elif self.palette_rect.collidepoint(mouse_pos):
                 self.palette_scroll_y = max(0.0, min(self.max_palette_scroll_y, self.palette_scroll_y - event.y * 80))
-            else:
-                self._pan_camera(-event.y * 90)
+            elif self.view_rect.collidepoint(mouse_pos):
+                self._pan_camera(-event.x * 90, -event.y * 90)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self._handle_mouse_down(event)
         elif event.type == pygame.MOUSEMOTION:
