@@ -360,7 +360,8 @@ def check_story() -> None:
     used: set[str] = set()
     line_groups = list(script.BOSS_INTRO.values()) + list(script.BOSS_MID.values()) \
                   + list(script.BOSS_DEFEAT.values()) \
-                  + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())
+                  + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values()) \
+                  + list(script.TUTORIAL.values())
     for grp in line_groups:
         for ln in grp:
             used.add(ln.speaker)
