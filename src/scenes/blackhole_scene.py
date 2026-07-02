@@ -11,6 +11,7 @@ from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.background import ScrollingBackground
 from src.entities.companion import Karonaru
 from src.entities.player import Player
+from src.story.aliases import bgm_path
 from src.story.lines import Page
 from src.story.speakers import (
     DEFAULT_TEXT_COLOR,
@@ -67,7 +68,9 @@ class BlackholeScene(Scene):
         self._fade_out_t = 0.0
         self._fade_out = False
         self._finished = False
-        self.game.sound.stop_bgm(fadeout_ms=500)
+        self._buf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        # 承認欲求ブラックホールはインターステラー系の重い空気で包む（仮配線）。
+        self.game.sound.play_bgm(bgm_path("BGM_BLACKHOLE"), volume=0.55)
         self._enter_page()
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -116,11 +119,18 @@ class BlackholeScene(Scene):
         if new_phase != self._phase:
             self._phase = new_phase
             self._phase_time = 0.0
+            if new_phase == "fall":
+                # 相棒が吸い込まれる崩落。重低音のズゴゴを重ね、揺れを一段強める。
+                self.game.sound.play_se_alias("SE_BLACKHOLE", volume=0.7)
+                self._shake_t = max(self._shake_t, 0.7)
         pg = self._cur()
         if pg.se:
             self.game.sound.play_se_alias(pg.se)
-        if "shake" in pg.fx or "blackhole" in pg.fx:
-            self._shake_t = 0.5
+        # 「ズゴゴ」＝ブラックホール示現は重い揺れ、通常 shake は軽め。
+        if "blackhole" in pg.fx:
+            self._shake_t = max(self._shake_t, 0.8)
+        elif "shake" in pg.fx:
+            self._shake_t = max(self._shake_t, 0.5)
         if "white_particle" in pg.fx or "light" in pg.fx:
             self._flash_t = 0.35
 
@@ -207,8 +217,10 @@ class BlackholeScene(Scene):
         self._noise_level += (noise_target - self._noise_level) * blend
 
     def draw(self, screen: pygame.Surface) -> None:
-        self._bg.draw(screen, self._time * 42.0)
-        self._draw_blackhole(screen)
+        buf = self._buf
+        buf.fill((0, 0, 0))
+        self._bg.draw(buf, self._time * 42.0)
+        self._draw_blackhole(buf)
 
         px, py = self._player_pos
         kx, ky = self._karonaru_pos
@@ -216,7 +228,7 @@ class BlackholeScene(Scene):
         self._player.sx = px
         self._player.sy = py
         self._player.rect.topleft = (int(px), int(py))
-        self._player.draw(screen)
+        self._player.draw(buf)
 
         if karonaru_alpha > 0:
             self._karonaru.sx = kx
@@ -225,9 +237,14 @@ class BlackholeScene(Scene):
             if karonaru_alpha < 255:
                 img = self._karonaru.image.copy()
                 img.set_alpha(int(karonaru_alpha))
-                screen.blit(img, self._karonaru.rect)
+                buf.blit(img, self._karonaru.rect)
             else:
-                self._karonaru.draw(screen)
+                self._karonaru.draw(buf)
+
+        # ワールドはブラックホールの重力で震える。会話・フェードは震わせない。
+        ox, oy = self._shake_offset()
+        screen.fill((0, 0, 0))
+        screen.blit(buf, (ox, oy))
 
         self._draw_dialogue(screen)
 
@@ -247,6 +264,19 @@ class BlackholeScene(Scene):
             fade.set_alpha(fade_a)
             fade.fill((0, 0, 0))
             screen.blit(fade, (0, 0))
+
+    def _shake_offset(self) -> tuple[int, int]:
+        """離散シェイク（ページfx）＋崩落の進行に応じた連続微振動。"""
+        disc = 13.0 * (self._shake_t / 0.8) if self._shake_t > 0 else 0.0
+        cont = 0.0
+        if self._phase in ("fall", "silence"):
+            strength = min(1.0, 0.28 + self._event_ratio() * 0.9)
+            cont = 3.6 * strength
+        amp = disc + cont
+        if amp <= 0.3:
+            return (0, 0)
+        a = int(amp)
+        return (random.randint(-a, a), random.randint(-a, a))
 
     def _draw_blackhole(self, screen: pygame.Surface) -> None:
         cx, cy = int(_CENTER[0]), int(_CENTER[1])

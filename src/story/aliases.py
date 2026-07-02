@@ -16,6 +16,7 @@ BGM: dict[str, str | None] = {
     "BGM_BOSS":     "music/bgm/決戦.mp3",
     "BGM_BOSS_FORM2": "music/bgm/決戦.mp3",             # 仮：第2形態専用曲は後で差し替え
     "BGM_FINAL":    "music/bgm/決戦.mp3",
+    "BGM_BLACKHOLE": "music/bgm/The_world_of_spirit.mp3",  # 仮：インターステラー系（後で差し替え）
     "BGM_EPILOGUE": None,                              # TODO(Phase4): 専用曲ダミー
     "BGM_CLEAR":    "music/bgm/FFVI_勝利のファンファーレ.mp3",
     "BGM_CREDITS":  "music/bgm/il_vento_d'oro.mp3",
@@ -41,7 +42,7 @@ SE: dict[str, str | None] = {
     "SE_KARONARU_RETIRE": "music/se/dummy_karonaru_retire.wav",  # dummy（先輩 退場）
     "SE_KARONARU_ARRIVE": "music/se/dummy_karonaru_arrive.wav",  # dummy（先輩 移動出現）
     "SE_LIGHT":        None,                           # TODO(Phase4)
-    "SE_BLACKHOLE":    None,                           # TODO(Phase4)
+    "SE_BLACKHOLE":    "music/bgm/ノイズ_重低音.mp3",   # 仮：ブラックホールのズゴゴ（重低音・後で差し替え）
     "SE_HEAL":         "music/se/item_heal_pickup.wav",
     "SE_ERROR":        None,                           # TODO(Phase4)
     "SE_SHOGI_PLACE":  "music/se/dummy_shogi_place.wav",     # dummy（持ち駒を置く「ピシッ」。要差し替え）
