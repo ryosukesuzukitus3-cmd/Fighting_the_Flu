@@ -25,9 +25,9 @@ from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH  # noqa: E402
 from src.entities.stage3_composer_terrain import (  # noqa: E402
     Stage3ComposerLayout,
     build_stage3_piece_layout,
+    draw_stage3_composer_layout,
     load_stage3_composer_pieces,
     render_stage3_composer_surface,
-    render_stage3_piece_surface,
 )
 from src.entities.terrain import make_terrain_segments_from_event  # noqa: E402
 
@@ -43,8 +43,9 @@ BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
 VIEW_W = SCREEN_WIDTH
 VIEW_H = SCREEN_HEIGHT
 TOOLBAR_H = 48
-PANEL_W = 390
-MIN_WINDOW_W = VIEW_W + PANEL_W
+PALETTE_W = 430
+INFO_W = 360
+MIN_WINDOW_W = VIEW_W + PALETTE_W + INFO_W
 MIN_WINDOW_H = VIEW_H + TOOLBAR_H
 
 RECT_TERRAIN_TYPES = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
@@ -385,19 +386,40 @@ class StageDesigner:
         self.panning = False
         self.pan_anchor = pygame.Vector2(0, 0)
         self.pan_camera_x = self.camera_x
+        self.pan_camera_y = 0.0
+        self.camera_y = 0.0
+        self.zoom = 1.0
         self.cursor_world = pygame.Vector2(self.camera_x + VIEW_W / 2, VIEW_H / 2)
+        self.last_mouse_pos = pygame.Vector2(VIEW_W / 2, TOOLBAR_H + VIEW_H / 2)
         self.event_palette_index = 0
         self.piece_palette_role = "floor_surface"
         self.piece_palette_index = 0
+        self.palette_scroll_y = 0.0
+        self.max_palette_scroll_y = 0.0
+        self.palette_drag: dict[str, Any] | None = None
+        self._palette_hitboxes: list[tuple[pygame.Rect, dict[str, Any]]] = []
         self.message = "Ready"
         self.dirty = False
         self.undo_stack: list[dict[str, Any]] = []
         self._terrain_cache_key: str | None = None
         self._terrain_cache: tuple[list[Any], dict[str, list[Any]]] | None = None
+        self._backdrop_cache: dict[tuple[int, int], pygame.Surface] = {}
 
     @property
     def view_rect(self) -> pygame.Rect:
         return pygame.Rect(0, TOOLBAR_H, VIEW_W, VIEW_H)
+
+    @property
+    def palette_rect(self) -> pygame.Rect:
+        return pygame.Rect(VIEW_W, TOOLBAR_H, PALETTE_W, VIEW_H)
+
+    @property
+    def info_rect(self) -> pygame.Rect:
+        width = max(INFO_W, self.screen.get_width() - VIEW_W - PALETTE_W)
+        return pygame.Rect(VIEW_W + PALETTE_W, TOOLBAR_H, width, VIEW_H)
+
+    def _visible_world_size(self) -> tuple[int, int]:
+        return max(1, int(round(VIEW_W / self.zoom))), max(1, int(round(VIEW_H / self.zoom)))
 
     def _push_undo(self) -> None:
         self.undo_stack.append(copy.deepcopy(self.data))
@@ -469,48 +491,84 @@ class StageDesigner:
 
     def _palette_summary(self) -> list[str]:
         if self.mode == "terrain" and _layout(self.data).get("type") == "TerrainPieces":
-            return [self._piece_palette_summary()]
+            piece = self._current_piece_asset()
+            asset = _piece_asset_id(piece) if piece is not None else "-"
+            return [f"piece role: {self._current_piece_role()}", f"piece asset: {asset}"]
         return [f"event palette: {_event_template_name(self.event_palette_index)}"]
 
-    def _load_backdrop(self) -> pygame.Surface:
-        surface = pygame.Surface((VIEW_W, VIEW_H))
+    def _load_backdrop(self, width: int = VIEW_W, height: int = VIEW_H) -> pygame.Surface:
+        key = (width, height)
+        if key in self._backdrop_cache:
+            return self._backdrop_cache[key].copy()
+        surface = pygame.Surface((width, height))
         surface.fill((6, 14, 17))
         try:
             raw = pygame.image.load(str(BACKGROUND_PATH))
         except (FileNotFoundError, pygame.error):
+            self._backdrop_cache[key] = surface.copy()
             return surface
-        scale = max(VIEW_W / raw.get_width(), VIEW_H / raw.get_height())
+        scale = max(width / raw.get_width(), height / raw.get_height())
         scaled = pygame.transform.smoothscale(
             raw,
-            (max(VIEW_W, int(raw.get_width() * scale)), max(VIEW_H, int(raw.get_height() * scale))),
+            (max(width, int(raw.get_width() * scale)), max(height, int(raw.get_height() * scale))),
         )
-        surface.blit(scaled, ((VIEW_W - scaled.get_width()) // 2, (VIEW_H - scaled.get_height()) // 2))
-        veil = pygame.Surface((VIEW_W, VIEW_H), pygame.SRCALPHA)
+        surface.blit(scaled, ((width - scaled.get_width()) // 2, (height - scaled.get_height()) // 2))
+        veil = pygame.Surface((width, height), pygame.SRCALPHA)
         veil.fill((0, 4, 6, 90))
         surface.blit(veil, (0, 0))
+        self._backdrop_cache[key] = surface.copy()
         return surface
 
     def _world_to_screen(self, x: float, y: float) -> tuple[int, int]:
-        return int(round(x - self.camera_x)), int(round(y + TOOLBAR_H))
+        return (
+            int(round((x - self.camera_x) * self.zoom)),
+            int(round((y - self.camera_y) * self.zoom + TOOLBAR_H)),
+        )
 
     def _screen_to_world(self, pos: tuple[int, int]) -> tuple[float, float]:
-        return float(pos[0]) + self.camera_x, float(pos[1] - TOOLBAR_H)
+        return (
+            float(pos[0]) / self.zoom + self.camera_x,
+            float(pos[1] - TOOLBAR_H) / self.zoom + self.camera_y,
+        )
 
     def _update_cursor_world(self, pos: tuple[int, int]) -> None:
+        self.last_mouse_pos.xy = pos
         if self.view_rect.collidepoint(pos):
             self.cursor_world.xy = self._screen_to_world(pos)
 
     def _clamp_camera(self) -> None:
-        max_x = max(0, _stage_length(self.data) - VIEW_W)
+        visible_w, visible_h = self._visible_world_size()
+        max_x = max(0, _stage_length(self.data) - visible_w)
         self.camera_x = max(-180.0, min(float(max_x + 180), self.camera_x))
+        self.camera_y = max(0.0, min(max(0.0, float(SCREEN_HEIGHT - visible_h)), self.camera_y))
+
+    def _set_zoom(self, next_zoom: float, anchor_pos: tuple[int, int] | None = None) -> None:
+        old_zoom = self.zoom
+        next_zoom = max(0.5, min(2.5, next_zoom))
+        if abs(next_zoom - old_zoom) < 0.001:
+            return
+        anchor = anchor_pos if anchor_pos is not None and self.view_rect.collidepoint(anchor_pos) else (VIEW_W // 2, TOOLBAR_H + VIEW_H // 2)
+        before = self._screen_to_world(anchor)
+        self.zoom = next_zoom
+        self.camera_x = before[0] - float(anchor[0]) / self.zoom
+        self.camera_y = before[1] - float(anchor[1] - TOOLBAR_H) / self.zoom
+        self._clamp_camera()
+        self._update_cursor_world(anchor)
+        self.message = f"Zoom: {self.zoom:.2f}x"
+
+    def _pan_camera(self, dx: float, dy: float = 0.0) -> None:
+        self.camera_x += dx
+        self.camera_y += dy
+        self._clamp_camera()
 
     def _event_at(self, pos: tuple[int, int]) -> int | None:
-        vx, vy = pos[0], pos[1] - TOOLBAR_H
+        wx, wy = self._screen_to_world(pos)
+        tolerance = max(4, int(round(10 / self.zoom)))
         best: tuple[int, float] | None = None
         for i, event in enumerate(self.data.get("world_events", [])):
-            rect = _event_rect(event, self.data, self.camera_x).inflate(10, 10)
-            if rect.collidepoint(vx, vy):
-                dist = (rect.centerx - vx) ** 2 + (rect.centery - vy) ** 2
+            rect = _event_rect(event, self.data, 0).inflate(tolerance, tolerance)
+            if rect.collidepoint(wx, wy):
+                dist = (rect.centerx - wx) ** 2 + (rect.centery - wy) ** 2
                 if best is None or dist < best[1]:
                     best = (i, dist)
         return None if best is None else best[0]
@@ -532,18 +590,19 @@ class StageDesigner:
         return None if best is None else best[0]
 
     def _terrain_piece_at(self, pos: tuple[int, int]) -> Selection | None:
-        vx, vy = pos[0], pos[1] - TOOLBAR_H
+        wx, wy = self._screen_to_world(pos)
         composer_layout, _pieces = self._piece_layout()
+        tolerance = max(3, int(round(6 / self.zoom)))
         best: tuple[Selection, float] | None = None
         for i, placement in enumerate(composer_layout.placements):
             rect = pygame.Rect(
-                int(round(placement.x - self.camera_x)),
+                int(round(placement.x)),
                 placement.y,
                 placement.image.get_width(),
                 placement.image.get_height(),
-            ).inflate(6, 6)
-            if rect.collidepoint(vx, vy):
-                dist = (rect.centerx - vx) ** 2 + (rect.centery - vy) ** 2
+            ).inflate(tolerance, tolerance)
+            if rect.collidepoint(wx, wy):
+                dist = (rect.centerx - wx) ** 2 + (rect.centery - wy) ** 2
                 if best is None or dist < best[1]:
                     best = (Selection("piece", i), dist)
         return None if best is None else best[0]
@@ -552,18 +611,27 @@ class StageDesigner:
         self.selection = None
         if not self.view_rect.collidepoint(pos):
             return
-        if self.mode == "terrain":
-            if _layout(self.data).get("type") == "TerrainPieces":
-                self.selection = self._terrain_piece_at(pos)
-                if self.selection is not None:
-                    self.message = f"Selected terrain piece #{self.selection.index + 1}"
-                return
-            self.selection = self._terrain_point_at(pos)
-            if self.selection is not None:
+        event_index = self._event_at(pos)
+        piece_selection: Selection | None = None
+        if _layout(self.data).get("type") == "TerrainPieces":
+            piece_selection = self._terrain_piece_at(pos)
+        elif self.mode == "terrain":
+            piece_selection = self._terrain_point_at(pos)
+
+        if event_index is not None and (self.mode != "terrain" or piece_selection is None):
+            self.selection = Selection("event", event_index)
+            ev = self.data["world_events"][event_index]
+            self.message = f"Selected event #{event_index + 1}: {ev.get('type')}"
+            return
+        if piece_selection is not None:
+            self.selection = piece_selection
+            if self.selection.kind == "piece":
+                self.message = f"Selected terrain piece #{self.selection.index + 1}"
+            else:
                 self.message = f"Selected {self.selection.side} point #{self.selection.index + 1}"
             return
-        index = self._event_at(pos)
-        if index is not None:
+        if event_index is not None:
+            index = event_index
             self.selection = Selection("event", index)
             ev = self.data["world_events"][index]
             self.message = f"Selected event #{index + 1}: {ev.get('type')}"
@@ -595,9 +663,9 @@ class StageDesigner:
         self.selection = None
         return None
 
-    def _add_event_at(self, wx: float, wy: float) -> None:
+    def _add_event_template_at(self, index: int, wx: float, wy: float) -> None:
         self._push_undo()
-        _name, template = EVENT_TEMPLATES[self.event_palette_index % len(EVENT_TEMPLATES)]
+        _name, template = EVENT_TEMPLATES[index % len(EVENT_TEMPLATES)]
         event = copy.deepcopy(template)
         _position_new_event(event, wx, wy)
         events = self.data.setdefault("world_events", [])
@@ -606,27 +674,53 @@ class StageDesigner:
         self.dirty = True
         self.message = f"Added event: {event.get('type')}"
 
-    def _add_piece_at(self, wx: float, wy: float) -> None:
+    def _add_event_at(self, wx: float, wy: float) -> None:
+        self._add_event_template_at(self.event_palette_index, wx, wy)
+
+    def _add_piece_asset_at(self, role: str, asset_id: str, wx: float, wy: float) -> None:
         layout = _layout(self.data)
         if layout.get("type") != "TerrainPieces":
             self.message = "TerrainPieces layout is required"
             return
-        piece = self._current_piece_asset()
-        if piece is None:
-            self.message = "No terrain piece in palette"
-            return
         self._push_undo()
         raw = {
-            "asset": _piece_asset_id(piece),
+            "asset": asset_id,
             "x": int(round(wx)),
             "y": int(round(wy)),
-            **_piece_defaults(self._current_piece_role()),
+            **_piece_defaults(role),
         }
         layout.setdefault("pieces", []).append(raw)
         self.selection = Selection("piece", len(layout["pieces"]) - 1)
         self._invalidate_terrain_cache()
         self.dirty = True
         self.message = f"Added piece: {raw['asset']}"
+
+    def _add_piece_at(self, wx: float, wy: float) -> None:
+        piece = self._current_piece_asset()
+        if piece is None:
+            self.message = "No terrain piece in palette"
+            return
+        self._add_piece_asset_at(self._current_piece_role(), _piece_asset_id(piece), wx, wy)
+
+    def _add_palette_payload_at(self, payload: dict[str, Any], wx: float, wy: float) -> None:
+        if payload.get("kind") == "event":
+            self.event_palette_index = int(payload.get("template_index", 0)) % len(EVENT_TEMPLATES)
+            self.mode = "events"
+            self._add_event_template_at(self.event_palette_index, wx, wy)
+            return
+        if payload.get("kind") == "piece":
+            role = str(payload.get("role", self._current_piece_role()))
+            asset = str(payload.get("asset", ""))
+            if not asset:
+                self.message = "No terrain piece asset"
+                return
+            self.piece_palette_role = role
+            asset_ids = [_piece_asset_id(piece) for piece in self._piece_palette_options(role)]
+            if asset in asset_ids:
+                self.piece_palette_index = asset_ids.index(asset)
+            self.mode = "terrain"
+            self._add_piece_asset_at(role, asset, wx, wy)
+            return
 
     def _add_from_palette(self) -> None:
         if self.mode == "terrain":
@@ -869,7 +963,8 @@ class StageDesigner:
             for i, point in enumerate(points):
                 if not isinstance(point, list) or len(point) < 2:
                     continue
-                sx, sy = int(round(float(point[0]) - self.camera_x)), int(round(float(point[1])))
+                sx, sy = self._world_to_screen(float(point[0]), float(point[1]))
+                sy -= TOOLBAR_H
                 screen_points.append((sx, sy))
                 selected = self.selection == Selection("terrain", i, side)
                 radius = 6 if selected else 4
@@ -881,13 +976,14 @@ class StageDesigner:
     def _draw_terrain_pieces(self, target: pygame.Surface) -> None:
         composer_layout, _pieces = self._piece_layout()
         for i, placement in enumerate(composer_layout.placements):
+            sx, sy = self._world_to_screen(float(placement.x), float(placement.y))
             rect = pygame.Rect(
-                int(round(placement.x - self.camera_x)),
-                placement.y,
-                placement.image.get_width(),
-                placement.image.get_height(),
+                sx,
+                sy - TOOLBAR_H,
+                max(1, int(round(placement.image.get_width() * self.zoom))),
+                max(1, int(round(placement.image.get_height() * self.zoom))),
             )
-            if rect.right < 0 or rect.left > VIEW_W:
+            if rect.right < 0 or rect.left > target.get_width():
                 continue
             selected = self.selection == Selection("piece", i)
             color = POINT_BOTTOM_COLOR if placement.side == "bottom" else POINT_TOP_COLOR if placement.side == "top" else TERRAIN_COLOR
@@ -898,11 +994,18 @@ class StageDesigner:
 
     def _draw_events(self, target: pygame.Surface) -> None:
         for i, event in enumerate(self.data.get("world_events", [])):
-            rect = _event_rect(event, self.data, self.camera_x)
+            world_rect = _event_rect(event, self.data, 0)
+            sx, sy = self._world_to_screen(world_rect.x, world_rect.y)
+            rect = pygame.Rect(
+                sx,
+                sy - TOOLBAR_H,
+                max(1, int(round(world_rect.width * self.zoom))),
+                max(1, int(round(world_rect.height * self.zoom))),
+            )
             color = _event_color(event)
             selected = self.selection == Selection("event", i)
             if event.get("type") == "BossGate":
-                pygame.draw.line(target, color, (rect.centerx, 0), (rect.centerx, VIEW_H), 3 if selected else 1)
+                pygame.draw.line(target, color, (rect.centerx, 0), (rect.centerx, target.get_height()), 3 if selected else 1)
             elif event.get("type") in RECT_TERRAIN_TYPES:
                 fill = (*color, 55 if selected else 32)
                 overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
@@ -920,8 +1023,9 @@ class StageDesigner:
         length = _stage_length(self.data)
         x, y, w, h = 14, 12, 330, 14
         pygame.draw.rect(target, (24, 32, 36), (x, y, w, h))
+        visible_w, _visible_h = self._visible_world_size()
         view_x = x + int((self.camera_x / max(1, length)) * w)
-        view_w = max(12, int((VIEW_W / max(1, length)) * w))
+        view_w = max(12, int((visible_w / max(1, length)) * w))
         pygame.draw.rect(target, (90, 220, 190), (view_x, y, view_w, h))
         pygame.draw.rect(target, (138, 160, 166), (x, y, w, h), 1)
 
@@ -960,75 +1064,125 @@ class StageDesigner:
             f"y: {point[1]}",
         ]
 
-    def _draw_piece_palette_preview(self, target: pygame.Surface, pos: tuple[int, int], max_w: int) -> int:
-        if self.mode != "terrain" or _layout(self.data).get("type") != "TerrainPieces":
-            return 0
-        piece = self._current_piece_asset()
-        if piece is None:
-            return 0
+    def _draw_palette_title(self, target: pygame.Surface, text: str, pos: tuple[int, int]) -> int:
+        image = self.font.render(text, True, (225, 232, 230))
+        target.blit(image, pos)
+        return image.get_height() + 8
+
+    def _draw_piece_cell(self, target: pygame.Surface, rect: pygame.Rect, role: str, piece: Any) -> None:
+        asset = _piece_asset_id(piece)
+        selected = self.mode == "terrain" and role == self._current_piece_role() and self._current_piece_asset() is piece
+        color = (91, 232, 188) if selected else (72, 92, 96)
+        pygame.draw.rect(target, (8, 12, 15), rect)
+        pygame.draw.rect(target, color, rect, 2 if selected else 1)
         image = piece.image
-        scale = min(1.0, max_w / max(1, image.get_width()), 92 / max(1, image.get_height()))
+        scale = min(1.0, (rect.width - 12) / max(1, image.get_width()), 44 / max(1, image.get_height()))
         preview = image if scale >= 1.0 else pygame.transform.smoothscale(
             image,
             (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale))),
         )
-        bg = pygame.Rect(pos[0] - 4, pos[1] - 4, max_w + 8, preview.get_height() + 8)
-        pygame.draw.rect(target, (6, 10, 13), bg)
-        pygame.draw.rect(target, (48, 60, 64), bg, 1)
-        target.blit(preview, pos)
-        return bg.height + 8
+        target.blit(preview, (rect.x + 6, rect.y + 6))
+        label = self.small_font.render(asset, True, (220, 232, 228))
+        target.blit(label, (rect.x + 6, rect.bottom - 18))
 
-    def render(self) -> pygame.Surface:
-        surface = pygame.Surface(self.screen.get_size())
-        surface.fill((10, 13, 16))
-        view = self._load_backdrop()
-        layout = _layout(self.data)
-        if layout.get("type") == "TerrainPieces":
-            _composer_layout, pieces = self._piece_layout()
-            render_stage3_piece_surface(
-                view,
-                layout,
-                pieces,
-                camera_x=self.camera_x,
-                start_x=_layout_start_x(layout),
-                collision_step=int(layout.get("composer_collision_step", 8)),
-                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
-            )
-            if self.mode == "terrain":
-                self._draw_terrain_pieces(view)
-        else:
-            segments, pieces = self._terrain()
-            render_stage3_composer_surface(
-                view,
-                segments,
-                pieces,
-                camera_x=self.camera_x,
-                sample_step=int(layout.get("composer_sample_step", 48)),
-                tolerance=int(layout.get("composer_tolerance", 26)),
-                collision_step=int(layout.get("composer_collision_step", 8)),
-                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
-                overlap=int(layout.get("composer_overlap", 0)),
-            )
-            self._draw_terrain_points(view)
-        self._draw_events(view)
-        surface.blit(view, self.view_rect.topleft)
+    def _draw_event_cell(self, target: pygame.Surface, rect: pygame.Rect, index: int, name: str, template: dict[str, Any]) -> None:
+        selected = self.mode == "events" and index == self.event_palette_index
+        color = (255, 175, 98) if selected else _event_color(template)
+        pygame.draw.rect(target, (8, 12, 15), rect)
+        pygame.draw.rect(target, color, rect, 2 if selected else 1)
+        chip = pygame.Rect(rect.x + 7, rect.y + 8, 22, 22)
+        pygame.draw.rect(target, (*color, 80), chip)
+        pygame.draw.rect(target, color, chip, 1)
+        label = self.small_font.render(name, True, (230, 235, 232))
+        target.blit(label, (rect.x + 36, rect.y + 9))
+        type_label = self.small_font.render(str(template.get("type", "")), True, (160, 178, 178))
+        target.blit(type_label, (rect.x + 7, rect.bottom - 18))
 
-        toolbar = surface.subsurface(pygame.Rect(0, 0, surface.get_width(), TOOLBAR_H))
-        toolbar.fill((8, 12, 15))
-        self._draw_minimap(toolbar)
-        dirty = "*" if self.dirty else ""
-        self._draw_label(toolbar, f"{dirty} mode={self.mode} x={int(self.camera_x)}", (360, 10), (220, 235, 230))
-        self._draw_label(toolbar, self.message, (640, 10), (220, 235, 230))
+    def _draw_palette(self, target: pygame.Surface) -> None:
+        panel = self.palette_rect
+        pygame.draw.rect(target, (13, 17, 21), panel)
+        pygame.draw.line(target, (48, 60, 64), (panel.left, panel.top), (panel.left, panel.bottom))
+        pygame.draw.line(target, (48, 60, 64), (panel.right - 1, panel.top), (panel.right - 1, panel.bottom))
 
-        panel = pygame.Rect(VIEW_W, TOOLBAR_H, max(0, surface.get_width() - VIEW_W), VIEW_H)
-        pygame.draw.rect(surface, (13, 17, 21), panel)
-        pygame.draw.line(surface, (48, 60, 64), (panel.left, panel.top), (panel.left, panel.bottom))
+        self._palette_hitboxes = []
+        old_clip = target.get_clip()
+        target.set_clip(panel)
+        x0 = panel.left + 12
+        y = panel.top + 12 - int(round(self.palette_scroll_y))
+        cols = 3
+        gap = 8
+        cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
+
+        y += self._draw_palette_title(target, "Event Palette", (x0, y))
+        event_h = 58
+        for i, (name, template) in enumerate(EVENT_TEMPLATES):
+            col = i % cols
+            row = i // cols
+            rect = pygame.Rect(x0 + col * (cell_w + gap), y + row * (event_h + gap), cell_w, event_h)
+            if rect.colliderect(panel):
+                self._draw_event_cell(target, rect, i, name, template)
+                self._palette_hitboxes.append((rect.copy(), {"kind": "event", "template_index": i}))
+        y += ((len(EVENT_TEMPLATES) + cols - 1) // cols) * (event_h + gap) + 12
+
+        y += self._draw_palette_title(target, "Terrain Pieces", (x0, y))
+        piece_h = 76
+        for role in self._piece_roles():
+            y += self._draw_palette_title(target, role, (x0, y))
+            options = self._piece_palette_options(role)
+            for i, piece in enumerate(options):
+                col = i % cols
+                row = i // cols
+                rect = pygame.Rect(x0 + col * (cell_w + gap), y + row * (piece_h + gap), cell_w, piece_h)
+                if rect.colliderect(panel):
+                    self._draw_piece_cell(target, rect, role, piece)
+                    self._palette_hitboxes.append((rect.copy(), {"kind": "piece", "role": role, "asset": _piece_asset_id(piece)}))
+            y += ((len(options) + cols - 1) // cols) * (piece_h + gap) + 12
+
+        target.set_clip(old_clip)
+        content_h = y - panel.top + int(round(self.palette_scroll_y))
+        self.max_palette_scroll_y = max(0.0, float(content_h - panel.height + 20))
+        self.palette_scroll_y = max(0.0, min(self.max_palette_scroll_y, self.palette_scroll_y))
+        if self.max_palette_scroll_y > 0:
+            track = pygame.Rect(panel.right - 8, panel.top + 8, 4, panel.height - 16)
+            thumb_h = max(24, int(track.height * (panel.height / max(panel.height, content_h))))
+            thumb_y = track.y + int((track.height - thumb_h) * (self.palette_scroll_y / self.max_palette_scroll_y))
+            pygame.draw.rect(target, (38, 48, 52), track)
+            pygame.draw.rect(target, (104, 138, 136), (track.x, thumb_y, track.width, thumb_h))
+
+    def _palette_payload_at(self, pos: tuple[int, int]) -> dict[str, Any] | None:
+        for rect, payload in self._palette_hitboxes:
+            if rect.collidepoint(pos):
+                return payload
+        return None
+
+    def _select_palette_payload(self, payload: dict[str, Any]) -> None:
+        if payload.get("kind") == "event":
+            self.event_palette_index = int(payload.get("template_index", 0)) % len(EVENT_TEMPLATES)
+            self.mode = "events"
+            self.message = f"Event palette: {_event_template_name(self.event_palette_index)}"
+            return
+        if payload.get("kind") == "piece":
+            role = str(payload.get("role", self._current_piece_role()))
+            asset = str(payload.get("asset", ""))
+            self.piece_palette_role = role
+            asset_ids = [_piece_asset_id(piece) for piece in self._piece_palette_options(role)]
+            if asset in asset_ids:
+                self.piece_palette_index = asset_ids.index(asset)
+            self.mode = "terrain"
+            self.message = self._piece_palette_summary()
+
+    def _draw_info_panel(self, target: pygame.Surface) -> None:
+        panel = self.info_rect
+        pygame.draw.rect(target, (13, 17, 21), panel)
+        pygame.draw.line(target, (48, 60, 64), (panel.left, panel.top), (panel.left, panel.bottom))
         y = panel.top + 12
         help_lines = [
             "Stage Designer",
-            "E events / T terrain/pieces",
-            "Drag selected item",
-            "Arrows move (Ctrl=10)",
+            "Drag palette item onto stage",
+            "Click stage item to select",
+            "Arrows pan stage",
+            "Shift+Arrows move selection",
+            "Ctrl+Wheel zoom",
             "N add / Del delete / Ins dup",
             "[ ] palette / R role",
             "M collision / X side / F/Y flip",
@@ -1038,8 +1192,79 @@ class StageDesigner:
             "",
         ] if self.show_help else ["Stage Designer", "H help", ""]
         for line in [*help_lines, *self._palette_summary(), "", *self._selected_summary()]:
-            y += self._draw_label(surface, line, (panel.left + 14, y), (225, 232, 230))
-        y += self._draw_piece_palette_preview(surface, (panel.left + 18, y + 4), max(80, panel.width - 36))
+            y += self._draw_label(target, line, (panel.left + 14, y), (225, 232, 230))
+
+    def _draw_drag_preview(self, target: pygame.Surface) -> None:
+        if not self.palette_drag:
+            return
+        pos = pygame.mouse.get_pos()
+        payload = self.palette_drag
+        if payload.get("kind") == "event":
+            name = _event_template_name(int(payload.get("template_index", 0)))
+            image = self.font.render(name, True, (255, 210, 150))
+            bg = pygame.Rect(pos[0] + 12, pos[1] + 12, image.get_width() + 10, image.get_height() + 8)
+            pygame.draw.rect(target, (8, 12, 15), bg)
+            pygame.draw.rect(target, (255, 210, 150), bg, 1)
+            target.blit(image, (bg.x + 5, bg.y + 4))
+            return
+        role = str(payload.get("role", ""))
+        asset = str(payload.get("asset", ""))
+        for piece in self._piece_palette_options(role):
+            if _piece_asset_id(piece) == asset:
+                image = piece.image
+                scale = min(1.0, 120 / max(1, image.get_width()), 80 / max(1, image.get_height()))
+                preview = image if scale >= 1.0 else pygame.transform.smoothscale(
+                    image,
+                    (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale))),
+                )
+                target.blit(preview, (pos[0] + 12, pos[1] + 12))
+                return
+
+    def render(self) -> pygame.Surface:
+        surface = pygame.Surface(self.screen.get_size())
+        surface.fill((10, 13, 16))
+        visible_w, visible_h = self._visible_world_size()
+        canvas_h = max(SCREEN_HEIGHT, int(round(self.camera_y)) + visible_h)
+        world_view = self._load_backdrop(visible_w, canvas_h)
+        layout = _layout(self.data)
+        if layout.get("type") == "TerrainPieces":
+            composer_layout, _pieces = self._piece_layout()
+            draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
+        else:
+            segments, pieces = self._terrain()
+            render_stage3_composer_surface(
+                world_view,
+                segments,
+                pieces,
+                camera_x=self.camera_x,
+                sample_step=int(layout.get("composer_sample_step", 48)),
+                tolerance=int(layout.get("composer_tolerance", 26)),
+                collision_step=int(layout.get("composer_collision_step", 8)),
+                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
+                overlap=int(layout.get("composer_overlap", 0)),
+            )
+        crop = pygame.Rect(0, int(round(self.camera_y)), visible_w, visible_h)
+        view = pygame.Surface((visible_w, visible_h), pygame.SRCALPHA)
+        view.blit(world_view, (0, 0), crop)
+        if self.zoom != 1.0:
+            view = pygame.transform.smoothscale(view, (VIEW_W, VIEW_H))
+        if layout.get("type") == "TerrainPieces":
+            self._draw_terrain_pieces(view)
+        else:
+            self._draw_terrain_points(view)
+        self._draw_events(view)
+        surface.blit(view, self.view_rect.topleft)
+
+        toolbar = surface.subsurface(pygame.Rect(0, 0, surface.get_width(), TOOLBAR_H))
+        toolbar.fill((8, 12, 15))
+        self._draw_minimap(toolbar)
+        dirty = "*" if self.dirty else ""
+        self._draw_label(toolbar, f"{dirty} mode={self.mode} x={int(self.camera_x)} zoom={self.zoom:.2f}", (360, 10), (220, 235, 230))
+        self._draw_label(toolbar, self.message, (640, 10), (220, 235, 230))
+
+        self._draw_palette(surface)
+        self._draw_info_panel(surface)
+        self._draw_drag_preview(surface)
         return surface
 
     def draw(self) -> None:
@@ -1055,6 +1280,7 @@ class StageDesigner:
     def _handle_key(self, event: pygame.event.Event) -> bool:
         mods = pygame.key.get_mods()
         step = 10 if mods & pygame.KMOD_CTRL else 1
+        pan_step = 180 if mods & pygame.KMOD_CTRL else 48
         if event.key == pygame.K_ESCAPE:
             return False
         if event.key == pygame.K_e:
@@ -1100,38 +1326,55 @@ class StageDesigner:
             if self.mode == "terrain":
                 self._toggle_selected_piece_flip("y")
         elif event.key == pygame.K_LEFT:
-            self._move_selection(-step, 0)
+            if mods & pygame.KMOD_SHIFT:
+                self._move_selection(-step, 0)
+            else:
+                self._pan_camera(-pan_step)
         elif event.key == pygame.K_RIGHT:
-            self._move_selection(step, 0)
+            if mods & pygame.KMOD_SHIFT:
+                self._move_selection(step, 0)
+            else:
+                self._pan_camera(pan_step)
         elif event.key == pygame.K_UP:
-            self._move_selection(0, -step)
+            if mods & pygame.KMOD_SHIFT:
+                self._move_selection(0, -step)
+            else:
+                self._pan_camera(0, -pan_step)
         elif event.key == pygame.K_DOWN:
-            self._move_selection(0, step)
+            if mods & pygame.KMOD_SHIFT:
+                self._move_selection(0, step)
+            else:
+                self._pan_camera(0, pan_step)
         elif event.key == pygame.K_a:
-            self.camera_x -= 90 if mods & pygame.KMOD_CTRL else 24
-            self._clamp_camera()
+            self._pan_camera(-(90 if mods & pygame.KMOD_CTRL else 24))
         elif event.key == pygame.K_d:
-            self.camera_x += 90 if mods & pygame.KMOD_CTRL else 24
-            self._clamp_camera()
+            self._pan_camera(90 if mods & pygame.KMOD_CTRL else 24)
         elif event.key == pygame.K_PAGEUP:
-            self.camera_x -= VIEW_W * 0.75
-            self._clamp_camera()
+            self._pan_camera(-VIEW_W * 0.75)
         elif event.key == pygame.K_PAGEDOWN:
-            self.camera_x += VIEW_W * 0.75
-            self._clamp_camera()
+            self._pan_camera(VIEW_W * 0.75)
         elif event.key == pygame.K_HOME:
             self.camera_x = 0.0
+            self.camera_y = 0.0
         elif event.key == pygame.K_END:
-            self.camera_x = float(_stage_length(self.data) - VIEW_W)
+            visible_w, _visible_h = self._visible_world_size()
+            self.camera_x = float(_stage_length(self.data) - visible_w)
             self._clamp_camera()
         return True
 
     def _handle_mouse_down(self, event: pygame.event.Event) -> None:
         self._update_cursor_world(event.pos)
+        if event.button == 1 and self.palette_rect.collidepoint(event.pos):
+            payload = self._palette_payload_at(event.pos)
+            if payload is not None:
+                self._select_palette_payload(payload)
+                self.palette_drag = copy.deepcopy(payload)
+            return
         if event.button in (2, 3):
             self.panning = True
             self.pan_anchor = pygame.Vector2(event.pos)
             self.pan_camera_x = self.camera_x
+            self.pan_camera_y = self.camera_y
             return
         if event.button != 1:
             return
@@ -1161,8 +1404,12 @@ class StageDesigner:
         self._update_cursor_world(event.pos)
         if self.panning:
             dx = pygame.Vector2(event.pos).x - self.pan_anchor.x
-            self.camera_x = self.pan_camera_x - dx
+            dy = pygame.Vector2(event.pos).y - self.pan_anchor.y
+            self.camera_x = self.pan_camera_x - dx / self.zoom
+            self.camera_y = self.pan_camera_y - dy / self.zoom
             self._clamp_camera()
+            return
+        if self.palette_drag is not None:
             return
         if self.dragging and self.selection is not None:
             wx, wy = self._screen_to_world(event.pos)
@@ -1172,6 +1419,11 @@ class StageDesigner:
         if event.button in (2, 3):
             self.panning = False
         if event.button == 1:
+            if self.palette_drag is not None:
+                if self.view_rect.collidepoint(event.pos):
+                    wx, wy = self._screen_to_world(event.pos)
+                    self._add_palette_payload_at(self.palette_drag, wx, wy)
+                self.palette_drag = None
             self.dragging = False
 
     def _handle_event(self, event: pygame.event.Event) -> bool:
@@ -1183,8 +1435,15 @@ class StageDesigner:
                 pygame.RESIZABLE,
             )
         elif event.type == pygame.MOUSEWHEEL:
-            self.camera_x -= event.y * 90
-            self._clamp_camera()
+            mouse_pos = tuple(int(v) for v in self.last_mouse_pos)
+            mods = pygame.key.get_mods()
+            if mods & pygame.KMOD_CTRL and self.view_rect.collidepoint(mouse_pos):
+                factor = 1.12 if event.y > 0 else 1 / 1.12
+                self._set_zoom(self.zoom * factor, mouse_pos)
+            elif self.palette_rect.collidepoint(mouse_pos):
+                self.palette_scroll_y = max(0.0, min(self.max_palette_scroll_y, self.palette_scroll_y - event.y * 80))
+            else:
+                self._pan_camera(-event.y * 90)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self._handle_mouse_down(event)
         elif event.type == pygame.MOUSEMOTION:

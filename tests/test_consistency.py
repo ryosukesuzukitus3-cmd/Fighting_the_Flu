@@ -1809,6 +1809,13 @@ def test_stage_designer_adds_duplicates_and_deletes_terrain_pieces() -> None:
     designer._delete_selection()
     assert len(designer.data["terrain_layout"][0]["pieces"]) == 1
 
+    designer._add_palette_payload_at({"kind": "piece", "role": "ceiling_surface", "asset": "strip_top:2"}, 210, -40)
+    added = designer.data["terrain_layout"][0]["pieces"][-1]
+    assert added["asset"] == "strip_top:2"
+    assert added["role"] == "ceiling_surface"
+    assert added["side"] == "top"
+    assert added["flip_y"] is True
+
 
 def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> None:
     from tools.stage_designer import EVENT_TEMPLATES, Selection, StageDesigner
@@ -1836,6 +1843,9 @@ def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> Non
 
     designer._delete_selection()
     assert len(designer.data["world_events"]) == 1
+
+    designer._add_palette_payload_at({"kind": "event", "template_index": designer.event_palette_index}, 500, 410)
+    assert designer.data["world_events"][-1]["x"] == 500
 
 
 def test_stage3_composer_report_opens_preview_by_default() -> None:
