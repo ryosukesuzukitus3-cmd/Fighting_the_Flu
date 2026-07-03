@@ -325,6 +325,9 @@ class GameScene(
 
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
+        if __debug__:
+            dt = self._debug_apply_time_scale(dt)
+
         # Hitstop slows movement updates for a short impact moment.
         if self._hitstop_timer > 0:
             self._hitstop_timer -= dt
@@ -596,7 +599,8 @@ class GameScene(
             return
 
         if __debug__:
-            self._debug_handle_input()
+            if self._debug_handle_input():
+                return
 
         if self._is_debug_stage and self._debug_panel is not None:
             self._debug_panel.update(dt)

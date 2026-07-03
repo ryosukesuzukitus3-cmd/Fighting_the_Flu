@@ -284,7 +284,7 @@ class GameScene(
 
 | Mixin | 責務 |
 |---|---|
-| DebugMixin | デバッグコマンド（F1〜F6, Ctrl+N: ステージワープ） |
+| DebugMixin | デバッグコマンド（F1〜F7, Ctrl+N: 全シーンステージワープ） |
 | PostBossMixin | ボス撃破後のスロー・追加爆発・マグネット・セリフ・遷移 |
 | OverlayMixin | ステージバナー・ALERT・ボス名・FIGHT!バナー・ボス戦中セリフ |
 | UpgradeMixin | ボス撃破後のウェポンスロット選択UI |

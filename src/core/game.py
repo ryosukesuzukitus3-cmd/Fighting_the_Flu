@@ -49,6 +49,11 @@ class Game:
 
     def run(self) -> None:
         from src.scenes.title import TitleScene
+        handle_debug_input = None
+        if __debug__:
+            from src.core.debug import handle_global_debug_input
+            handle_debug_input = handle_global_debug_input
+
         self.change_scene(TitleScene(self))
 
         running = True
@@ -77,6 +82,8 @@ class Game:
                 self._scene.handle_event(event)
 
             self.input.update(delta_time)
+            if handle_debug_input is not None and handle_debug_input(self):
+                continue
             self._scene.update(delta_time)
             self._scene.draw(self.screen)
             pygame.display.flip()
