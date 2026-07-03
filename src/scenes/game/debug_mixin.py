@@ -4,23 +4,43 @@
   F1        無敵トグル
   F2        ウェポンアイテムをドロップ
   F3        現在状態をコンソール出力
+  F4        押している間ステージ進行を早送り
   F5        次ウェーブを即スキップ
   F6        ボスを即スポーン（ALERT なし）
-  Ctrl+1~4  指定ステージへワープ
+  F7        ウェポン状態を最大化
+  Ctrl+1~9  登録済みステージへワープ
 """
 from __future__ import annotations
 import pygame
 from src.core.constants import SCREEN_WIDTH
 
 
+DEBUG_FAST_FORWARD_SCALE = 6.0
+_DEBUG_MAX_UPGRADE_STEPS = 20
+
+
 class GameSceneDebugMixin:
     """デバッグ操作と画面右上オーバーレイを担当する。"""
 
-    def _debug_handle_input(self) -> None:
-        inp  = self.game.input          # type: ignore[attr-defined]
-        keys = pygame.key.get_pressed()
-        ctrl = keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]
+    def _debug_apply_time_scale(self, dt: float) -> float:
+        inp = self.game.input  # type: ignore[attr-defined]
+        scale = DEBUG_FAST_FORWARD_SCALE if inp.is_pressed(pygame.K_F4) else 1.0
+        self._debug_time_scale = scale  # type: ignore[attr-defined]
+        return dt * scale
 
+    def _debug_max_weapon(self) -> None:
+        w = self.player.weapon  # type: ignore[attr-defined]
+        for item_type in ("weapon_main", "speed", "laser", "homing", "magnet", "barrier"):
+            for _ in range(_DEBUG_MAX_UPGRADE_STEPS):
+                w.upgrade(item_type)
+        print(
+            "[DEBUG] Weapon maxed: "
+            f"main={w.main_level} laser={w.laser_level} homing={w.homing_level} "
+            f"speed={w.speed_level} barrier={w.has_barrier} magnet={w.magnet_level}"
+        )
+
+    def _debug_handle_input(self) -> bool:
+        inp  = self.game.input          # type: ignore[attr-defined]
         # F1: 無敵トグル
         if inp.is_just_pressed(pygame.K_F1):
             self._debug_invincible = not self._debug_invincible  # type: ignore[attr-defined]
@@ -80,17 +100,15 @@ class GameSceneDebugMixin:
                 self._queue_boss_spawn()  # type: ignore[attr-defined]
                 print("[DEBUG] Force boss spawn")
 
-        # Ctrl+N: ステージワープ（stage_ids() でステージ数に追従）
-        if ctrl:
-            from src.core.registries import stage_ids
-            _STAGE_KEYS = [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
-                           pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9]
-            for stage, key in zip(stage_ids(), _STAGE_KEYS):
-                if inp.is_just_pressed(key):
-                    print(f"[DEBUG] Warp to Stage {stage}")
-                    from src.scenes.game_scene import GameScene
-                    self.game.change_scene(GameScene(self.game, stage_id=stage))  # type: ignore[attr-defined]
-                    return
+        # F7: max out the weapon state
+        if inp.is_just_pressed(pygame.K_F7):
+            self._debug_max_weapon()
+
+        # Ctrl+N: stage warp. This mirrors the global handler for headless tools
+        # that drive GameScene directly instead of Game.run().
+        from src.core.debug import handle_global_debug_input
+
+        return handle_global_debug_input(self.game)  # type: ignore[arg-type]
 
     def _debug_draw_overlay(self, screen: pygame.Surface) -> None:
         font = self.game.resources.pixelfont(15)  # type: ignore[attr-defined]
@@ -98,19 +116,21 @@ class GameSceneDebugMixin:
 
         combo_count = getattr(self, "_combo_count", 0)
         combo_timer = getattr(self, "_combo_timer", 0.0)
+        scale = getattr(self, "_debug_time_scale", 1.0)
+        ff_label = f"  FFx{scale:.0f}" if scale > 1.0 else ""
 
         lines = [
             "[ DEBUG ]",
             f"Stage {self._stage_id}  t={self._stage_elapsed:.1f}s",  # type: ignore[attr-defined]
             f"HP {self.player.hp}/{self.player.max_hp}"               # type: ignore[attr-defined]
-            + ("  INV:ON" if getattr(self, "_debug_invincible", False) else ""),
+            + ("  INV:ON" if getattr(self, "_debug_invincible", False) else "") + ff_label,
             f"main={w.main_level} L{w.laser_level} H{w.homing_level} S{w.speed_level}",
             f"barrier={'Y' if w.has_barrier else 'N'}  mgt={w.magnet_level}",
             f"Enemies:{len(self.enemies)}  Items:{len(self.items)}",  # type: ignore[attr-defined]
             f"Score:{self.game.shared.score}  Kills:{self.game.shared.kill_count}",  # type: ignore[attr-defined]
             f"Combo:{combo_count}  ({combo_timer:.1f}s)",
-            "F1:無敵 F2:Wドロップ F3:出力",
-            "F5:次波 F6:ボス Ctrl+N:ワープ",
+            "F1:INV F2:Drop F3:Log F4:FF",
+            "F5:Wave F6:Boss F7:MaxW Ctrl+N:Warp",
         ]
 
         line_h  = 17
