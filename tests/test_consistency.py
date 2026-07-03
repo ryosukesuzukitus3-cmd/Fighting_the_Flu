@@ -758,6 +758,33 @@ def test_world_event_surface_can_use_authored_terrain_block() -> None:
     assert turret.world_y == 396
 
 
+def test_world_event_anchor_y_preserves_authored_formation_position() -> None:
+    from src.core.camera import Camera
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=pygame.sprite.Group(),
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[],
+        player=object(),
+        terrain=pygame.sprite.Group(),
+    )
+
+    positions = spawner._world_positions(
+        {"type": "EnemyVirus", "x": 1000, "count": 3, "formation": "line", "anchor_y": 300},
+        3,
+        "bottom",
+        camera,
+        offset=20,
+        step=56,
+    )
+
+    assert positions == [(1000, 256), (1056, 300), (1112, 344)]
+
+
 def test_world_event_fixed_drop_metadata_reaches_spawned_objects() -> None:
     from src.core.camera import Camera
     from src.stages.spawner import EnemySpawner
@@ -1848,6 +1875,56 @@ def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> Non
     assert designer.data["world_events"][-1]["x"] == 500
 
 
+def test_stage_designer_event_palette_uses_enemy_type_once_and_edits_variants() -> None:
+    from tools.stage_designer import EVENT_TEMPLATES, Selection, StageDesigner
+
+    enemy_templates = [
+        template
+        for _name, template in EVENT_TEMPLATES
+        if str(template.get("type", "")).startswith("Enemy")
+    ]
+    enemy_types = [template["type"] for template in enemy_templates]
+
+    assert enemy_types.count("EnemyVirus") == 1
+    assert enemy_types.count("EnemyTakeshi") == 1
+    assert enemy_types.count("EnemyPachemon") == 1
+    assert {"EnemyBroly", "EnemyDebrisLarge", "EnemyCoughSprayer", "EnemySporeSplitter", "EnemyBilly"} <= set(enemy_types)
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "pieces": [],
+            "guide_top": [[0, 60], [500, 60]],
+            "guide_bottom": [[0, 520], [500, 520]],
+        }],
+        "world_events": [{"type": "EnemyBroly", "x": 200, "count": 1, "formation": "single"}],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer.cursor_world = pygame.Vector2(200, 300)
+    designer.selection = Selection("event", 0)
+    designer.message = ""
+    designer.undo_stack = []
+    designer.dirty = False
+
+    designer._adjust_selected_event_count(1)
+    event = designer.data["world_events"][0]
+    assert event["count"] == 2
+    assert event["formation"] == "line"
+    assert "anchor_y" in event
+
+    designer._cycle_selected_event_formation()
+    assert event["formation"] == "v_shape"
+
+    designer._toggle_selected_event_enhanced()
+    assert event["enhanced"] is True
+    designer._toggle_selected_event_enhanced()
+    assert "enhanced" not in event
+
+
 def test_stage_designer_formats_and_autofills_guide_points() -> None:
     from tools.stage_designer import Selection, StageDesigner, _format_stage_json
 
@@ -1972,6 +2049,7 @@ def test_stage_designer_selects_visible_event_previews_without_flattening_format
 
     assert event["x"] == 460
     assert "y" not in event
+    assert event["anchor_y"] == 340
     assert before[0][1] < before[1][1] < before[2][1]
     assert after[0][1] < after[1][1] < after[2][1]
 

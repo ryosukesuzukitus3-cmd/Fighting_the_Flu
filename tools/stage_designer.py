@@ -79,14 +79,12 @@ PIECE_ROLE_ORDER = [
 PIECE_COLLISION_ORDER = ["auto", "none", "surface", "rect"]
 PIECE_SIDE_ORDER = ["bottom", "top"]
 AUTO_FILL_REPLACE_ROLES = {"floor_surface", "ceiling_surface", "body_fill"}
+FORMATION_ORDER = ["single", "line", "v_shape", "random"]
 
 EVENT_TEMPLATES: list[tuple[str, dict[str, Any]]] = [
-    ("virus line", {"type": "EnemyVirus", "x": 0, "count": 3, "formation": "line"}),
-    ("virus v", {"type": "EnemyVirus", "x": 0, "count": 5, "formation": "v_shape"}),
+    ("virus", {"type": "EnemyVirus", "x": 0, "count": 1, "formation": "single"}),
     ("takeshi", {"type": "EnemyTakeshi", "x": 0, "count": 1, "formation": "single"}),
-    ("takeshi line", {"type": "EnemyTakeshi", "x": 0, "count": 3, "formation": "line"}),
     ("pachemon", {"type": "EnemyPachemon", "x": 0, "count": 1, "formation": "single"}),
-    ("pachemon v", {"type": "EnemyPachemon", "x": 0, "count": 3, "formation": "v_shape"}),
     ("crawler bottom", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
     ("crawler top", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
     ("turret bottom", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
@@ -314,6 +312,8 @@ def _event_x_key(event: dict[str, Any]) -> str | None:
 def _event_y(event: dict[str, Any], data: dict[str, Any]) -> float:
     if "y" in event:
         return float(event["y"])
+    if "anchor_y" in event:
+        return float(event["anchor_y"])
     wx = _event_x(event) or 0.0
     offset = float(event.get("surface_offset", 0.0))
     layout = _layout(data)
@@ -324,6 +324,16 @@ def _event_y(event: dict[str, Any], data: dict[str, Any]) -> float:
     if event.get("type") == "BossGate":
         return 48.0
     return SCREEN_HEIGHT / 2
+
+
+def _event_can_use_anchor_y(event: dict[str, Any]) -> bool:
+    if event.get("type") == "BossGate":
+        return False
+    if event.get("type") in RECT_TERRAIN_TYPES:
+        return False
+    if event.get("surface") in {"top", "bottom"} and "y" not in event:
+        return False
+    return str(event.get("type", "")).startswith("Enemy")
 
 
 def _set_event_x(event: dict[str, Any], value: float) -> None:
@@ -346,7 +356,8 @@ def _set_event_y(event: dict[str, Any], value: float) -> None:
         return
     if event.get("surface") in {"top", "bottom"} and "y" not in event:
         return
-    event["y"] = int(round(max(0.0, min(float(SCREEN_HEIGHT), value))))
+    key = "y" if "y" in event or not _event_can_use_anchor_y(event) else "anchor_y"
+    event[key] = int(round(max(0.0, min(float(SCREEN_HEIGHT), value))))
 
 
 def _event_template_name(index: int) -> str:
@@ -367,6 +378,9 @@ def _position_new_event(event: dict[str, Any], wx: float, wy: float) -> None:
         return
     if "y" in event or event.get("type") in RECT_TERRAIN_TYPES:
         event["y"] = int(round(max(0.0, min(float(SCREEN_HEIGHT), wy))))
+        return
+    if _event_can_use_anchor_y(event):
+        event["anchor_y"] = int(round(max(0.0, min(float(SCREEN_HEIGHT), wy))))
 
 
 def _piece_asset_id(piece: Any) -> str:
@@ -417,9 +431,7 @@ def _event_can_edit_y(event: dict[str, Any]) -> bool:
         return False
     if "y" in event:
         return True
-    formation = str(event.get("formation", ""))
-    count = max(1, int(event.get("count", 1)))
-    return count <= 1 or formation in {"", "single"}
+    return _event_can_use_anchor_y(event)
 
 
 def _fit_surface(source: pygame.Surface, max_w: int, max_h: int) -> pygame.Surface:
@@ -476,6 +488,10 @@ def _event_color(event: dict[str, Any]) -> tuple[int, int, int]:
     return ENEMY_COLOR
 
 
+def _event_is_enemy(event: dict[str, Any]) -> bool:
+    return str(event.get("type", "")).startswith("Enemy")
+
+
 def _event_rect(event: dict[str, Any], data: dict[str, Any], camera_x: float) -> pygame.Rect:
     wx = _event_x(event) or 0.0
     sx = int(round(wx - camera_x))
@@ -518,6 +534,7 @@ class StageDesigner:
         self.mode = str(args.mode)
         self.selection: Selection | None = None
         self.show_help = True
+        self.show_overlays = True
         self.dragging = False
         self.drag_offset = pygame.Vector2(0, 0)
         self.drag_start_world = pygame.Vector2(0, 0)
@@ -682,7 +699,10 @@ class StageDesigner:
 
     def _event_image(self, event: dict[str, Any], *, max_w: int = 64, max_h: int = 52) -> pygame.Surface:
         etype = str(event.get("type", ""))
-        key = f"{etype}:{event.get('kind', '')}:{event.get('surface', '')}:{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
+        key = (
+            f"{etype}:{event.get('kind', '')}:{event.get('surface', '')}:"
+            f"{event.get('enhanced', False)}:{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
+        )
         if key in self._event_image_cache:
             return self._event_image_cache[key]
 
@@ -728,6 +748,12 @@ class StageDesigner:
             pygame.draw.circle(image, _event_color(event), (21, 21), 18)
             pygame.draw.circle(image, (240, 248, 245), (21, 21), 18, 2)
         fitted = _fit_surface(image, max_w, max_h)
+        if bool(event.get("enhanced", False)):
+            fitted = fitted.copy()
+            tint = pygame.Surface(fitted.get_size(), pygame.SRCALPHA)
+            tint.fill((255, 74, 132, 46))
+            fitted.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            pygame.draw.rect(fitted, (255, 118, 166), fitted.get_rect(), 2)
         self._event_image_cache[key] = fitted
         return fitted
 
@@ -837,6 +863,8 @@ class StageDesigner:
     def _event_anchor_y(self, event: dict[str, Any], world_x: float) -> float:
         if "y" in event:
             return float(event["y"])
+        if "anchor_y" in event:
+            return float(event["anchor_y"])
         if event.get("surface") in {"top", "bottom"}:
             surface = str(event.get("surface", "bottom"))
             sy = self._terrain_surface_y_at(world_x, surface)
@@ -875,8 +903,22 @@ class StageDesigner:
             return [(base_x + i * step, float(event["y"])) for i in range(count)]
         formation = str(event.get("formation", "single"))
         safe_top, safe_bottom = self._safe_y_bounds(base_x)
-        center_y = (safe_top + safe_bottom) / 2.0
+        center_y = float(event.get("anchor_y", (safe_top + safe_bottom) / 2.0))
+        center_y = max(safe_top, min(safe_bottom, center_y))
+        if formation in {"", "single"} or count <= 1:
+            return [(base_x, center_y)]
         if formation == "line":
+            if "anchor_y" in event:
+                step_x = float(event.get("step", 44))
+                step_y = float(event.get("formation_step_y", 44))
+                mid = (count - 1) / 2.0
+                return [
+                    (
+                        base_x + i * step_x,
+                        max(safe_top, min(safe_bottom, center_y + (i - mid) * step_y)),
+                    )
+                    for i in range(count)
+                ]
             step_y = (safe_bottom - safe_top) / max(count - 1, 1)
             return [(base_x, float(safe_top + i * step_y)) for i in range(count)]
         if formation == "v_shape":
@@ -886,6 +928,11 @@ class StageDesigner:
                     base_x + abs(i - count // 2) * 50,
                     max(safe_top, min(safe_bottom, center_y + (i - count // 2) * amp)),
                 )
+                for i in range(count)
+            ]
+        if "anchor_y" in event:
+            return [
+                (base_x + i * 40, max(safe_top, min(safe_bottom, center_y + ((i * 47) % 80) - 40)))
                 for i in range(count)
             ]
         span = max(1.0, safe_bottom - safe_top)
@@ -1304,6 +1351,8 @@ class StageDesigner:
                 _set_event_x(clone, (_event_x(clone) or 0.0) + 96)
             if offset and clone.get("surface") not in {"top", "bottom"} and "y" in clone:
                 clone["y"] = int(round(min(float(SCREEN_HEIGHT), float(clone["y"]) + 24)))
+            if offset and clone.get("surface") not in {"top", "bottom"} and "anchor_y" in clone:
+                clone["anchor_y"] = int(round(min(float(SCREEN_HEIGHT), float(clone["anchor_y"]) + 24)))
             events.insert(self.selection.index + 1, clone)
             self.selection = Selection("event", self.selection.index + 1)
             self.message = f"Duplicated event: {clone.get('type')}"
@@ -1332,8 +1381,9 @@ class StageDesigner:
         self.dirty = True
 
     def _cycle_event_palette(self, delta: int) -> None:
-        self.event_palette_index = (self.event_palette_index + delta) % len(EVENT_TEMPLATES)
-        self.message = f"Event palette: {_event_template_name(self.event_palette_index)}"
+        self._select_palette_payload(
+            {"kind": "event", "template_index": (self.event_palette_index + delta) % len(EVENT_TEMPLATES)}
+        )
 
     def _cycle_piece_role(self, delta: int) -> None:
         roles = self._piece_roles()
@@ -1373,6 +1423,67 @@ class StageDesigner:
 
     def _cycle_palette(self, delta: int) -> None:
         self._move_palette_cursor(delta, 0)
+
+    def _selected_enemy_event(self) -> dict[str, Any] | None:
+        event = self._selected_event()
+        if event is None or not _event_is_enemy(event):
+            self.message = "Select an enemy event first"
+            return None
+        return event
+
+    def _ensure_event_anchor_y(self, event: dict[str, Any]) -> None:
+        if "y" in event or "anchor_y" in event or not _event_can_use_anchor_y(event):
+            return
+        wx = _event_x(event) or self.cursor_world.x
+        event["anchor_y"] = int(round(self._event_anchor_y(event, wx)))
+
+    def _cycle_selected_event_formation(self) -> None:
+        event = self._selected_enemy_event()
+        if event is None:
+            return
+        if event.get("surface") in {"top", "bottom"} and "y" not in event:
+            self.message = "Surface enemy formation follows the terrain"
+            return
+        current = str(event.get("formation", "single"))
+        index = FORMATION_ORDER.index(current) if current in FORMATION_ORDER else 0
+        self._push_undo()
+        event["formation"] = FORMATION_ORDER[(index + 1) % len(FORMATION_ORDER)]
+        if event["formation"] != "single":
+            event["count"] = max(2, int(event.get("count", 1)))
+            self._ensure_event_anchor_y(event)
+        else:
+            event["count"] = 1
+        self.dirty = True
+        self.message = f"Enemy formation: {event['formation']}"
+
+    def _adjust_selected_event_count(self, delta: int) -> None:
+        event = self._selected_enemy_event()
+        if event is None:
+            return
+        self._push_undo()
+        count = max(1, min(12, int(event.get("count", 1)) + delta))
+        event["count"] = count
+        if event.get("surface") not in {"top", "bottom"} or "y" in event:
+            if count > 1 and str(event.get("formation", "single")) in {"", "single"}:
+                event["formation"] = "line"
+            elif count == 1:
+                event["formation"] = "single"
+            self._ensure_event_anchor_y(event)
+        self.dirty = True
+        self.message = f"Enemy count: {count}"
+
+    def _toggle_selected_event_enhanced(self) -> None:
+        event = self._selected_enemy_event()
+        if event is None:
+            return
+        self._push_undo()
+        enabled = not bool(event.get("enhanced", False))
+        if enabled:
+            event["enhanced"] = True
+        else:
+            event.pop("enhanced", None)
+        self.dirty = True
+        self.message = f"Enemy enhanced: {enabled}"
 
     def _cycle_selected_piece_collision(self) -> None:
         piece = self._selected_piece()
@@ -1522,7 +1633,50 @@ class StageDesigner:
         target.blit(image, pos)
         return image.get_height() + 7
 
+    def _draw_wrapped_label(
+        self,
+        target: pygame.Surface,
+        text: str,
+        pos: tuple[int, int],
+        max_w: int,
+        color: tuple[int, int, int] = (232, 238, 236),
+    ) -> int:
+        if not text:
+            return self.font.get_height() + 5
+        lines: list[str] = []
+        current = ""
+        for word in text.split(" "):
+            candidate = word if not current else f"{current} {word}"
+            if self.font.size(candidate)[0] <= max_w:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            if self.font.size(word)[0] <= max_w:
+                current = word
+                continue
+            chunk = ""
+            for char in word:
+                candidate = f"{chunk}{char}"
+                if self.font.size(candidate)[0] > max_w and chunk:
+                    lines.append(chunk)
+                    chunk = char
+                else:
+                    chunk = candidate
+            current = chunk
+        if current:
+            lines.append(current)
+        y = pos[1]
+        total = 0
+        for line in lines:
+            advance = self._draw_label(target, line, (pos[0], y), color)
+            y += advance
+            total += advance
+        return total
+
     def _draw_terrain_points(self, target: pygame.Surface) -> None:
+        if not self.show_overlays:
+            return
         layout = _layout(self.data)
         for side, color in (("top", POINT_TOP_COLOR), ("bottom", POINT_BOTTOM_COLOR)):
             points = layout.get(side, [])
@@ -1541,6 +1695,8 @@ class StageDesigner:
                 pygame.draw.lines(target, color, False, screen_points, 1)
 
     def _draw_terrain_pieces(self, target: pygame.Surface) -> None:
+        if not self.show_overlays:
+            return
         composer_layout, _pieces = self._piece_layout()
         for i, placement in enumerate(composer_layout.placements):
             sx, sy = self._world_to_screen(float(placement.x), float(placement.y))
@@ -1560,6 +1716,8 @@ class StageDesigner:
                 target.blit(label, (rect.left, max(0, rect.top - 16)))
 
     def _draw_guides(self, target: pygame.Surface) -> None:
+        if not self.show_overlays:
+            return
         for line_i, line in enumerate(self._guide_lines()):
             side = "top" if line.get("side") == "top" else "bottom"
             color = POINT_TOP_COLOR if side == "top" else POINT_BOTTOM_COLOR
@@ -1585,6 +1743,8 @@ class StageDesigner:
             color = _event_color(event)
             selected = self.selection == Selection("event", i)
             if event.get("type") == "BossGate":
+                if not self.show_overlays:
+                    continue
                 world_rect = _event_rect(event, self.data, 0)
                 sx, sy = self._world_to_screen(world_rect.x, world_rect.y)
                 rect = pygame.Rect(
@@ -1610,12 +1770,13 @@ class StageDesigner:
                 preview = self._event_image(event, max_w=rect.width, max_h=rect.height)
                 preview = pygame.transform.smoothscale(preview, (rect.width, rect.height))
                 target.blit(preview, rect.topleft)
-                fill = (*color, 42 if selected else 20)
-                overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
-                overlay.fill(fill)
-                target.blit(overlay, rect.topleft)
-                pygame.draw.rect(target, color, rect, 2 if selected else 1)
-                if selected or event.get("type") in {"weapon_gate", "breakable_gate"}:
+                if self.show_overlays:
+                    fill = (*color, 42 if selected else 20)
+                    overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
+                    overlay.fill(fill)
+                    target.blit(overlay, rect.topleft)
+                    pygame.draw.rect(target, color, rect, 2 if selected else 1)
+                if self.show_overlays and (selected or event.get("type") in {"weapon_gate", "breakable_gate"}):
                     label = self.small_font.render(str(event.get("type", "")), True, color)
                     target.blit(label, (rect.left, max(0, rect.top - 16)))
                 continue
@@ -1633,12 +1794,12 @@ class StageDesigner:
                     image.set_alpha(150)
                 target.blit(image, rect.topleft)
                 drawn_rects.append(rect)
-                if selected:
+                if self.show_overlays and selected:
                     pygame.draw.rect(target, color, rect.inflate(4, 4), 1)
-            if len(drawn_rects) >= 2:
+            if self.show_overlays and len(drawn_rects) >= 2:
                 centers = [rect.center for rect in drawn_rects]
                 pygame.draw.lines(target, (*color, 180), False, centers, 1)
-            if drawn_rects and (selected or len(positions) > 1):
+            if self.show_overlays and drawn_rects and (selected or len(positions) > 1):
                 group_rect = drawn_rects[0].unionall(drawn_rects[1:]) if len(drawn_rects) > 1 else drawn_rects[0]
                 pygame.draw.rect(target, color, group_rect.inflate(8, 8), 2 if selected else 1)
                 label = self.small_font.render(
@@ -1670,7 +1831,10 @@ class StageDesigner:
                 f"type: {event.get('type')}",
                 f"x: {_event_x(event)}",
                 f"y: {_event_y(event, self.data):.0f}",
-                f"keys: {', '.join(event.keys())}",
+                f"count: {event.get('count', 1)}",
+                f"formation: {event.get('formation', '-')}",
+                f"enhanced: {bool(event.get('enhanced', False))}",
+                f"keys: {', '.join(str(key) for key in event.keys())}",
             ]
         if self.selection.kind == "piece":
             piece = self._selected_piece()
@@ -1750,6 +1914,64 @@ class StageDesigner:
         type_label = self.small_font.render(str(template.get("type", "")), True, (160, 178, 178))
         target.blit(type_label, (rect.x + 7, rect.bottom - 18))
 
+    def _palette_content_rects(self) -> tuple[dict[tuple[Any, ...], pygame.Rect], float]:
+        panel = self.palette_rect
+        x0 = panel.left + 12
+        y = panel.top + 12
+        cols = PALETTE_COLS
+        gap = 8
+        cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
+        title_h = self.font.get_height() + 8
+        event_h = 58
+        piece_h = 76
+        rects: dict[tuple[Any, ...], pygame.Rect] = {}
+
+        y += title_h
+        for i, _template in enumerate(EVENT_TEMPLATES):
+            col = i % cols
+            row = i // cols
+            payload = {"kind": "event", "template_index": i}
+            rects[self._palette_payload_key(payload)] = pygame.Rect(
+                x0 + col * (cell_w + gap),
+                y + row * (event_h + gap),
+                cell_w,
+                event_h,
+            )
+        y += ((len(EVENT_TEMPLATES) + cols - 1) // cols) * (event_h + gap) + 12
+
+        y += title_h
+        for role in self._piece_roles():
+            y += title_h
+            options = self._piece_palette_options(role)
+            for i, piece in enumerate(options):
+                col = i % cols
+                row = i // cols
+                payload = {"kind": "piece", "role": role, "asset": _piece_asset_id(piece)}
+                rects[self._palette_payload_key(payload)] = pygame.Rect(
+                    x0 + col * (cell_w + gap),
+                    y + row * (piece_h + gap),
+                    cell_w,
+                    piece_h,
+                )
+            y += ((len(options) + cols - 1) // cols) * (piece_h + gap) + 12
+        return rects, float(y - panel.top)
+
+    def _ensure_palette_payload_visible(self, payload: dict[str, Any]) -> None:
+        rects, content_h = self._palette_content_rects()
+        self.max_palette_scroll_y = max(0.0, float(content_h - self.palette_rect.height + 20))
+        rect = rects.get(self._palette_payload_key(payload))
+        if rect is None:
+            return
+        visible_top = self.palette_rect.top + 8
+        visible_bottom = self.palette_rect.bottom - 8
+        screen_top = rect.top - self.palette_scroll_y
+        screen_bottom = rect.bottom - self.palette_scroll_y
+        if screen_top < visible_top:
+            self.palette_scroll_y = rect.top - visible_top
+        elif screen_bottom > visible_bottom:
+            self.palette_scroll_y = rect.bottom - visible_bottom
+        self.palette_scroll_y = max(0.0, min(self.max_palette_scroll_y, self.palette_scroll_y))
+
     def _draw_palette(self, target: pygame.Surface) -> None:
         panel = self.palette_rect
         pygame.draw.rect(target, (13, 17, 21), panel)
@@ -1812,6 +2034,7 @@ class StageDesigner:
             self.event_palette_index = int(payload.get("template_index", 0)) % len(EVENT_TEMPLATES)
             self.mode = "events"
             self.message = f"Event palette: {_event_template_name(self.event_palette_index)}"
+            self._ensure_palette_payload_visible(payload)
             return
         if payload.get("kind") == "piece":
             role = str(payload.get("role", self._current_piece_role()))
@@ -1822,22 +2045,27 @@ class StageDesigner:
                 self.piece_palette_index = asset_ids.index(asset)
             self.mode = "terrain"
             self.message = self._piece_palette_summary()
+            self._ensure_palette_payload_visible(payload)
 
     def _draw_info_panel(self, target: pygame.Surface) -> None:
         panel = self.info_rect
         pygame.draw.rect(target, (13, 17, 21), panel)
         pygame.draw.line(target, (48, 60, 64), (panel.left, panel.top), (panel.left, panel.bottom))
         y = panel.top + 12
+        old_clip = target.get_clip()
+        target.set_clip(panel.inflate(-4, -4))
         help_lines = [
             "Stage Designer",
             "Drag palette item onto stage",
             "Click stage item to select",
             "Arrows move palette/selection",
+            "Enemy: V formation / +/- count / B enhanced",
             "G guide mode / U guide side",
             "Guide: click add/select",
             "P auto-fill selected guide",
             "Shift-drag axis lock",
             "Ctrl-drag copy",
+            "O overlays on/off",
             "Ctrl+Wheel zoom",
             "Wheel pan stage/palette",
             "Del delete selection",
@@ -1848,7 +2076,8 @@ class StageDesigner:
             "",
         ] if self.show_help else ["Stage Designer", "H help", ""]
         for line in [*help_lines, *self._palette_summary(), "", *self._selected_summary()]:
-            y += self._draw_label(target, line, (panel.left + 14, y), (225, 232, 230))
+            y += self._draw_wrapped_label(target, line, (panel.left + 14, y), panel.width - 30, (225, 232, 230))
+        target.set_clip(old_clip)
 
     def _draw_drag_preview(self, target: pygame.Surface) -> None:
         if not self.palette_drag:
@@ -1926,7 +2155,8 @@ class StageDesigner:
         toolbar.fill((8, 12, 15))
         self._draw_minimap(toolbar)
         dirty = "*" if self.dirty else ""
-        self._draw_label(toolbar, f"{dirty} mode={self.mode} x={int(self.camera_x)} zoom={self.zoom:.2f}", (360, 10), (220, 235, 230))
+        overlay = "on" if self.show_overlays else "off"
+        self._draw_label(toolbar, f"{dirty} mode={self.mode} x={int(self.camera_x)} z={self.zoom:.2f} O={overlay}", (360, 10), (220, 235, 230))
         self._draw_label(toolbar, self.message, (640, 10), (220, 235, 230))
 
         self._draw_palette(surface)
@@ -1966,6 +2196,17 @@ class StageDesigner:
             self.capture(path)
         elif event.key == pygame.K_h:
             self.show_help = not self.show_help
+        elif event.key == pygame.K_o:
+            self.show_overlays = not self.show_overlays
+            self.message = "Overlays: on" if self.show_overlays else "Overlays: off"
+        elif event.key == pygame.K_v:
+            self._cycle_selected_event_formation()
+        elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+            self._adjust_selected_event_count(1)
+        elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+            self._adjust_selected_event_count(-1)
+        elif event.key == pygame.K_b:
+            self._toggle_selected_event_enhanced()
         elif event.key == pygame.K_g:
             self.guide_mode = not self.guide_mode
             self.selection = None
@@ -2159,13 +2400,15 @@ class StageDesigner:
         elif event.type == pygame.MOUSEWHEEL:
             mouse_pos = tuple(int(v) for v in self.last_mouse_pos)
             mods = pygame.key.get_mods()
-            if mods & pygame.KMOD_CTRL and event.y != 0 and self.view_rect.collidepoint(mouse_pos):
-                factor = 1.12 if event.y > 0 else 1 / 1.12
+            wheel_x = float(getattr(event, "precise_x", event.x))
+            wheel_y = float(getattr(event, "precise_y", event.y))
+            if mods & pygame.KMOD_CTRL and wheel_y != 0 and self.view_rect.collidepoint(mouse_pos):
+                factor = 1.12 if wheel_y > 0 else 1 / 1.12
                 self._set_zoom(self.zoom * factor, mouse_pos)
             elif self.palette_rect.collidepoint(mouse_pos):
-                self.palette_scroll_y = max(0.0, min(self.max_palette_scroll_y, self.palette_scroll_y - event.y * 80))
+                self.palette_scroll_y = max(0.0, min(self.max_palette_scroll_y, self.palette_scroll_y - wheel_y * 80))
             elif self.view_rect.collidepoint(mouse_pos):
-                self._pan_camera(-event.x * 90, -event.y * 90)
+                self._pan_camera(wheel_x * 90, -wheel_y * 90)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self._handle_mouse_down(event)
         elif event.type == pygame.MOUSEMOTION:
