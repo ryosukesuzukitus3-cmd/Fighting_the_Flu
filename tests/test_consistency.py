@@ -1761,11 +1761,52 @@ def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
 
     data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
     text = _format_stage_json(data)
+    first_event = data["world_events"][0]
+    first_event_text = json.dumps(first_event, ensure_ascii=False, separators=(", ", ": "))
 
     assert json.loads(text) == data
     assert '        {"asset": "strip_top:' in text
-    assert '    {"type": "EnemyTakeshi", "x": 940' in text
-    assert '\n          "x": 940' not in text
+    assert f"    {first_event_text}" in text
+    if "x" in first_event:
+        assert f'\n          "x": {first_event["x"]}' not in text
+
+
+def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
+    from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args
+
+    default_profile = _profile_from_args(_parse_args([]))
+    stage2_profile = _profile_from_args(_parse_args(["--stage", "2"]))
+    inferred_stage2_profile = _profile_from_args(
+        _parse_args(["--stage-json", str(ROOT / "data" / "stages" / "stage2.json")])
+    )
+
+    assert default_profile.stage_id == 3
+    assert stage2_profile.stage_id == 2
+    assert inferred_stage2_profile.stage_id == 2
+    assert stage2_profile.stage_json == ROOT / "data" / "stages" / "stage2.json"
+    assert stage2_profile.rects == ROOT / "tools" / "stage2_terrain_rects.json"
+    assert stage2_profile.fallback_rects == DEFAULT_RECTS
+    assert stage2_profile.fallback_mask_dir == DEFAULT_MASK_DIR
+    assert stage2_profile.background == ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"
+    assert stage2_profile.terrain_kind == "data_block"
+
+
+def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_templates_for_kind
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainStrip", "length": 1000}], "world_events": []}
+    designer.event_templates = _event_templates_for_kind("data_block")
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+
+    index = next(i for i, (name, _template) in enumerate(designer.event_templates) if name == "solid block")
+    designer._add_event_template_at(index, 120, 240)
+
+    assert designer.data["world_events"][0]["kind"] == "data_block"
+    assert designer.selection == Selection("event", 0)
 
 
 def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
