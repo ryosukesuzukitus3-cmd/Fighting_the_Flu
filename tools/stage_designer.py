@@ -2176,6 +2176,7 @@ class StageDesigner:
 
     def _handle_key(self, event: pygame.event.Event) -> bool:
         mods = pygame.key.get_mods()
+        typed = str(getattr(event, "unicode", ""))
         step = 10 if mods & pygame.KMOD_CTRL else 1
         if event.key == pygame.K_ESCAPE:
             return False
@@ -2201,9 +2202,9 @@ class StageDesigner:
             self.message = "Overlays: on" if self.show_overlays else "Overlays: off"
         elif event.key == pygame.K_v:
             self._cycle_selected_event_formation()
-        elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+        elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS) or typed == "+":
             self._adjust_selected_event_count(1)
-        elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+        elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS) or typed == "-":
             self._adjust_selected_event_count(-1)
         elif event.key == pygame.K_b:
             self._toggle_selected_event_enhanced()

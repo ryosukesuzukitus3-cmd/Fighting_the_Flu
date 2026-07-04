@@ -1916,6 +1916,11 @@ def test_stage_designer_event_palette_uses_enemy_type_once_and_edits_variants() 
     assert event["formation"] == "line"
     assert "anchor_y" in event
 
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SEMICOLON, unicode="+"))
+    assert event["count"] == 3
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_MINUS, unicode="-"))
+    assert event["count"] == 2
+
     designer._cycle_selected_event_formation()
     assert event["formation"] == "v_shape"
 
