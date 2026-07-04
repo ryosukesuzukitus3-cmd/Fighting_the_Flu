@@ -152,6 +152,28 @@ class EnemySpawner:
         if safe_bottom <= safe_top:
             safe_top, safe_bottom = float(_MARGIN), float(SCREEN_HEIGHT - _MARGIN)
         formation = event.get("formation", "random")
+        if "anchor_y" in event:
+            cy = max(safe_top, min(safe_bottom, float(event["anchor_y"])))
+            if formation in {"", "single"} or count <= 1:
+                return [(base_x, cy)]
+            if formation == "line":
+                y_step = float(event.get("formation_step_y", 44))
+                mid = (count - 1) / 2
+                return [
+                    (base_x + i * step, max(safe_top, min(safe_bottom, cy + (i - mid) * y_step)))
+                    for i in range(count)
+                ]
+            if formation == "v_shape":
+                amp = min(60.0, max(24.0, (safe_bottom - safe_top) * 0.25))
+                return [
+                    (base_x + abs(i - count // 2) * step,
+                     max(safe_top, min(safe_bottom, cy + (i - count // 2) * amp)))
+                    for i in range(count)
+                ]
+            return [
+                (base_x + i * step, max(safe_top, min(safe_bottom, cy + random.uniform(-42, 42))))
+                for i in range(count)
+            ]
         if formation == "line":
             y_step = (safe_bottom - safe_top) / max(count - 1, 1)
             return [(base_x + i * step, float(safe_top + i * y_step)) for i in range(count)]

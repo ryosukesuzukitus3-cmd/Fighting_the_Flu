@@ -758,6 +758,33 @@ def test_world_event_surface_can_use_authored_terrain_block() -> None:
     assert turret.world_y == 396
 
 
+def test_world_event_anchor_y_preserves_authored_formation_position() -> None:
+    from src.core.camera import Camera
+    from src.stages.spawner import EnemySpawner
+
+    camera = Camera()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=pygame.sprite.Group(),
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        world_events=[],
+        player=object(),
+        terrain=pygame.sprite.Group(),
+    )
+
+    positions = spawner._world_positions(
+        {"type": "EnemyVirus", "x": 1000, "count": 3, "formation": "line", "anchor_y": 300},
+        3,
+        "bottom",
+        camera,
+        offset=20,
+        step=56,
+    )
+
+    assert positions == [(1000, 256), (1056, 300), (1112, 344)]
+
+
 def test_world_event_fixed_drop_metadata_reaches_spawned_objects() -> None:
     from src.core.camera import Camera
     from src.stages.spawner import EnemySpawner
@@ -1759,6 +1786,316 @@ def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
         "lock_camera_x": 9400,
         "player_limit_x": 10200,
     }
+
+
+def test_stage_designer_adds_duplicates_and_deletes_terrain_pieces() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [
+            {"type": "TerrainPieces", "renderer": "stage3_composer", "pieces": []}
+        ],
+        "world_events": [],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer.mode = "terrain"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer.piece_palette_role = "floor_surface"
+    designer.piece_palette_index = 0
+
+    designer._add_piece_at(120, 240)
+    piece = designer.data["terrain_layout"][0]["pieces"][0]
+
+    assert piece["asset"].startswith("strip_top:")
+    assert piece["role"] == "floor_surface"
+    assert piece["collision"] == "surface"
+    assert piece["side"] == "bottom"
+    assert designer.selection == Selection("piece", 0)
+
+    original_asset = piece["asset"]
+    designer._cycle_piece_asset(1)
+    assert designer.data["terrain_layout"][0]["pieces"][0]["asset"] != original_asset or len(
+        designer._piece_palette_options("floor_surface")
+    ) == 1
+
+    designer._cycle_selected_piece_collision()
+    assert designer.data["terrain_layout"][0]["pieces"][0]["collision"] == "rect"
+
+    designer._duplicate_selection()
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    assert len(pieces) == 2
+    assert pieces[1]["x"] == pieces[0]["x"] + 48
+    assert pieces[1]["y"] == pieces[0]["y"] + 24
+
+    designer._delete_selection()
+    assert len(designer.data["terrain_layout"][0]["pieces"]) == 1
+
+    designer._add_palette_payload_at({"kind": "piece", "role": "ceiling_surface", "asset": "strip_top:2"}, 210, -40)
+    added = designer.data["terrain_layout"][0]["pieces"][-1]
+    assert added["asset"] == "strip_top:2"
+    assert added["role"] == "ceiling_surface"
+    assert added["side"] == "top"
+    assert added["flip_y"] is True
+
+
+def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> None:
+    from tools.stage_designer import EVENT_TEMPLATES, Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": []}], "world_events": []}
+    designer.mode = "events"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer.event_palette_index = next(i for i, (name, _template) in enumerate(EVENT_TEMPLATES) if name == "solid block")
+
+    designer._add_event_at(320, 360)
+    event = designer.data["world_events"][0]
+
+    assert event == {"type": "Terrain", "x": 320, "y": 360, "w": 140, "h": 92, "kind": "fortress_block"}
+    assert designer.selection == Selection("event", 0)
+
+    designer._duplicate_selection()
+    events = designer.data["world_events"]
+    assert len(events) == 2
+    assert events[1]["x"] == 416
+    assert events[1]["y"] == 384
+
+    designer._delete_selection()
+    assert len(designer.data["world_events"]) == 1
+
+    designer._add_palette_payload_at({"kind": "event", "template_index": designer.event_palette_index}, 500, 410)
+    assert designer.data["world_events"][-1]["x"] == 500
+
+
+def test_stage_designer_event_palette_uses_enemy_type_once_and_edits_variants() -> None:
+    from tools.stage_designer import EVENT_TEMPLATES, Selection, StageDesigner
+
+    enemy_templates = [
+        template
+        for _name, template in EVENT_TEMPLATES
+        if str(template.get("type", "")).startswith("Enemy")
+    ]
+    enemy_types = [template["type"] for template in enemy_templates]
+
+    assert enemy_types.count("EnemyVirus") == 1
+    assert enemy_types.count("EnemyTakeshi") == 1
+    assert enemy_types.count("EnemyPachemon") == 1
+    assert {"EnemyBroly", "EnemyDebrisLarge", "EnemyCoughSprayer", "EnemySporeSplitter", "EnemyBilly"} <= set(enemy_types)
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "pieces": [],
+            "guide_top": [[0, 60], [500, 60]],
+            "guide_bottom": [[0, 520], [500, 520]],
+        }],
+        "world_events": [{"type": "EnemyBroly", "x": 200, "count": 1, "formation": "single"}],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer.cursor_world = pygame.Vector2(200, 300)
+    designer.selection = Selection("event", 0)
+    designer.message = ""
+    designer.undo_stack = []
+    designer.dirty = False
+
+    designer._adjust_selected_event_count(1)
+    event = designer.data["world_events"][0]
+    assert event["count"] == 2
+    assert event["formation"] == "line"
+    assert "anchor_y" in event
+
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SEMICOLON, unicode="+"))
+    assert event["count"] == 3
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_MINUS, unicode="-"))
+    assert event["count"] == 2
+
+    designer._cycle_selected_event_formation()
+    assert event["formation"] == "v_shape"
+
+    designer._toggle_selected_event_enhanced()
+    assert event["enhanced"] is True
+    designer._toggle_selected_event_enhanced()
+    assert "enhanced" not in event
+
+
+def test_stage_designer_formats_and_autofills_guide_points() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _format_stage_json
+
+    data = {
+        "stage_id": 3,
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "theme": "fortress",
+            "renderer": "stage3_composer",
+            "composer_sample_step": 48,
+            "composer_tolerance": 26,
+            "composer_collision_step": 8,
+            "composer_collision_tolerance": 10,
+            "guide_top": [[0, 58], [240, 78], [480, 52]],
+            "guide_bottom": [[0, 520], [240, 488], [480, 510]],
+            "pieces": [{"asset": "strip_top:1", "x": 120, "y": 430, "role": "floor_surface", "collision": "surface", "side": "bottom"}],
+        }],
+        "world_events": [],
+    }
+
+    text = _format_stage_json(data)
+    assert '"guide_top": [' in text
+    assert "        [0, 58]," in text
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = copy = json.loads(json.dumps(data))
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer.selection = None
+
+    designer._guide_lines()
+    designer.selection = Selection("guide_line", 1)
+    designer._auto_fill_from_guides()
+
+    layout = copy["terrain_layout"][0]
+    pieces = layout["pieces"]
+    assert designer.dirty is True
+    assert designer.undo_stack
+    assert len(pieces) > 1
+    assert any(piece["role"] == "floor_surface" for piece in pieces)
+    assert all(piece.get("side") == "bottom" for piece in pieces)
+    assert not any(piece.get("asset") == "strip_top:1" and piece.get("x") == 120 for piece in pieces)
+
+
+def test_stage_designer_event_preview_positions_show_formations() -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "pieces": [],
+            "guide_top": [[0, 60], [500, 60]],
+            "guide_bottom": [[0, 520], [500, 520]],
+        }],
+        "world_events": [],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    line = designer._event_preview_positions({"type": "EnemyTakeshi", "x": 200, "count": 3, "formation": "line"})
+    v_shape = designer._event_preview_positions({"type": "EnemyPachemon", "x": 200, "count": 3, "formation": "v_shape"})
+    surface = designer._event_preview_positions({"type": "EnemyCrawler", "x": 200, "count": 2, "surface": "bottom", "surface_offset": 22})
+
+    assert len(line) == 3
+    assert line[0][0] == line[1][0] == line[2][0]
+    assert line[0][1] < line[1][1] < line[2][1]
+    assert len(v_shape) == 3
+    assert v_shape[0][1] < v_shape[1][1] < v_shape[2][1]
+    assert len(surface) == 2
+    assert all(y == 498 for _x, y in surface)
+
+
+def test_stage_designer_selects_visible_event_previews_without_flattening_formations() -> None:
+    from tools.stage_designer import Selection, StageDesigner, TOOLBAR_H
+
+    pygame.display.set_mode((1, 1))
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "terrain_layout": [{
+            "type": "TerrainPieces",
+            "pieces": [],
+            "guide_top": [[0, 60], [1000, 60]],
+            "guide_bottom": [[0, 520], [1000, 520]],
+        }],
+        "world_events": [
+            {"type": "EnemyDebrisLarge", "x": 200, "count": 1, "formation": "single"},
+            {"type": "EnemyTakeshi", "x": 400, "count": 3, "formation": "line"},
+        ],
+    }
+    designer.rects_path = ROOT / "tools" / "stage3_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage3_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._event_image_cache = {}
+    designer.camera_x = 0.0
+    designer.camera_y = 0.0
+    designer.zoom = 1.0
+    designer.mode = "events"
+    designer.selection = None
+    designer.message = ""
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.dirty = False
+
+    debris_pos = designer._event_preview_positions(designer.data["world_events"][0])[0]
+    designer._select_at((int(debris_pos[0]), int(debris_pos[1] + TOOLBAR_H)))
+    assert designer.selection == Selection("event", 0)
+
+    designer.selection = Selection("event", 1)
+    before = designer._event_preview_positions(designer.data["world_events"][1])
+    designer._set_selection_world_pos(460, 340)
+    event = designer.data["world_events"][1]
+    after = designer._event_preview_positions(event)
+
+    assert event["x"] == 460
+    assert "y" not in event
+    assert event["anchor_y"] == 340
+    assert before[0][1] < before[1][1] < before[2][1]
+    assert after[0][1] < after[1][1] < after[2][1]
+
+
+def test_stage_designer_guide_lines_can_be_created_edited_and_retyped() -> None:
+    from tools.stage_designer import Selection, StageDesigner, TOOLBAR_H
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": []}], "world_events": []}
+    designer.guide_side = "bottom"
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer.camera_x = 0.0
+    designer.camera_y = 0.0
+    designer.zoom = 1.0
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.drag_start_world = pygame.Vector2(0, 0)
+    designer.dragging = False
+
+    designer._handle_guide_mouse_down((100, TOOLBAR_H + 420))
+    designer._handle_guide_mouse_down((100, TOOLBAR_H + 430))
+    designer._handle_guide_mouse_down((220, TOOLBAR_H + 450))
+
+    line = designer.data["terrain_layout"][0]["guide_lines"][0]
+    assert line["side"] == "bottom"
+    assert line["points"] == [[100, 430], [220, 450]]
+
+    designer.dragging = False
+    designer._handle_guide_mouse_down((160, TOOLBAR_H + 440))
+    assert designer.selection == Selection("guide_line", 0)
+
+    designer.selection = Selection("guide_line", 0)
+    designer._toggle_selected_guide_side()
+    assert line["side"] == "top"
+
+    designer.selection = Selection("guide_point", 0, sub_index=0)
+    designer._delete_selection()
+    assert line["points"] == [[220, 450]]
 
 
 def test_stage3_composer_report_opens_preview_by_default() -> None:
