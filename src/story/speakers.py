@@ -17,6 +17,7 @@ SYSTEM         = "SYSTEM"
 # ボス（BOSS_NAMES と一致）
 BOSS1          = "悪寒大王インフルX"
 BOSS2          = "情報汚染超人野獣ブロリー"
+BOSS2_FORM2    = "超サイヤ人ブロリー"
 BOSS3          = "婚活要塞マッチング・ゼロ"
 BOSS4          = "棋理の化身　藤井竜王"
 BOSS4_FORM2    = "赤眼の真・藤井四段"
@@ -53,6 +54,7 @@ SPEAKERS: dict[str, Speaker] = {
     SYSTEM:         Speaker(SYSTEM,         "",                    (255, 220, 80)),
     BOSS1:          Speaker(BOSS1,          BOSS1,                 (255, 90, 90),  "graphic/enemy_バイキンマン68x80.png"),
     BOSS2:          Speaker(BOSS2,          BOSS2,                 (255, 90, 90),  "graphic/enemy_ブロリー.png"),
+    BOSS2_FORM2:    Speaker(BOSS2_FORM2,    BOSS2_FORM2,           (255, 200, 40), "graphic/enemy_ブロリー.png"),
     BOSS3:          Speaker(BOSS3,          BOSS3,                 (255, 120, 170), _MATCHING_ZERO_PORTRAIT),
     BOSS4:          Speaker(BOSS4,          BOSS4,                 (255, 110, 90), "graphic/enemy_fujii4dan.png"),
     BOSS4_FORM2:    Speaker(BOSS4_FORM2,    BOSS4_FORM2,           (255, 60, 60),  "graphic/藤井四段第二形態_もう一度.png"),

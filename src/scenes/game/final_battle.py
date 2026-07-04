@@ -152,13 +152,16 @@ class FinalBattleDirector:
         scene.player._invincible_timer = max(scene.player._invincible_timer, 2.5)
         scene._form2_flash_timer = 0.5
         scene.game.sound.play_se_alias("SE_BOSS_TRANSFORM", volume=0.85)
-        # 専用トラック未着手のため現状は決戦を継続（if_new＝再スタートしない）。
-        # 後で BGM_BOSS_FORM2 を差し替えると自動で切り替わる。
-        scene.game.sound.play_bgm_if_new(bgm_path("BGM_BOSS_FORM2"))
-        self._show_final_banner("awaken", 2.6)
-        f2_key = f"{scene._boss_stage_id()}f2"
-        scene._enqueue_boss_dialogue(BOSS_MID.get(f2_key, []), BOSS_MID_LINE_DURATION)
-        scene._boss_mid_dialogue_shown = False
+        stage_id = scene._boss_stage_id()
+        if stage_id == 4:
+            # 専用トラック未着手のため現状は決戦を継続（if_new＝再スタートしない）。
+            # 後で BGM_BOSS_FORM2 を差し替えると自動で切り替わる。
+            scene.game.sound.play_bgm_if_new(bgm_path("BGM_BOSS_FORM2"))
+            # Form2 の HP50% で "4f2mid" を出すため再アーム。
+            # S2 はキーが "2mid" のままなので再アームすると同じ台詞が二重再生される。
+            scene._boss_mid_dialogue_shown = False
+        self._show_final_banner("awaken" if stage_id == 4 else "awaken2", 2.6)
+        scene._enqueue_boss_dialogue(BOSS_MID.get(f"{stage_id}f2", []), BOSS_MID_LINE_DURATION)
 
     def on_form3_transition(self) -> None:
         """Transition from form 2 to the true final form."""
