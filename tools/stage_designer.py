@@ -1,8 +1,7 @@
 """Interactive stage layout designer for authored stage JSON.
 
-The first target is Stage3, where both the route shape and world_events are
-authored by hand. The tool edits the JSON directly while keeping the file in a
-compact, reviewable layout.
+The tool edits route shapes, terrain pieces, and world_events directly while
+keeping stage JSON in a compact, reviewable layout.
 """
 from __future__ import annotations
 
@@ -43,6 +42,11 @@ except ModuleNotFoundError:  # noqa: E402
 DEFAULT_STAGE = ROOT / "data" / "stages" / "stage3.json"
 DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
 BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
+DEFAULT_STAGE_ID = 3
+STAGE2_STAGE = ROOT / "data" / "stages" / "stage2.json"
+STAGE2_RECTS = ROOT / "tools" / "stage2_terrain_rects.json"
+STAGE2_MASK_DIR = ROOT / "tools" / "stage2_terrain_alpha_masks"
+STAGE2_BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"
 
 VIEW_W = SCREEN_WIDTH
 VIEW_H = SCREEN_HEIGHT
@@ -81,25 +85,67 @@ PIECE_SIDE_ORDER = ["bottom", "top"]
 AUTO_FILL_REPLACE_ROLES = {"floor_surface", "ceiling_surface", "body_fill"}
 FORMATION_ORDER = ["single", "line", "v_shape", "random"]
 
-EVENT_TEMPLATES: list[tuple[str, dict[str, Any]]] = [
-    ("virus", {"type": "EnemyVirus", "x": 0, "count": 1, "formation": "single"}),
-    ("takeshi", {"type": "EnemyTakeshi", "x": 0, "count": 1, "formation": "single"}),
-    ("pachemon", {"type": "EnemyPachemon", "x": 0, "count": 1, "formation": "single"}),
-    ("crawler bottom", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
-    ("crawler top", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
-    ("turret bottom", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
-    ("turret top", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
-    ("broly", {"type": "EnemyBroly", "x": 0, "count": 1, "formation": "single"}),
-    ("debris large", {"type": "EnemyDebrisLarge", "x": 0, "count": 1, "formation": "single"}),
-    ("cough sprayer", {"type": "EnemyCoughSprayer", "x": 0, "count": 1, "y": 300}),
-    ("spore splitter", {"type": "EnemySporeSplitter", "x": 0, "count": 1, "y": 300, "fixed_drop": "WeaponItem"}),
-    ("billy", {"type": "EnemyBilly", "x": 0, "count": 1, "y": 300}),
-    ("solid block", {"type": "Terrain", "x": 0, "y": 360, "w": 140, "h": 92, "kind": "fortress_block"}),
-    ("ceiling block", {"type": "Terrain", "x": 0, "y": 0, "w": 132, "h": 92, "kind": "fortress_block", "surface_anchor": "ceiling"}),
-    ("turret mount", {"type": "turret_mount", "x": 0, "y": 360, "w": 260, "h": 46, "kind": "fortress_block"}),
-    ("breakable gate", {"type": "breakable_gate", "x": 0, "y": 220, "w": 120, "h": 240, "kind": "fortress_block", "hp": 48, "drop_chance": 0.03}),
-    ("weapon gate", {"type": "weapon_gate", "x": 0, "y": 330, "w": 110, "h": 170, "kind": "fortress_block", "hp": 44}),
-]
+
+@dataclass(frozen=True)
+class StageDesignerProfile:
+    stage_id: int
+    stage_json: Path
+    rects: Path
+    mask_dir: Path
+    background: Path
+    terrain_kind: str
+    label: str
+    fallback_rects: Path | None = None
+    fallback_mask_dir: Path | None = None
+
+
+STAGE_PROFILES: dict[int, StageDesignerProfile] = {
+    2: StageDesignerProfile(
+        stage_id=2,
+        stage_json=STAGE2_STAGE,
+        rects=STAGE2_RECTS,
+        mask_dir=STAGE2_MASK_DIR,
+        background=STAGE2_BACKGROUND_PATH,
+        terrain_kind="data_block",
+        label="Stage2",
+        fallback_rects=DEFAULT_RECTS,
+        fallback_mask_dir=DEFAULT_MASK_DIR,
+    ),
+    3: StageDesignerProfile(
+        stage_id=3,
+        stage_json=DEFAULT_STAGE,
+        rects=DEFAULT_RECTS,
+        mask_dir=DEFAULT_MASK_DIR,
+        background=BACKGROUND_PATH,
+        terrain_kind="fortress_block",
+        label="Stage3",
+    ),
+}
+
+
+def _event_templates_for_kind(terrain_kind: str) -> list[tuple[str, dict[str, Any]]]:
+    return [
+        ("virus", {"type": "EnemyVirus", "x": 0, "count": 1, "formation": "single"}),
+        ("takeshi", {"type": "EnemyTakeshi", "x": 0, "count": 1, "formation": "single"}),
+        ("pachemon", {"type": "EnemyPachemon", "x": 0, "count": 1, "formation": "single"}),
+        ("crawler bottom", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
+        ("crawler top", {"type": "EnemyCrawler", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
+        ("turret bottom", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "bottom", "surface_offset": 22}),
+        ("turret top", {"type": "EnemyTurret", "x": 0, "count": 1, "surface": "top", "surface_offset": 22}),
+        ("broly", {"type": "EnemyBroly", "x": 0, "count": 1, "formation": "single"}),
+        ("debris large", {"type": "EnemyDebrisLarge", "x": 0, "count": 1, "formation": "single"}),
+        ("cough sprayer", {"type": "EnemyCoughSprayer", "x": 0, "count": 1, "y": 300}),
+        ("spore splitter", {"type": "EnemySporeSplitter", "x": 0, "count": 1, "y": 300, "fixed_drop": "WeaponItem"}),
+        ("billy", {"type": "EnemyBilly", "x": 0, "count": 1, "y": 300}),
+        ("solid block", {"type": "Terrain", "x": 0, "y": 360, "w": 140, "h": 92, "kind": terrain_kind}),
+        ("ceiling block", {"type": "Terrain", "x": 0, "y": 0, "w": 132, "h": 92, "kind": terrain_kind, "surface_anchor": "ceiling"}),
+        ("turret mount", {"type": "turret_mount", "x": 0, "y": 360, "w": 260, "h": 46, "kind": terrain_kind}),
+        ("breakable gate", {"type": "breakable_gate", "x": 0, "y": 220, "w": 120, "h": 240, "kind": terrain_kind, "hp": 48, "drop_chance": 0.03}),
+        ("weapon gate", {"type": "weapon_gate", "x": 0, "y": 330, "w": 110, "h": 170, "kind": terrain_kind, "hp": 44}),
+    ]
+
+
+EVENT_TEMPLATES: list[tuple[str, dict[str, Any]]] = _event_templates_for_kind("fortress_block")
 
 EVENT_IMAGE_PATHS = {
     "EnemyVirus": "graphic/enemy_virus.png",
@@ -135,6 +181,30 @@ def _load_stage(path: Path) -> dict[str, Any]:
     if not isinstance(data.get("world_events", []), list):
         raise ValueError("stage JSON world_events must be a list")
     return data
+
+
+def _stage_id_from_json(path: Path) -> int | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    try:
+        return int(data.get("stage_id"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _profile_from_args(args: argparse.Namespace) -> StageDesignerProfile:
+    stage_id = args.stage
+    if stage_id is None and args.stage_json:
+        stage_id = _stage_id_from_json(_resolve(args.stage_json))
+    return STAGE_PROFILES.get(int(stage_id or DEFAULT_STAGE_ID), STAGE_PROFILES[DEFAULT_STAGE_ID])
+
+
+def _profile_path(primary: Path, fallback: Path | None) -> Path:
+    if primary.exists() or fallback is None:
+        return primary
+    return fallback
 
 
 def _compact_json(value: Any) -> str:
@@ -360,8 +430,9 @@ def _set_event_y(event: dict[str, Any], value: float) -> None:
     event[key] = int(round(max(0.0, min(float(SCREEN_HEIGHT), value))))
 
 
-def _event_template_name(index: int) -> str:
-    return EVENT_TEMPLATES[index % len(EVENT_TEMPLATES)][0]
+def _event_template_name(index: int, templates: list[tuple[str, dict[str, Any]]] | None = None) -> str:
+    templates = EVENT_TEMPLATES if templates is None else templates
+    return templates[index % len(templates)][0]
 
 
 def _position_new_event(event: dict[str, Any], wx: float, wy: float) -> None:
@@ -519,15 +590,27 @@ class Selection:
 
 class StageDesigner:
     def __init__(self, args: argparse.Namespace) -> None:
-        self.stage_path = _resolve(args.stage_json)
-        self.rects_path = _resolve(args.rects)
-        self.mask_dir = _resolve(args.mask_dir)
+        self.profile = _profile_from_args(args)
+        self.stage_path = _resolve(args.stage_json) if args.stage_json else self.profile.stage_json
+        self.rects_path = (
+            _resolve(args.rects)
+            if args.rects
+            else _profile_path(self.profile.rects, self.profile.fallback_rects)
+        )
+        if args.mask_dir:
+            self.mask_dir = _resolve(args.mask_dir)
+        elif self.rects_path == self.profile.rects:
+            self.mask_dir = self.profile.mask_dir
+        else:
+            self.mask_dir = _profile_path(self.profile.mask_dir, self.profile.fallback_mask_dir)
+        self.background_path = _resolve(args.background) if args.background else self.profile.background
+        self.event_templates = _event_templates_for_kind(self.profile.terrain_kind)
         self.data = _load_stage(self.stage_path)
         self.screen = pygame.display.set_mode(
             (max(MIN_WINDOW_W, args.window_w), max(MIN_WINDOW_H, args.window_h)),
             pygame.RESIZABLE,
         )
-        pygame.display.set_caption("Stage designer")
+        pygame.display.set_caption(f"Stage designer - {self.profile.label}")
         self.font = pygame.font.SysFont("consolas", 16) or pygame.font.Font(None, 16)
         self.small_font = pygame.font.SysFont("consolas", 13) or pygame.font.Font(None, 13)
         self.camera_x = float(args.x)
@@ -556,7 +639,7 @@ class StageDesigner:
         self.palette_drag: dict[str, Any] | None = None
         self._palette_hitboxes: list[tuple[pygame.Rect, dict[str, Any]]] = []
         self._event_image_cache: dict[str, pygame.Surface] = {}
-        self.message = "Ready"
+        self.message = f"Ready: {self.profile.label}"
         self.dirty = False
         self.undo_stack: list[dict[str, Any]] = []
         self._terrain_cache_key: str | None = None
@@ -647,6 +730,12 @@ class StageDesigner:
         asset = _piece_asset_id(piece) if piece is not None else "-"
         return f"piece palette: {self._current_piece_role()} {asset}"
 
+    def _event_templates(self) -> list[tuple[str, dict[str, Any]]]:
+        return getattr(self, "event_templates", EVENT_TEMPLATES)
+
+    def _event_template_name(self, index: int) -> str:
+        return _event_template_name(index, self._event_templates())
+
     def _palette_summary(self) -> list[str]:
         if self.mode == "terrain" and _layout(self.data).get("type") == "TerrainPieces":
             piece = self._current_piece_asset()
@@ -657,12 +746,12 @@ class StageDesigner:
                 f"guide mode: {self.guide_mode}",
                 f"new guide side: {self.guide_side}",
             ]
-        return [f"event palette: {_event_template_name(self.event_palette_index)}", f"guide mode: {self.guide_mode}"]
+        return [f"event palette: {self._event_template_name(self.event_palette_index)}", f"guide mode: {self.guide_mode}"]
 
     def _palette_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = [
             {"kind": "event", "template_index": i}
-            for i, _template in enumerate(EVENT_TEMPLATES)
+            for i, _template in enumerate(self._event_templates())
         ]
         for role in self._piece_roles():
             for piece in self._piece_palette_options(role):
@@ -763,8 +852,9 @@ class StageDesigner:
             return self._backdrop_cache[key].copy()
         surface = pygame.Surface((width, height))
         surface.fill((6, 14, 17))
+        background_path = getattr(self, "background_path", BACKGROUND_PATH)
         try:
-            raw = pygame.image.load(str(BACKGROUND_PATH))
+            raw = pygame.image.load(str(background_path))
         except (FileNotFoundError, pygame.error):
             self._backdrop_cache[key] = surface.copy()
             return surface
@@ -1235,7 +1325,8 @@ class StageDesigner:
 
     def _add_event_template_at(self, index: int, wx: float, wy: float) -> None:
         self._push_undo()
-        _name, template = EVENT_TEMPLATES[index % len(EVENT_TEMPLATES)]
+        templates = self._event_templates()
+        _name, template = templates[index % len(templates)]
         event = copy.deepcopy(template)
         _position_new_event(event, wx, wy)
         events = self.data.setdefault("world_events", [])
@@ -1274,7 +1365,7 @@ class StageDesigner:
 
     def _add_palette_payload_at(self, payload: dict[str, Any], wx: float, wy: float) -> None:
         if payload.get("kind") == "event":
-            self.event_palette_index = int(payload.get("template_index", 0)) % len(EVENT_TEMPLATES)
+            self.event_palette_index = int(payload.get("template_index", 0)) % len(self._event_templates())
             self.mode = "events"
             self._add_event_template_at(self.event_palette_index, wx, wy)
             return
@@ -1382,7 +1473,7 @@ class StageDesigner:
 
     def _cycle_event_palette(self, delta: int) -> None:
         self._select_palette_payload(
-            {"kind": "event", "template_index": (self.event_palette_index + delta) % len(EVENT_TEMPLATES)}
+            {"kind": "event", "template_index": (self.event_palette_index + delta) % len(self._event_templates())}
         )
 
     def _cycle_piece_role(self, delta: int) -> None:
@@ -1925,9 +2016,10 @@ class StageDesigner:
         event_h = 58
         piece_h = 76
         rects: dict[tuple[Any, ...], pygame.Rect] = {}
+        event_templates = self._event_templates()
 
         y += title_h
-        for i, _template in enumerate(EVENT_TEMPLATES):
+        for i, _template in enumerate(event_templates):
             col = i % cols
             row = i // cols
             payload = {"kind": "event", "template_index": i}
@@ -1937,7 +2029,7 @@ class StageDesigner:
                 cell_w,
                 event_h,
             )
-        y += ((len(EVENT_TEMPLATES) + cols - 1) // cols) * (event_h + gap) + 12
+        y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
 
         y += title_h
         for role in self._piece_roles():
@@ -1989,14 +2081,15 @@ class StageDesigner:
 
         y += self._draw_palette_title(target, "Event Palette", (x0, y))
         event_h = 58
-        for i, (name, template) in enumerate(EVENT_TEMPLATES):
+        event_templates = self._event_templates()
+        for i, (name, template) in enumerate(event_templates):
             col = i % cols
             row = i // cols
             rect = pygame.Rect(x0 + col * (cell_w + gap), y + row * (event_h + gap), cell_w, event_h)
             if rect.colliderect(panel):
                 self._draw_event_cell(target, rect, i, name, template)
                 self._palette_hitboxes.append((rect.copy(), {"kind": "event", "template_index": i}))
-        y += ((len(EVENT_TEMPLATES) + cols - 1) // cols) * (event_h + gap) + 12
+        y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
 
         y += self._draw_palette_title(target, "Terrain Pieces", (x0, y))
         piece_h = 76
@@ -2031,9 +2124,9 @@ class StageDesigner:
 
     def _select_palette_payload(self, payload: dict[str, Any]) -> None:
         if payload.get("kind") == "event":
-            self.event_palette_index = int(payload.get("template_index", 0)) % len(EVENT_TEMPLATES)
+            self.event_palette_index = int(payload.get("template_index", 0)) % len(self._event_templates())
             self.mode = "events"
-            self.message = f"Event palette: {_event_template_name(self.event_palette_index)}"
+            self.message = f"Event palette: {self._event_template_name(self.event_palette_index)}"
             self._ensure_palette_payload_visible(payload)
             return
         if payload.get("kind") == "piece":
@@ -2086,8 +2179,9 @@ class StageDesigner:
         payload = self.palette_drag
         if payload.get("kind") == "event":
             index = int(payload.get("template_index", 0))
-            name = _event_template_name(index)
-            template = EVENT_TEMPLATES[index % len(EVENT_TEMPLATES)][1]
+            templates = self._event_templates()
+            name = _event_template_name(index, templates)
+            template = templates[index % len(templates)][1]
             preview = self._event_image(template, max_w=58, max_h=46)
             label = self.font.render(name, True, (255, 210, 150))
             bg = pygame.Rect(
@@ -2447,9 +2541,11 @@ def _open_file(path: Path) -> None:
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--stage-json", default=str(DEFAULT_STAGE), help="stage JSON to edit")
-    parser.add_argument("--rects", default=str(DEFAULT_RECTS), help="Stage3 rect config")
-    parser.add_argument("--mask-dir", default=str(DEFAULT_MASK_DIR), help="Stage3 alpha mask directory")
+    parser.add_argument("--stage", type=int, choices=sorted(STAGE_PROFILES), default=None, help="stage profile to edit")
+    parser.add_argument("--stage-json", default=None, help="stage JSON to edit (defaults to selected stage)")
+    parser.add_argument("--rects", default=None, help="terrain rect config (defaults to selected stage)")
+    parser.add_argument("--mask-dir", default=None, help="terrain alpha mask directory (defaults to selected stage)")
+    parser.add_argument("--background", default=None, help="background image for the designer canvas")
     parser.add_argument("--x", type=float, default=0.0, help="initial camera x")
     parser.add_argument("--mode", choices=("events", "terrain"), default="events", help="initial editor mode")
     parser.add_argument("--window-w", type=int, default=MIN_WINDOW_W)

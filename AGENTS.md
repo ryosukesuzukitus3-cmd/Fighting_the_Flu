@@ -3,6 +3,12 @@
 <!-- このファイル固有の追記は AUTOGEN ブロックの外（このコメントの上、または END 以降）に書く。
      共有内容は docs/agent_guide_shared.md を編集し `tools/run.py docs` で両ガイドへ自動展開する。 -->
 
+## Codex Memory
+
+Codex は作業開始時、必要に応じて `.codex/memory/` を参照する。
+`.codex/memory/` は Codex 用の作業記憶であり、厳格な運用ルールはこの `AGENTS.md` を優先する。
+メモリ構成の見直しが必要だと判断した場合、Codex は提案してから更新する。
+
 <!-- AUTOGEN:agent_guide START -->
 ## SSOT 原則（反映漏れ防止）
 
