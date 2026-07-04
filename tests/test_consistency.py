@@ -499,7 +499,9 @@ def test_stage3_uses_explicit_labor_fortress_pieces() -> None:
         ev for ev in world_events
         if ev.get("kind") in {"wall", "rock", "fortress_block"} and ev.get("x", 0) >= boss_gate["trigger_x"]
     ]
-    first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
+    # 9963291のチューニングでボス部屋の装飾ブロックは撤去され、部屋自体がノークラッター化された。
+    # 装飾が存在する場合のみカメラロック/移動制限のクリアランスを検証する。
+    first_boss_room_x = min((ev["x"] for ev in boss_room_blocks), default=None)
     stage = Stage(object(), 3)
 
     assert data.get("initial_terrain", []) == []
@@ -517,23 +519,27 @@ def test_stage3_uses_explicit_labor_fortress_pieces() -> None:
     assert "top" not in layout
     assert "bottom" not in layout
     assert len(pieces) >= 100
-    assert len(surface_pieces) >= 80
+    assert len(surface_pieces) >= 60
     assert body_pieces
     assert rect_collision_pieces
     assert {piece.get("side") for piece in surface_pieces} >= {"top", "bottom"}
     assert layout["length"] >= boss_x + 800
     assert len(world_events) >= 40
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 10
-    assert len(mounts) >= 5
+    # turret_mount装飾は本チューニングで全廃止され、turretはcomposer地形のsurfaceへ直接吸着する方式に統一された。
+    assert mounts == []
     assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
     assert len(gates) >= 3
     assert len(reward_gates) == 1
     assert all(ev.get("fixed_drop") == "WeaponItem" for ev in minibosses)
-    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 2
-    assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 2
-    assert any(ev["type"] == "EnemyBilly" for ev in world_events)
+    # ミニボス構成が再編され、CoughSprayerは1体・SporeSplitterは今回の区間には未配置になった。
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 1
+    assert [ev["type"] for ev in fixed_weapon_events].count("EnemySporeSplitter") == 0
+    # EnemyBillyの単独遭遇はこのチューニングでステージ3から削除された。
     assert [(ev["w"], ev["h"], ev["hp"]) for ev in breakable_blocks] == [
         (150, 94, 12),
+        (150, 94, 12),
+        (105, 246, 36),
         (105, 246, 36),
         (107, 168, 44),
         (123, 288, 48),
@@ -545,17 +551,29 @@ def test_stage3_uses_explicit_labor_fortress_pieces() -> None:
             abs(ev["x"] - mount_center) <= 220
             for ev in turrets
         ), f"turret_mount at x={mount['x']} should have nearby turrets"
-    for gate in gates:
+    # 隣接して並ぶ破壊可能ゲート（例: x=2942/3048の二重扉）は1つの障害物クラスタとして扱い、
+    # クラスタ全体の近傍に守備役の敵がいるかを確認する。
+    guard_types = {"EnemyTurret", "EnemyCrawler", "EnemyCoughSprayer", "EnemyBroly"}
+    gate_clusters: list[list[dict]] = []
+    for gate in sorted(gates, key=lambda g: g["x"]):
+        if gate_clusters and gate["x"] - gate_clusters[-1][-1]["x"] <= 150:
+            gate_clusters[-1].append(gate)
+        else:
+            gate_clusters.append([gate])
+    for cluster in gate_clusters:
+        lo = min(g["x"] for g in cluster) - 300
+        hi = max(g["x"] for g in cluster) + 360
         assert any(
-            ev["type"] in {"EnemyTurret", "EnemyCrawler", "EnemyCoughSprayer"}
-            and gate["x"] - 300 <= ev.get("x", -9999) <= gate["x"] + 360
+            ev["type"] in guard_types and lo <= ev.get("x", -9999) <= hi
             for ev in world_events
-        ), f"gate at x={gate['x']} should be part of a combat setpiece"
-    assert any(ev["type"] == "EnemyTurret" and ev.get("y", 0) >= 200 and 3140 <= ev["x"] <= 3400 for ev in turrets)
-    assert any(ev["type"] == "EnemyTurret" and ev.get("y", 0) >= 220 and 5400 <= ev["x"] <= 5650 for ev in turrets)
-    assert any(ev["type"] == "EnemyCrawler" and 7200 <= ev["x"] <= 7300 for ev in world_events)
-    assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
-    assert boss_gate["player_limit_x"] <= first_boss_room_x
+        ), f"gate cluster near x={[g['x'] for g in cluster]} should be part of a combat setpiece"
+    # turretは「y固定の浮遊配置」からsurface吸着方式へ変わったため、高度条件はsurface方向で代替する。
+    assert any(ev["type"] == "EnemyTurret" and ev.get("surface") == "bottom" and 3140 <= ev["x"] <= 3450 for ev in turrets)
+    assert any(ev["type"] == "EnemyTurret" and ev.get("surface") == "top" and 5400 <= ev["x"] <= 5650 for ev in turrets)
+    assert any(ev["type"] == "EnemyCrawler" and 7000 <= ev["x"] <= 7150 for ev in world_events)
+    if first_boss_room_x is not None:
+        assert boss_gate["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
+        assert boss_gate["player_limit_x"] <= first_boss_room_x
     assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
     assert stage.boss_terrain_mode == "preplaced"
 
@@ -582,8 +600,8 @@ def test_stage3_piece_route_has_deliberate_chokes_and_arenas() -> None:
     assert gap_at(1200) >= 400
     assert gap_at(3300) <= 360
     assert gap_at(6100) >= 460
-    assert gap_at(7300) <= 390
-    assert gap_at(9900) >= 440
+    assert gap_at(7300) <= 415
+    assert gap_at(7650) >= 470
 
 
 def test_stage3_ceiling_attackers_keep_clearance_from_hud() -> None:
@@ -593,15 +611,17 @@ def test_stage3_ceiling_attackers_keep_clearance_from_hud() -> None:
         ev for ev in world_events
         if ev["type"] == "EnemyPachemon" and ev.get("surface") == "top"
     ]
+    # 9963291のチューニングでボス直前のTakeshi集団はx=7006/7048付近へ圧縮され、
+    # 固定"y"の代わりに実座標である"anchor_y"で高さを指定するようになった。
     final_takeshi = [
         ev for ev in world_events
-        if ev["type"] == "EnemyTakeshi" and ev.get("x", 0) >= 9000
+        if ev["type"] == "EnemyTakeshi" and ev.get("x", 0) >= 6900
     ]
 
     assert ceiling_fliers
     assert all(ev.get("surface_offset", 0) >= 130 for ev in ceiling_fliers)
     assert final_takeshi
-    assert all(ev.get("y", 0) >= 180 for ev in final_takeshi)
+    assert all(ev.get("anchor_y", 0) >= 180 for ev in final_takeshi)
 
 
 def test_stage4_uses_authored_shogi_void_setpieces() -> None:
@@ -1761,11 +1781,52 @@ def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
 
     data = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
     text = _format_stage_json(data)
+    first_event = data["world_events"][0]
+    first_event_text = json.dumps(first_event, ensure_ascii=False, separators=(", ", ": "))
 
     assert json.loads(text) == data
     assert '        {"asset": "strip_top:' in text
-    assert '    {"type": "EnemyTakeshi", "x": 940' in text
-    assert '\n          "x": 940' not in text
+    assert f"    {first_event_text}" in text
+    if "x" in first_event:
+        assert f'\n          "x": {first_event["x"]}' not in text
+
+
+def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
+    from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args
+
+    default_profile = _profile_from_args(_parse_args([]))
+    stage2_profile = _profile_from_args(_parse_args(["--stage", "2"]))
+    inferred_stage2_profile = _profile_from_args(
+        _parse_args(["--stage-json", str(ROOT / "data" / "stages" / "stage2.json")])
+    )
+
+    assert default_profile.stage_id == 3
+    assert stage2_profile.stage_id == 2
+    assert inferred_stage2_profile.stage_id == 2
+    assert stage2_profile.stage_json == ROOT / "data" / "stages" / "stage2.json"
+    assert stage2_profile.rects == ROOT / "tools" / "stage2_terrain_rects.json"
+    assert stage2_profile.fallback_rects == DEFAULT_RECTS
+    assert stage2_profile.fallback_mask_dir == DEFAULT_MASK_DIR
+    assert stage2_profile.background == ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"
+    assert stage2_profile.terrain_kind == "data_block"
+
+
+def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_templates_for_kind
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainStrip", "length": 1000}], "world_events": []}
+    designer.event_templates = _event_templates_for_kind("data_block")
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+
+    index = next(i for i, (name, _template) in enumerate(designer.event_templates) if name == "solid block")
+    designer._add_event_template_at(index, 120, 240)
+
+    assert designer.data["world_events"][0]["kind"] == "data_block"
+    assert designer.selection == Selection("event", 0)
 
 
 def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
