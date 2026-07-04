@@ -18,7 +18,7 @@ from src.story.lines import Line, Page, StoryBeat, page
 from src.story.speakers import (
     SAWAGUCHI as S, KARONARU as K, KARONARU_MAX as KM,
     NARRATION as N, UNKNOWN as Q, SYSTEM as SYS,
-    BOSS1, BOSS2, BOSS3, BOSS4, BOSS4_FORM2, BOSS_SAWAGUCHI,
+    BOSS1, BOSS2, BOSS2_FORM2, BOSS3, BOSS4, BOSS4_FORM2, BOSS_SAWAGUCHI,
     TUTORIAL_DUMMY as DUMMY,
 )
 
@@ -80,7 +80,9 @@ PROLOGUE: list[Page] = [
             "……で、行くのか、寝るのか。",
             "俺はどっちでも、横にいるにょ。"),
     page(S, "……行く。",
-            "寝て覚める熱なら、とっくに引いてる。", last=True),
+            "寝て覚める熱なら、とっくに引いてる。"),
+    page(S, "なんなら明日、出社する。"),
+    page(K, "それは管理外じゃなくて、論外だにょ。", last=True),
 ]
 
 
@@ -186,6 +188,9 @@ BOSS_INTRO: dict[int, list[Line]] = {
         Line(S,     "……声がでかい。"),
         Line(K,     "SNSはだいたい声がでかいにょ。",
                     "中身の薄さを、音量で殴ってくるにょ。"),
+        Line(S,     "だいたい「情報汚染超人野獣」って、",
+                    "肩書きが渋滞してる。"),
+        Line(K,     "盛るやつほど、中身は薄いにょ。"),
         Line(BOSS2, "みんな暮らしをやってるゥ!!"),
         Line(BOSS2, "やってないのは、お前だけだァ!!"),
         Line(S,     "……まあ、そうかもな。"),
@@ -197,11 +202,16 @@ BOSS_INTRO: dict[int, list[Line]] = {
     ],
     3: [
         Line(SYS,   "婚活要塞マッチング・ゼロ 起動"),
+        Line(S,     "マッチング・ゼロ……名前で戦績を言うな。"),
+        Line(K,     "開始前から結果発表とは、親切な要塞だにょ。"),
         Line(SYS,   "対象：澤口修平／31歳／いいね 0"),
         Line(SYS,   "自己紹介文：未記入"),
         Line(K,     "未記入だにょ。"),
         Line(S,     "……書くことが、なかったんだ。"),
         Line(K,     "それを書くのが、自己紹介だにょ。"),
+        Line(SYS,   "希望条件：年上NG／経験者NG／婚前交渉NG"),
+        Line(K,     "いいね0が出す条件じゃないにょ。"),
+        Line(S,     "こだわりと言え。"),
         Line(BOSS3, "ようこそ。あなたに、ぴったりの提案があります。"),
         Line(BOSS3, "——「マッチングを終了する」。"),
         Line(BOSS3, "押せば、もう審査されない。誰にも採点されない。"),
@@ -221,6 +231,11 @@ BOSS_INTRO: dict[int, list[Line]] = {
         Line(S,     "……将棋ソフトみたいな言い方を、しやがって。"),
         Line(BOSS4, "私は棋理の化身です。"),
         Line(BOSS4, "あなたの盤も、人生も、同じ精度で読みます。"),
+        Line(BOSS4, "参考までに。あなたの人生の、",
+                    "現局面の最善手は——入浴です。"),
+        Line(BOSS4, "次善手は、睡眠。以下、洗濯、返信と続きます。"),
+        Line(S,     "……盤上の話をしろ。"),
+        Line(BOSS4, "盤上でしたら、最善手は投了です。"),
         Line(BOSS4, "盤の外で負け続けて、盤の上へ逃げてきましたね。"),
         Line(S,     "……逃げてきたんじゃない。"),
         Line(S,     "ここだけは、正直だと思ったからだ。"),
@@ -234,7 +249,7 @@ BOSS_INTRO: dict[int, list[Line]] = {
 
 # ════════════════════════════════════════════════════════════════════
 # 戦闘中セリフ（HP閾値・フェーズ移行。自動タイムアウトで順送り）
-#   キー: "{stage}mid"（HP50%） / "4f2"（Form2 開始） / "4f2mid"（Form2 HP50%）
+#   キー: "{stage}mid"（HP50%） / "{stage}f2"（Form2 開始） / "4f2mid"（Form2 HP50%）
 # ════════════════════════════════════════════════════════════════════
 BOSS_MID: dict[str, list[Line]] = {
     "1mid": [
@@ -249,6 +264,14 @@ BOSS_MID: dict[str, list[Line]] = {
         Line(S,     "……。"),
         Line(K,     "黙るなにょ。"),
         Line(K,     "黙ると、向こうの言葉が本当っぽくなるにょ。"),
+    ],
+    # Form2 開始（超サイヤ人ブロリー変身。on_form2_transition から再生。
+    #   声の暴力の最終形態＝ついに文脈が死ぬ）
+    "2f2": [
+        Line(BOSS2_FORM2, "東大医学部、頭悪くないかァ！？"),
+        Line(BOSS2_FORM2, "お前が正しい根拠を言えェ!!"),
+        Line(S,           "誰の話を！？"),
+        Line(K,           "文脈が死んだにょ。撃ち落とすにょ。"),
     ],
     "3mid": [
         Line(BOSS3, "年齢、年収、肩書。審査項目は、まだまだあります。"),
@@ -391,6 +414,7 @@ FINAL_SEQ: dict[str, list[Line]] = {
 # 技名・SYSTEM バナー文言（中央表示。Line ではなくバナー描画で使う）
 FINAL_BANNERS: dict[str, tuple[str, ...]] = {
     "awaken":      ("覚醒", BOSS4_FORM2),   # 第1→2形態遷移バナー（赤眼の真・藤井四段）
+    "awaken2":     ("覚醒", BOSS2_FORM2),   # S2 第二形態遷移バナー（超サイヤ人ブロリー）
     "true_final":  ("TRUE FINAL BOSS", "投了王サワグチ"),
     "sengen":      ("投了勧告",),
     "kouhatsu":    ("薬効発現", "カロナール先輩・薬効最大"),
@@ -413,7 +437,8 @@ BOSS_DEFEAT: dict[int, list[Line]] = {
         Line(S,     "くそ、復活か？"),
         Line(BOSS1, "お前が倒したのは、別の\"私\"だ。"),
         Line(BOSS1, "\"私\"は増え、お前の身体を内側から塗り潰していく。"),
-        Line(K,     "理屈っぽいウイルスだにょ。"),
+        Line(S,     "……極めて何か、生命に対する侮辱を感じる。"),
+        Line(K,     "巨匠と同じ感想だにょ。"),
         Line(BOSS1, "お前が向き合うのは、発熱だけではない。"),
         Line(BOSS1, "熱に浮かされた夜は、"),
         Line(BOSS1, "普段見ないものまで見えてしまう。"),
@@ -430,6 +455,11 @@ BOSS_DEFEAT: dict[int, list[Line]] = {
         Line(K, "鎮痛剤だからにょ。痛いところには、詳しいにょ。"),
     ],
     3: [
+        Line(SYS,   "要塞機能停止。最終メッセージを出力します。"),
+        Line(BOSS3, "けど、けれどね、私にも、寂しいときが、あるのです。"),
+        Line(S,     "……その文章、どこかで読んだことがあるぞ。"),
+        Line(K,     "サクラにも、寂しさはあるのかにょ。"),
+        Line(S,     "ないだろ。……あったら、嫌だな。"),
         Line(S, "俺は、そんなに駄目か。"),
         Line(S, "……いや。"),
         Line(S, "駄目かどうかを決めたくて、"),
@@ -575,6 +605,8 @@ EPILOGUE: list[Page] = [
     page(S, "いや。",
             "効いてたんだな。"),
     page(N, "スマホに、世界を変えるような通知は来ていない。"),
+    page(N, "……「アラスカ」の未読が、39件たまっているだけだ。"),
+    page(S, "あいつら、平熱で暇か。"),
     page(N, "仕事もある。",
             "婚活もある。",
             "たぶん、また傷つく。"),
@@ -589,7 +621,11 @@ EPILOGUE: list[Page] = [
     page(K, "朝になったら、溶けるにょ。",
             "……もうちょっとだけ、横にいるにょ。"),
     page(S, "うるさい薬だ。"),
-    page(S, "……でも、また外れの夜が来たら、頼む。", last=True),
+    page(S, "……でも、また外れの夜が来たら、頼む。"),
+    page(S, "今夜は、世話になったな。……すまにょ。"),
+    page(K, "……今の、わざとかにょ。"),
+    page(S, "熱のせいだ。"),
+    page(K, "風邪より、うつりやすいやつだにょ。", last=True),
 ]
 
 
@@ -714,6 +750,8 @@ GAMEOVER_LINES: list[list[str]] = [
     ["先輩：「ここで投げるなにょ」", "澤口：「……あと5分」"],
     ["まだ終局ではない。", "CONTINUE?"],
     ["詰みかどうかは、最後まで読んだ者だけが言える。"],
+    ["澤口は、前提を疑わなかった。", "悪かったのは、前提の方だった。"],
+    ["敗因：入浴の、先延ばし。", "（因果関係は、不明。）"],
 ]
 
 
