@@ -1217,6 +1217,33 @@ def test_stage3_composer_rect_roles_are_available() -> None:
         ) <= 0.02
 
 
+def test_stage2_composer_rect_roles_are_available() -> None:
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+
+    pieces = load_stage3_composer_pieces(
+        ROOT / "tools" / "stage2_terrain_rects.json",
+        mask_dir=ROOT / "tools" / "stage2_terrain_alpha_masks",
+    )
+    expected_roles = {
+        "floor_surface",
+        "ceiling_surface",
+        "body_fill",
+        "fixed_floor_block",
+        "fixed_ceiling_block",
+        "exposed_column",
+        "floor_prop",
+        "decor_prop",
+        "turret_mount",
+        "breakable_block",
+    }
+
+    assert expected_roles <= set(pieces)
+    assert all(pieces[role] for role in expected_roles)
+    assert len(pieces["floor_surface"]) >= 6
+    assert len(pieces["block_square"]) >= 12
+    assert all(piece.image.get_width() > 0 and piece.image.get_height() > 0 for piece in pieces["floor_surface"])
+
+
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
     from src.entities.terrain import Terrain
 
@@ -1792,7 +1819,7 @@ def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
 
 
 def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
-    from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args
+    from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args, _profile_path
 
     default_profile = _profile_from_args(_parse_args([]))
     stage2_profile = _profile_from_args(_parse_args(["--stage", "2"]))
@@ -1805,6 +1832,7 @@ def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
     assert inferred_stage2_profile.stage_id == 2
     assert stage2_profile.stage_json == ROOT / "data" / "stages" / "stage2.json"
     assert stage2_profile.rects == ROOT / "tools" / "stage2_terrain_rects.json"
+    assert _profile_path(stage2_profile.rects, stage2_profile.fallback_rects) == stage2_profile.rects
     assert stage2_profile.fallback_rects == DEFAULT_RECTS
     assert stage2_profile.fallback_mask_dir == DEFAULT_MASK_DIR
     assert stage2_profile.background == ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"

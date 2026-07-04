@@ -1,0 +1,119 @@
+{
+  "sheet": "assets/graphic/stage2_cyber_terrain_sheet.png",
+  "roles": {
+    "floor_surface": ["strip_top"],
+    "ceiling_surface": ["strip_top"],
+    "body_fill": [
+      {"group": "block_square", "indices": [1, 2, 3, 4, 5, 6, 8, 10, 11, 12]}
+    ],
+    "fixed_floor_block": [
+      {"group": "block_wide", "indices": [1, 2, 4, 5]},
+      {"group": "block_square", "indices": [3, 7, 9, 13]},
+      {"group": "block_tall", "indices": [1, 4, 7, 9, 11]}
+    ],
+    "fixed_ceiling_block": [
+      {"group": "block_square", "indices": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]},
+      {"group": "block_tall", "indices": [2, 3, 5, 8, 10, 12]}
+    ],
+    "exposed_column": ["block_tall", "block_square"],
+    "floor_prop": ["floor_props"],
+    "decor_prop": ["floor_props"],
+    "turret_mount": [
+      {"group": "block_wide", "indices": [3, 6]},
+      {"group": "strip_top", "indices": [2, 4]}
+    ],
+    "breakable_block": [
+      {"group": "block_square", "indices": [7, 11, 13]},
+      {"group": "floor_props", "indices": [7, 8, 10]}
+    ]
+  },
+  "groups": {
+    "strip_top": {
+      "color": [64, 235, 255],
+      "rects": [
+        {"x": 18, "y": 18, "w": 300, "h": 98, "label": "cyan conduit lip A"},
+        {"x": 592, "y": 18, "w": 290, "h": 98, "label": "cyan conduit lip B"},
+        {"x": 902, "y": 18, "w": 272, "h": 98, "label": "circuit brace lip"},
+        {"x": 1194, "y": 18, "w": 260, "h": 98, "label": "server lip"},
+        {"x": 1482, "y": 20, "w": 270, "h": 96, "label": "data-core lip"},
+        {"x": 1778, "y": 20, "w": 60, "h": 98, "label": "end cap"}
+      ]
+    },
+    "strip_bottom": {
+      "color": [255, 190, 64],
+      "rects": []
+    },
+    "block_wide": {
+      "color": [64, 210, 255],
+      "rects": [
+        {"x": 16, "y": 376, "w": 370, "h": 126, "label": "wide data platform"},
+        {"x": 410, "y": 378, "w": 324, "h": 122, "label": "wide server platform"},
+        {"x": 758, "y": 378, "w": 154, "h": 122, "label": "compact bridge"},
+        {"x": 936, "y": 382, "w": 256, "h": 116, "label": "cyan bus platform"},
+        {"x": 1210, "y": 382, "w": 242, "h": 116, "label": "console bridge"},
+        {"x": 1578, "y": 764, "w": 258, "h": 64, "label": "lower conduit bridge"},
+        {"x": 14, "y": 766, "w": 370, "h": 62, "label": "lower slab run"},
+        {"x": 412, "y": 772, "w": 304, "h": 58, "label": "lower thin run"},
+        {"x": 744, "y": 772, "w": 176, "h": 58, "label": "lower segmented run"},
+        {"x": 944, "y": 772, "w": 346, "h": 58, "label": "lower panel run"},
+        {"x": 1312, "y": 768, "w": 244, "h": 58, "label": "lower hazard run"}
+      ]
+    },
+    "block_square": {
+      "color": [145, 255, 115],
+      "rects": [
+        {"x": 16, "y": 522, "w": 134, "h": 120, "label": "nested circuit block"},
+        {"x": 170, "y": 522, "w": 122, "h": 120, "label": "server grille block"},
+        {"x": 312, "y": 523, "w": 120, "h": 120, "label": "cyan core block"},
+        {"x": 450, "y": 523, "w": 122, "h": 120, "label": "cross brace block"},
+        {"x": 590, "y": 522, "w": 116, "h": 120, "label": "magenta node block"},
+        {"x": 724, "y": 522, "w": 114, "h": 120, "label": "concentric circuit block"},
+        {"x": 856, "y": 521, "w": 110, "h": 120, "label": "damaged data block"},
+        {"x": 986, "y": 522, "w": 110, "h": 120, "label": "server face block"},
+        {"x": 1114, "y": 522, "w": 104, "h": 120, "label": "x brace block"},
+        {"x": 1236, "y": 522, "w": 108, "h": 120, "label": "data pin block"},
+        {"x": 1360, "y": 522, "w": 106, "h": 120, "label": "hazard gate block"},
+        {"x": 1484, "y": 522, "w": 108, "h": 120, "label": "cross brace panel"},
+        {"x": 1610, "y": 525, "w": 114, "h": 118, "label": "vertical light block"},
+        {"x": 1744, "y": 526, "w": 98, "h": 116, "label": "slim terminal block"}
+      ]
+    },
+    "block_tall": {
+      "color": [210, 120, 255],
+      "rects": [
+        {"x": 16, "y": 136, "w": 206, "h": 224, "label": "server rack wall"},
+        {"x": 238, "y": 136, "w": 116, "h": 224, "label": "sealed data pillar"},
+        {"x": 510, "y": 136, "w": 112, "h": 210, "label": "plain armor pillar"},
+        {"x": 642, "y": 136, "w": 108, "h": 204, "label": "glass coolant pillar"},
+        {"x": 868, "y": 140, "w": 90, "h": 220, "label": "x brace tower"},
+        {"x": 976, "y": 140, "w": 90, "h": 220, "label": "server window tower"},
+        {"x": 1080, "y": 140, "w": 86, "h": 220, "label": "solid armor tower"},
+        {"x": 1190, "y": 140, "w": 80, "h": 220, "label": "diagonal light tower"},
+        {"x": 1290, "y": 140, "w": 100, "h": 220, "label": "dark server tower"},
+        {"x": 1416, "y": 140, "w": 88, "h": 220, "label": "circuit spine tower"},
+        {"x": 1528, "y": 142, "w": 88, "h": 220, "label": "reinforced gate pillar"},
+        {"x": 1634, "y": 142, "w": 96, "h": 220, "label": "split data tower"},
+        {"x": 1750, "y": 138, "w": 88, "h": 222, "label": "twin conduit tower"}
+      ]
+    },
+    "floor_props": {
+      "color": [255, 150, 30],
+      "rects": [
+        {"x": 24, "y": 662, "w": 184, "h": 78, "label": "terminal bank"},
+        {"x": 238, "y": 666, "w": 112, "h": 76, "label": "small power boxes"},
+        {"x": 384, "y": 666, "w": 134, "h": 76, "label": "energy canisters"},
+        {"x": 544, "y": 670, "w": 114, "h": 72, "label": "stacked data needles"},
+        {"x": 748, "y": 686, "w": 88, "h": 56, "label": "short console"},
+        {"x": 860, "y": 664, "w": 128, "h": 76, "label": "terminal pair"},
+        {"x": 1026, "y": 672, "w": 110, "h": 66, "label": "low data crate"},
+        {"x": 1152, "y": 682, "w": 94, "h": 58, "label": "magenta core crate"},
+        {"x": 1250, "y": 662, "w": 96, "h": 70, "label": "large console block"},
+        {"x": 1370, "y": 668, "w": 68, "h": 74, "label": "orange terminal"},
+        {"x": 1468, "y": 668, "w": 70, "h": 74, "label": "server sidecar"},
+        {"x": 1554, "y": 684, "w": 78, "h": 58, "label": "flat cable console"},
+        {"x": 1628, "y": 668, "w": 68, "h": 74, "label": "tower console"},
+        {"x": 1712, "y": 686, "w": 124, "h": 42, "label": "pipe rail"}
+      ]
+    }
+  }
+}
