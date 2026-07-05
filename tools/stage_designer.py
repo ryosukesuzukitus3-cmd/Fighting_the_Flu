@@ -27,7 +27,6 @@ from src.entities.stage3_composer_terrain import (  # noqa: E402
     build_stage3_piece_layout,
     draw_stage3_composer_layout,
     load_stage3_composer_pieces,
-    render_stage3_composer_surface,
 )
 from src.entities.enemies.crawler import EnemyCrawler  # noqa: E402
 from src.entities.enemies.debris import _rock_sprite  # noqa: E402
@@ -647,6 +646,10 @@ class StageDesigner:
         self.undo_stack: list[dict[str, Any]] = []
         self._terrain_cache_key: str | None = None
         self._terrain_cache: tuple[list[Any], dict[str, list[Any]]] | None = None
+        self._composer_layout_cache_key: str | None = None
+        self._composer_layout_cache: Stage3ComposerLayout | None = None
+        self._piece_layout_cache_key: str | None = None
+        self._piece_layout_cache: tuple[Stage3ComposerLayout, dict[str, list[Any]]] | None = None
         self._backdrop_cache: dict[tuple[int, int], pygame.Surface] = {}
 
     @property
@@ -673,6 +676,10 @@ class StageDesigner:
     def _invalidate_terrain_cache(self) -> None:
         self._terrain_cache_key = None
         self._terrain_cache = None
+        self._composer_layout_cache_key = None
+        self._composer_layout_cache = None
+        self._piece_layout_cache_key = None
+        self._piece_layout_cache = None
 
     def _terrain(self) -> tuple[list[Any], dict[str, list[Any]]]:
         key = json.dumps(_layout(self.data), sort_keys=True, ensure_ascii=False)
@@ -685,11 +692,48 @@ class StageDesigner:
         self._terrain_cache = (segments, pieces)
         return self._terrain_cache
 
+    def _composer_layout(self) -> Stage3ComposerLayout:
+        layout = _layout(self.data)
+        length = _stage_length(self.data)
+        key = "composer:" + json.dumps(
+            {
+                "layout": layout,
+                "length": length,
+                "height": SCREEN_HEIGHT,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        if (
+            getattr(self, "_composer_layout_cache_key", None) == key
+            and getattr(self, "_composer_layout_cache", None) is not None
+        ):
+            return self._composer_layout_cache
+        segments, pieces = self._terrain()
+        composer_layout = build_stage3_composer_layout(
+            segments,
+            pieces,
+            start_x=0,
+            end_x=length,
+            height=SCREEN_HEIGHT,
+            sample_step=int(layout.get("composer_sample_step", 48)),
+            tolerance=int(layout.get("composer_tolerance", 26)),
+            collision_step=int(layout.get("composer_collision_step", 8)),
+            collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
+            overlap=int(layout.get("composer_overlap", 0)),
+        )
+        self._composer_layout_cache_key = key
+        self._composer_layout_cache = composer_layout
+        return composer_layout
+
     def _piece_layout(self) -> tuple[Stage3ComposerLayout, dict[str, list[Any]]]:
         layout = _layout(self.data)
         key = "pieces:" + json.dumps(layout, sort_keys=True, ensure_ascii=False)
-        if self._terrain_cache is not None and self._terrain_cache_key == key:
-            return self._terrain_cache
+        if (
+            getattr(self, "_piece_layout_cache_key", None) == key
+            and getattr(self, "_piece_layout_cache", None) is not None
+        ):
+            return self._piece_layout_cache
         pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
         composer_layout = build_stage3_piece_layout(
             layout,
@@ -698,9 +742,9 @@ class StageDesigner:
             collision_step=int(layout.get("composer_collision_step", 8)),
             collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
         )
-        self._terrain_cache_key = key
-        self._terrain_cache = (composer_layout, pieces)
-        return self._terrain_cache
+        self._piece_layout_cache_key = key
+        self._piece_layout_cache = (composer_layout, pieces)
+        return self._piece_layout_cache
 
     def _composer_pieces(self) -> dict[str, list[Any]]:
         key = (str(self.rects_path), str(self.mask_dir))
@@ -2251,18 +2295,8 @@ class StageDesigner:
             composer_layout, _pieces = self._piece_layout()
             draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
         else:
-            segments, pieces = self._terrain()
-            render_stage3_composer_surface(
-                world_view,
-                segments,
-                pieces,
-                camera_x=self.camera_x,
-                sample_step=int(layout.get("composer_sample_step", 48)),
-                tolerance=int(layout.get("composer_tolerance", 26)),
-                collision_step=int(layout.get("composer_collision_step", 8)),
-                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
-                overlap=int(layout.get("composer_overlap", 0)),
-            )
+            composer_layout = self._composer_layout()
+            draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
         crop = pygame.Rect(0, crop_y, visible_w, visible_h)
         view = pygame.Surface((visible_w, visible_h), pygame.SRCALPHA)
         view.blit(world_view, (0, max(0, int(round(-self.camera_y)))), crop)

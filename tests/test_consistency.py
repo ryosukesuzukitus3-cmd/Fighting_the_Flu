@@ -1888,6 +1888,47 @@ def test_stage_designer_piece_palette_uses_stable_asset_identity() -> None:
     assert next(iter(designer._piece_preview_cache.values())) is cached_preview
 
 
+def test_stage_designer_caches_strip_composer_layout_across_scroll() -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "stage_id": 2,
+        "terrain_layout": [
+            {
+                "type": "TerrainStrip",
+                "length": 1200,
+                "segment_w": 48,
+                "seed": 202,
+                "gap_min": 358,
+                "gap_max": 468,
+                "center_y": 300,
+                "center_wave": 88,
+                "top_min": 24,
+                "bottom_min": 28,
+                "irregularity": 78,
+                "start_offset": -90,
+            }
+        ],
+        "world_events": [],
+    }
+    designer.rects_path = ROOT / "tools" / "stage2_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage2_terrain_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    first = designer._composer_layout()
+    designer.camera_x = 420.0
+    second = designer._composer_layout()
+
+    assert second is first
+    assert [placement.asset for placement in second.placements] == [placement.asset for placement in first.placements]
+
+
 def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
     from tools.stage_designer import _set_event_x
 
