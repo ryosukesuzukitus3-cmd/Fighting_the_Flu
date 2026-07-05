@@ -1857,6 +1857,37 @@ def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:
     assert designer.selection == Selection("event", 0)
 
 
+def test_stage_designer_piece_palette_uses_stable_asset_identity() -> None:
+    from types import SimpleNamespace
+
+    import pygame
+
+    from tools.stage_designer import StageDesigner
+
+    pygame.font.init()
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.mode = "terrain"
+    designer.piece_palette_role = "floor_surface"
+    designer.font = pygame.font.Font(None, 16)
+    designer.small_font = pygame.font.Font(None, 13)
+    designer._piece_preview_cache = {}
+
+    image = pygame.Surface((220, 80), pygame.SRCALPHA)
+    selected_piece = SimpleNamespace(group="strip_top", index=0, image=image)
+    visible_piece = SimpleNamespace(group="strip_top", index=0, image=image)
+    designer._current_piece_role = lambda: "floor_surface"  # type: ignore[method-assign]
+    designer._current_piece_asset = lambda: selected_piece  # type: ignore[method-assign]
+
+    target = pygame.Surface((180, 96), pygame.SRCALPHA)
+    rect = pygame.Rect(8, 8, 120, 76)
+    designer._draw_piece_cell(target, rect, "floor_surface", visible_piece)
+    cached_preview = next(iter(designer._piece_preview_cache.values()))
+    designer._draw_piece_cell(target, rect, "floor_surface", visible_piece)
+
+    assert target.get_at(rect.topleft)[:3] == (91, 232, 188)
+    assert next(iter(designer._piece_preview_cache.values())) is cached_preview
+
+
 def test_stage_designer_moves_boss_gate_as_one_unit() -> None:
     from tools.stage_designer import _set_event_x
 

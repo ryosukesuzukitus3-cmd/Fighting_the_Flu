@@ -639,6 +639,9 @@ class StageDesigner:
         self.palette_drag: dict[str, Any] | None = None
         self._palette_hitboxes: list[tuple[pygame.Rect, dict[str, Any]]] = []
         self._event_image_cache: dict[str, pygame.Surface] = {}
+        self._piece_preview_cache: dict[tuple[str, int, int, int], pygame.Surface] = {}
+        self._composer_piece_cache_key: tuple[str, str] | None = None
+        self._composer_piece_cache: dict[str, list[Any]] | None = None
         self.message = f"Ready: {self.profile.label}"
         self.dirty = False
         self.undo_stack: list[dict[str, Any]] = []
@@ -700,10 +703,22 @@ class StageDesigner:
         return self._terrain_cache
 
     def _composer_pieces(self) -> dict[str, list[Any]]:
-        return load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        key = (str(self.rects_path), str(self.mask_dir))
+        if (
+            getattr(self, "_composer_piece_cache_key", None) == key
+            and getattr(self, "_composer_piece_cache", None) is not None
+        ):
+            return self._composer_piece_cache  # type: ignore[return-value]
+        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        self._composer_piece_cache_key = key
+        self._composer_piece_cache = pieces
+        if not hasattr(self, "_piece_preview_cache"):
+            self._piece_preview_cache = {}
+        self._piece_preview_cache.clear()
+        return pieces
 
-    def _piece_roles(self) -> list[str]:
-        pieces = self._composer_pieces()
+    def _piece_roles(self, pieces: dict[str, list[Any]] | None = None) -> list[str]:
+        pieces = pieces or self._composer_pieces()
         roles = [role for role in PIECE_ROLE_ORDER if pieces.get(role)]
         return roles or [role for role, values in pieces.items() if values]
 
@@ -714,9 +729,14 @@ class StageDesigner:
             self.piece_palette_index = 0
         return self.piece_palette_role
 
-    def _piece_palette_options(self, role: str | None = None) -> list[Any]:
+    def _piece_palette_options(
+        self,
+        role: str | None = None,
+        pieces: dict[str, list[Any]] | None = None,
+    ) -> list[Any]:
         role = role or self._current_piece_role()
-        return self._composer_pieces().get(role, [])
+        pieces = pieces or self._composer_pieces()
+        return pieces.get(role, [])
 
     def _current_piece_asset(self) -> Any | None:
         options = self._piece_palette_options()
@@ -1979,16 +1999,25 @@ class StageDesigner:
 
     def _draw_piece_cell(self, target: pygame.Surface, rect: pygame.Rect, role: str, piece: Any) -> None:
         asset = _piece_asset_id(piece)
-        selected = self.mode == "terrain" and role == self._current_piece_role() and self._current_piece_asset() is piece
+        selected_piece = self._current_piece_asset()
+        selected_asset = _piece_asset_id(selected_piece) if selected_piece is not None else ""
+        selected = self.mode == "terrain" and role == self._current_piece_role() and asset == selected_asset
         color = (91, 232, 188) if selected else (72, 92, 96)
         pygame.draw.rect(target, (8, 12, 15), rect)
         pygame.draw.rect(target, color, rect, 2 if selected else 1)
         image = piece.image
         scale = min(1.0, (rect.width - 12) / max(1, image.get_width()), 44 / max(1, image.get_height()))
-        preview = image if scale >= 1.0 else pygame.transform.smoothscale(
-            image,
-            (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale))),
-        )
+        if scale >= 1.0:
+            preview = image
+        else:
+            preview_size = (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale)))
+            if not hasattr(self, "_piece_preview_cache"):
+                self._piece_preview_cache = {}
+            cache_key = (asset, id(image), preview_size[0], preview_size[1])
+            preview = self._piece_preview_cache.get(cache_key)
+            if preview is None:
+                preview = pygame.transform.smoothscale(image, preview_size)
+                self._piece_preview_cache[cache_key] = preview
         target.blit(preview, (rect.x + 6, rect.y + 6))
         label = self.small_font.render(asset, True, (220, 232, 228))
         target.blit(label, (rect.x + 6, rect.bottom - 18))
@@ -2032,9 +2061,10 @@ class StageDesigner:
         y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
 
         y += title_h
-        for role in self._piece_roles():
+        pieces = self._composer_pieces()
+        for role in self._piece_roles(pieces):
             y += title_h
-            options = self._piece_palette_options(role)
+            options = self._piece_palette_options(role, pieces)
             for i, piece in enumerate(options):
                 col = i % cols
                 row = i // cols
@@ -2093,9 +2123,10 @@ class StageDesigner:
 
         y += self._draw_palette_title(target, "Terrain Pieces", (x0, y))
         piece_h = 76
-        for role in self._piece_roles():
+        pieces = self._composer_pieces()
+        for role in self._piece_roles(pieces):
             y += self._draw_palette_title(target, role, (x0, y))
-            options = self._piece_palette_options(role)
+            options = self._piece_palette_options(role, pieces)
             for i, piece in enumerate(options):
                 col = i % cols
                 row = i // cols
