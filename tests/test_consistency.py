@@ -891,7 +891,9 @@ def test_story_speakers_are_registered() -> None:
     for grp in (list(script.BOSS_INTRO.values()) + list(script.BOSS_MID.values())
                 + list(script.BOSS_DEFEAT.values())
                 + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())
-                + list(script.TUTORIAL.values())):
+                + list(script.TUTORIAL.values())
+                + [script.BILLY_SPAWN_BARKS, script.BILLY_KILL_BARKS,
+                   script.SAKURA_LAST_WORDS]):
         used.update(ln.speaker for ln in grp)
     # 全画面会話の話者は STORY_BEATS のページから収集する。
     for beat in script.STORY_BEATS:
