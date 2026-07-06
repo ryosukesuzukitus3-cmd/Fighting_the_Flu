@@ -361,7 +361,9 @@ def check_story() -> None:
     line_groups = list(script.BOSS_INTRO.values()) + list(script.BOSS_MID.values()) \
                   + list(script.BOSS_DEFEAT.values()) \
                   + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values()) \
-                  + list(script.TUTORIAL.values())
+                  + list(script.TUTORIAL.values()) \
+                  + [script.BILLY_SPAWN_BARKS, script.BILLY_KILL_BARKS,
+                     script.SAKURA_LAST_WORDS]
     for grp in line_groups:
         for ln in grp:
             used.add(ln.speaker)

@@ -60,7 +60,10 @@ class GameSceneBossFxMixin:
             else:
                 n = b._summoned_alive() if hasattr(b, "_summoned_alive") else 0
                 if n > 0:
-                    label, lcol = f"DRONE SHIELD x{n}", (160, 230, 255)
+                    if getattr(b, "_stage_id", 0) == 3:
+                        label, lcol = f"サクラ x{n}", (255, 170, 200)
+                    else:
+                        label, lcol = f"DRONE SHIELD x{n}", (160, 230, 255)
 
         if label:
             surf = self.game.resources.pixelfont(20).render(label, True, lcol)

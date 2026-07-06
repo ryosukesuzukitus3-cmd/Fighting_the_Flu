@@ -49,9 +49,9 @@ class HUD:
         hp_label = self._label_font.render(f"HP {max(0, player.hp)}/{player.max_hp}", True, (255, 255, 255))
         screen.blit(hp_label, (hp_x + _HP_BAR_W + 8, hp_y + 1))
 
-        # 残機（HP バーの下）
+        # 残機＝「有給」表記（HP バーの下）
         if lives > 0:
-            lives_surf = self._label_font.render(f"残機: {lives}", True, (160, 100, 220))
+            lives_surf = self._label_font.render(f"有給: {lives}日", True, (160, 100, 220))
             screen.blit(lives_surf, (hp_x + _HP_BAR_W + 8, hp_y - 14))
 
         # 武器レベル

@@ -19,7 +19,7 @@ from src.story.speakers import (
     SAWAGUCHI as S, KARONARU as K, KARONARU_MAX as KM,
     NARRATION as N, UNKNOWN as Q, SYSTEM as SYS,
     BOSS1, BOSS2, BOSS2_FORM2, BOSS3, BOSS4, BOSS4_FORM2, BOSS_SAWAGUCHI,
-    TUTORIAL_DUMMY as DUMMY,
+    TUTORIAL_DUMMY as DUMMY, BILLY, SAKURA,
 )
 
 
@@ -486,6 +486,30 @@ BOSS_DEFEAT: dict[int, list[Line]] = {
 
 
 # ════════════════════════════════════════════════════════════════════
+# 道中の中ボス「ビリー」バーク（登場/撃破時にランダムで1つ・紫パネル）
+#   撃破時は ENEMY_DEFS の SE「アｯー♂」が同時に鳴る。
+# ════════════════════════════════════════════════════════════════════
+BILLY_SPAWN_BARKS: list[Line] = [
+    Line(BILLY, "ん？"),
+    Line(BILLY, "いいゾ〜これ"),
+    Line(BILLY, "やりますねぇ！"),
+    Line(BILLY, "ファッ！？"),
+]
+BILLY_KILL_BARKS: list[Line] = [
+    Line(BILLY, "お前のことが好きだったんだよ！"),
+    Line(BILLY, "あーもうめちゃくちゃだよ"),
+]
+
+# ════════════════════════════════════════════════════════════════════
+# S3 サクラ子機 — 最後の1機を撃破した瞬間の一言
+#   （ボス撃破後のフル文「けど、けれどね、私にも、…」への前フリ）
+# ════════════════════════════════════════════════════════════════════
+SAKURA_LAST_WORDS: list[Line] = [
+    Line(SAKURA, "けど、けれどね……"),
+]
+
+
+# ════════════════════════════════════════════════════════════════════
 # ステージ間の会話（物語タイムラインの遷移ビート本文）
 #   ステージに束縛しない。STORY_BEATS が "1->2" / "2->3" / "3->4_void"
 #   として並びに組み込む。1境界＝1シーンで地続きに再生される。
@@ -677,6 +701,8 @@ CREDITS: list[Page] = [
     page(SYS, "婚活要塞マッチング・ゼロ"),
     page(SYS, "棋理の化身　藤井竜王"),
     page(SYS, "投了王サワグチ"),
+    page(SYS, "ビリー"),
+    page(SYS, "サクラ"),
     page(SYS, "/ 全役 …… ゾル鈴木"),
 
     page(SYS, "■ MUSIC"),

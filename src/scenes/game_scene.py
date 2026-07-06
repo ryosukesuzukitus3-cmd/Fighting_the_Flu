@@ -40,6 +40,7 @@ from src.scenes.game.config import (
 # セリフ内容の SSOT
 from src.story.script import (
     BOSS_INTRO, BOSS_MID, STAGE_BG_TEXT,
+    BILLY_SPAWN_BARKS, BILLY_KILL_BARKS, SAKURA_LAST_WORDS,
 )
 # 被ダメージ／反撃ダメージ定数
 from src.core.balance import (
@@ -430,6 +431,7 @@ class GameScene(
 
         if self._stage_banner_timer <= 0 and self._is_normal_play:
             self.spawner.update(dt, self.camera)
+            self._check_billy_spawn_bark()
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
         if self.spawner.boss_gate_pending and self._is_normal_play:
@@ -1161,6 +1163,7 @@ class GameScene(
         self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
 
         if etype == "EnemyBilly":
+            self._enqueue_boss_dialogue([random.choice(BILLY_KILL_BARKS)], BOSS_MID_LINE_DURATION)
             from src.entities.items.heal import HealItem
             self._add_weapon_drop(
                 enemy.world_x + random.uniform(-40, 40),
@@ -1171,6 +1174,10 @@ class GameScene(
                     enemy.world_x + random.uniform(-60, 60),
                     enemy.world_y + random.uniform(-40, 40),
                 ))
+        elif etype == "MatchingZeroDrone":
+            # enemy.kill() 済みなので残存数 0 ＝最後の1機を撃破した瞬間
+            if not any(type(e).__name__ == "MatchingZeroDrone" for e in self.enemies):
+                self._enqueue_boss_dialogue(list(SAKURA_LAST_WORDS), BOSS_MID_LINE_DURATION)
         else:
             if self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y):
                 return
@@ -1243,6 +1250,13 @@ class GameScene(
             txt  = font.render(it["text"], True, (70, 70, 95))
             txt.set_alpha(70)
             surf.blit(txt, (int(it["x"]), int(it["y"])))
+
+    def _check_billy_spawn_bark(self) -> None:
+        """ビリー（中ボス格）の初登場時に語録バークをランダムで1つ流す。"""
+        for enemy in self.enemies:
+            if type(enemy).__name__ == "EnemyBilly" and not getattr(enemy, "_bark_done", False):
+                enemy._bark_done = True
+                self._enqueue_boss_dialogue([random.choice(BILLY_SPAWN_BARKS)], BOSS_MID_LINE_DURATION)
 
     def _enqueue_boss_dialogue(self, lines: list, line_duration: float | None = None) -> None:
         """Start timed boss dialogue and queue remaining lines."""
