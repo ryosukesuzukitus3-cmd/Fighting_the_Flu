@@ -426,7 +426,7 @@ _PHASE_CONFIGS = {
 ```
 
 ボスの静止画確認は `tools/capture_boss_concepts.py` で `captures/boss*_*.png` に出力できる。
-Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/graphic/boss_matching_zero.png` を原画として保存している。戦闘中は `boss_matching_zero_body.png` と3枚の `boss_matching_zero_drone_*.png` に分割した素材を使い、子機は破壊可能なシールドノードとして本体防御に関わる。奥の子機は本体の陰に隠れている扱いで通常弾を弾き、`LaserBeam` の貫通ダメージでのみ破壊できる。`rock_fall` の落石は地形反射/衝突演出を出さない貫通弾として扱う。
+Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/graphic/boss_matching_zero.png` を原画として保存している。戦闘中は `boss_matching_zero_body.png` と3枚の `sakura_drone_*.png`（マッチングアプリ風の円形サクラアイコン）を使い、子機「サクラ」は破壊可能なシールドノードとして本体防御に関わる。奥の子機は本体の陰に隠れている扱いで通常弾を弾き、`LaserBeam` の貫通ダメージでのみ破壊できる。`rock_fall` の落石は地形反射/衝突演出を出さない貫通弾として扱う。
 
 ### 5.7 balance.py（ステージ別スケーリング定数）
 

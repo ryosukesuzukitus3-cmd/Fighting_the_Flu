@@ -14,10 +14,11 @@ if TYPE_CHECKING:
     from src.entities.enemies.boss import Boss
     from src.entities.player import Player
 
+# 見た目はマッチングアプリ風プロフィールアイコン（＝サクラ）。円形・ピンクリング。
 _DRONE_IMAGES = (
-    "graphic/boss_matching_zero_drone_a.png",
-    "graphic/boss_matching_zero_drone_b.png",
-    "graphic/boss_matching_zero_drone_c.png",
+    "graphic/sakura_drone_a.png",
+    "graphic/sakura_drone_b.png",
+    "graphic/sakura_drone_c.png",
 )
 _DRONE_OFFSETS = (
     (-205.0, -120.0),
