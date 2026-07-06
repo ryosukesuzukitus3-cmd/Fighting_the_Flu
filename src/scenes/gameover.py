@@ -75,7 +75,7 @@ class GameOverScene(Scene):
         y = 415
         if self._lives > 0:
             cont = self._info_font.render(
-                f"ENTER : コンティニュー  (残機 {self._lives})", True, (100, 255, 150)
+                f"ENTER : 有給をもう1日使う  (残り{self._lives}日)", True, (100, 255, 150)
             )
             screen.blit(cont, (cx - cont.get_width() // 2, y))
             y += 36
