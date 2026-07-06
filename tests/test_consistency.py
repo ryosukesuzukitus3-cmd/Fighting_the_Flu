@@ -1857,6 +1857,33 @@ def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:
     assert designer.selection == Selection("event", 0)
 
 
+def test_stage_designer_stage2_block_previews_use_rect_roles() -> None:
+    from tools.stage_designer import StageDesigner, _event_material_role, _event_templates_for_kind
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.rects_path = ROOT / "tools" / "stage2_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage2_terrain_alpha_masks"
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+
+    expected = {
+        "solid block": "fixed_floor_block",
+        "ceiling block": "fixed_ceiling_block",
+        "turret mount": "turret_mount",
+        "breakable gate": "breakable_block",
+        "weapon gate": "breakable_block",
+    }
+    templates = dict(_event_templates_for_kind("data_block"))
+
+    for name, role in expected.items():
+        event = templates[name]
+        image = designer._event_rect_image(event, int(event["w"]), int(event["h"]))
+        role_images = [piece.image for piece in designer._composer_pieces()[role]]
+
+        assert _event_material_role(event) == role
+        assert any(image is role_image for role_image in role_images)
+
+
 def test_stage_designer_piece_palette_uses_stable_asset_identity() -> None:
     from types import SimpleNamespace
 

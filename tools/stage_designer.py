@@ -471,6 +471,19 @@ def _piece_defaults(role: str) -> dict[str, Any]:
     return {"role": role, "collision": "none", "side": "bottom"}
 
 
+def _event_material_role(event: dict[str, Any]) -> str | None:
+    etype = str(event.get("type", ""))
+    if etype == "turret_mount":
+        return "turret_mount"
+    if etype in {"breakable_gate", "weapon_gate"}:
+        return "breakable_block"
+    if etype in RECT_TERRAIN_TYPES:
+        if str(event.get("surface_anchor", "floor")) == "ceiling":
+            return "fixed_ceiling_block"
+        return "fixed_floor_block"
+    return None
+
+
 def _clean_guide_points(points: list[Any]) -> list[list[int]]:
     by_x: dict[int, list[int]] = {}
     for point in points:
@@ -794,6 +807,23 @@ class StageDesigner:
         asset = _piece_asset_id(piece) if piece is not None else "-"
         return f"piece palette: {self._current_piece_role()} {asset}"
 
+    def _event_rect_image(self, event: dict[str, Any], w: int, h: int) -> pygame.Surface | None:
+        role = _event_material_role(event)
+        if role is None:
+            return None
+        pieces = list(self._composer_pieces().get(role, []))
+        if not pieces:
+            return None
+        aspect = w / max(1, h)
+        ranked = sorted(
+            pieces,
+            key=lambda piece: (
+                abs((piece.image.get_width() / max(1, piece.image.get_height())) - aspect),
+                abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
+            ),
+        )
+        return ranked[0].image
+
     def _event_templates(self) -> list[tuple[str, dict[str, Any]]]:
         return getattr(self, "event_templates", EVENT_TEMPLATES)
 
@@ -852,8 +882,10 @@ class StageDesigner:
 
     def _event_image(self, event: dict[str, Any], *, max_w: int = 64, max_h: int = 52) -> pygame.Surface:
         etype = str(event.get("type", ""))
+        material_role = str(event.get("material_role", _event_material_role(event) or ""))
         key = (
             f"{etype}:{event.get('kind', '')}:{event.get('surface', '')}:"
+            f"{event.get('surface_anchor', '')}:{material_role}:{event.get('fixed_drop', '')}:"
             f"{event.get('enhanced', False)}:{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
         )
         if key in self._event_image_cache:
@@ -888,6 +920,10 @@ class StageDesigner:
         if image is None and etype in RECT_TERRAIN_TYPES:
             w = max(24, int(event.get("w", 72)))
             h = max(24, int(event.get("h", 54)))
+            image = self._event_rect_image(event, w, h)
+        if image is None and etype in RECT_TERRAIN_TYPES:
+            w = max(24, int(event.get("w", 72)))
+            h = max(24, int(event.get("h", 54)))
             image = Terrain._make_surface(
                 w,
                 h,
@@ -895,6 +931,7 @@ class StageDesigner:
                 destructible=bool(event.get("destructible") or etype in {"breakable_gate", "weapon_gate"}),
                 fixed_drop="WeaponItem" if etype == "weapon_gate" else None,
                 surface_anchor=str(event.get("surface_anchor", "floor")),
+                material_role=material_role or None,
             )
         if image is None:
             image = pygame.Surface((42, 42), pygame.SRCALPHA)
