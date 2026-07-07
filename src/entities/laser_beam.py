@@ -8,6 +8,7 @@ import math
 import random
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.balance import STANCE_LASER_TICK
 from src.entities.terrain_query import iter_collidable_terrain
 
 # ─── アニメーション共通 ──────────────────────────────────────────
@@ -223,7 +224,8 @@ class LaserBeam:
                 was_form2 = bool(getattr(boss, "_form2", False))
                 was_form3 = bool(getattr(boss, "_form3", False))
                 self.boss_was_hit = True
-                self.boss_killed = bool(boss.take_damage(1))
+                # レーザーは体幹ブレイカー（HP 1/tick に対し体幹は大きく削る）
+                self.boss_killed = bool(boss.take_damage(1, stance=STANCE_LASER_TICK))
                 self.boss_form2_transition = (
                     not was_form2 and bool(getattr(boss, "_form2", False))
                 )
