@@ -1,4 +1,4 @@
-"""Interactive editor for Stage3 terrain alpha masks.
+"""Interactive editor for stage terrain alpha masks.
 
 The mask PNGs use white pixels for transparent areas and black pixels for
 opaque areas. The terrain composer prefers these manual masks when they exist.
@@ -106,7 +106,7 @@ class Stage3AlphaMaskEditor:
         self.rect_index = max(0, min(args.index, max(0, len(self.current_rects) - 1)))
 
         self.screen = pygame.display.set_mode((args.window_w, args.window_h), pygame.RESIZABLE)
-        pygame.display.set_caption("Stage3 alpha mask editor")
+        pygame.display.set_caption("Stage alpha mask editor")
         self.font = _font(16)
         self.small_font = _font(13)
         self.zoom = max(0.2, args.zoom)
@@ -664,7 +664,10 @@ class Stage3AlphaMaskEditor:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Edit manual alpha masks for Stage3 terrain rects")
+    parser = argparse.ArgumentParser(
+        prog="stage-alpha-mask-editor",
+        description="Edit manual alpha masks for stage terrain rects",
+    )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Rect JSON path")
     parser.add_argument("--sheet", default="", help="Override terrain sheet path")
     parser.add_argument("--mask-dir", default=str(DEFAULT_MASK_DIR), help="Directory for mask PNGs")
@@ -686,7 +689,7 @@ def main(argv: list[str] | None = None) -> int:
         Stage3AlphaMaskEditor(args).run()
         return 0
     except Exception as exc:
-        print(f"[stage3-alpha-mask-editor] error: {exc}")
+        print(f"[stage-alpha-mask-editor] error: {exc}")
         return 1
     finally:
         pygame.quit()

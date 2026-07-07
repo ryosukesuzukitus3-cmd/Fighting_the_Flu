@@ -1801,6 +1801,12 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     assert ".venv" in src
     assert "stage3-composer-report" in src
     assert "stage-designer" in src
+    assert "stage-rect-preview" in src
+    assert "stage-rect-editor" in src
+    assert "stage-alpha-mask-editor" in src
+    assert "stage3-rect-preview" in src
+    assert "stage3-rect-editor" in src
+    assert "stage3-alpha-mask-editor" in src
 
 
 def test_stage_designer_formats_stage_json_for_hand_editing() -> None:

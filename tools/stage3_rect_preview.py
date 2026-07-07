@@ -1,13 +1,13 @@
-"""Preview Stage3 terrain source rects.
+"""Preview stage terrain source rects.
 
 Rect definitions live in JSON so they can be edited while checking pixel
 coordinates in Paint or another image editor.
 
 Examples:
-  python tools/stage3_rect_preview.py
-  python tools/stage3_rect_preview.py --group block_wide --group block_square
-  python tools/stage3_rect_preview.py --out captures/stage3_rect_check
-  python tools/stage3_rect_preview.py --open
+  python tools/run.py stage-rect-preview
+  python tools/run.py stage-rect-preview --group block_wide --group block_square
+  python tools/run.py stage-rect-preview --out captures/stage_rect_check
+  python tools/run.py stage-rect-preview --open
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ import pygame
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "tools" / "stage3_terrain_rects.json"
-DEFAULT_OUT = ROOT / "captures" / "stage3_rect_preview"
+DEFAULT_OUT = ROOT / "captures" / "stage_rect_preview"
 PALETTE = (
     (255, 91, 91),
     (255, 190, 64),
@@ -241,7 +241,7 @@ def _write_index(paths: list[Path], out: Path) -> Path:
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Stage3 Rect Preview</title>
+  <title>Stage Rect Preview</title>
   <style>
     body {{
       margin: 24px;
@@ -265,7 +265,7 @@ def _write_index(paths: list[Path], out: Path) -> Path:
   </style>
 </head>
 <body>
-  <h1>Stage3 Rect Preview</h1>
+  <h1>Stage Rect Preview</h1>
   {body}
 </body>
 </html>
@@ -290,22 +290,26 @@ def _open_file(path: Path) -> bool:
         else:
             subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as exc:
-        print(f"[stage3-rect-preview] open failed: {exc}")
+        print(f"[stage-rect-preview] open failed: {exc}")
         return False
     return True
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--config", default=str(DEFAULT_CONFIG), help="rect定義JSON")
-    p.add_argument("--sheet", default=None, help="素材画像。未指定ならconfigのsheet")
-    p.add_argument("--out", default=str(DEFAULT_OUT), help="出力ファイルprefix")
-    p.add_argument("--group", action="append", default=[], help="出力するグループ名。複数指定/カンマ区切り可")
-    p.add_argument("--grid-step", type=int, default=100, help="overlayに描く座標グリッド間隔。0で無効")
-    p.add_argument("--cell-w", type=int, default=240, help="グループ一覧の1セル幅")
-    p.add_argument("--cell-h", type=int, default=190, help="グループ一覧の1セル高さ")
-    p.add_argument("--cols", type=int, default=4, help="グループ一覧の列数")
-    p.add_argument("--max-preview-h", type=int, default=120, help="グループ一覧内の切り出し表示最大高さ")
+    p = argparse.ArgumentParser(
+        prog="stage-rect-preview",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("--config", default=str(DEFAULT_CONFIG), help="rect definition JSON")
+    p.add_argument("--sheet", default=None, help="override source sheet image path")
+    p.add_argument("--out", default=str(DEFAULT_OUT), help="output file prefix")
+    p.add_argument("--group", action="append", default=[], help="group name to preview; repeat or comma-separate")
+    p.add_argument("--grid-step", type=int, default=100, help="overlay coordinate grid spacing; 0 disables it")
+    p.add_argument("--cell-w", type=int, default=240, help="group preview cell width")
+    p.add_argument("--cell-h", type=int, default=190, help="group preview cell height")
+    p.add_argument("--cols", type=int, default=4, help="group preview column count")
+    p.add_argument("--max-preview-h", type=int, default=120, help="maximum crop height inside group previews")
     p.add_argument("--open", dest="open_preview", action="store_true", help="open the generated HTML preview")
     p.add_argument("--no-open", dest="open_preview", action="store_false", help="do not open the generated HTML preview")
     p.set_defaults(open_preview=None)
@@ -340,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         index_path = _write_index(paths, out)
     except (OSError, json.JSONDecodeError, pygame.error, ValueError) as exc:
-        print(f"[stage3-rect-preview] error: {exc}")
+        print(f"[stage-rect-preview] error: {exc}")
         return 2
 
     for path in paths:
