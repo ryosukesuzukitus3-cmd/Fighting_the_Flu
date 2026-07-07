@@ -18,6 +18,7 @@ class HUD:
     def __init__(self, game: Game) -> None:
         self._font       = game.resources.pixelfont(22)
         self._label_font = game.resources.pixelfont(14)
+        self._bomb_key   = game.settings.key_display("bomb")
 
     def draw(
         self,
@@ -29,6 +30,8 @@ class HUD:
         boss=None,
         laser: LaserBeam | None = None,
         lives: int = 0,
+        heat=None,
+        pieces: list[str] | None = None,
     ) -> None:
         # スコア
         score_surf = self._font.render(f"SCORE: {score}", True, (255, 255, 255))
@@ -114,6 +117,34 @@ class HUD:
             label = self._label_font.render(label_txt, True, label_col)
             screen.blit(label, (bar_x + bar_w + 6, bar_y - 2))
 
+        # ── 体温計（バトルv2: 撃つと上がり、休むと下がる。39.9℃で熱暴走）──
+        if heat is not None:
+            tx, ty = 10, 176
+            tw, th = 120, 8
+            hr = heat.ratio
+            pygame.draw.rect(screen, (40, 24, 24), (tx, ty, tw, th), border_radius=3)
+            if heat.overheated:
+                blink = (pygame.time.get_ticks() // 160) % 2 == 0
+                col = (255, 70, 40) if blink else (255, 160, 60)
+            elif hr < 0.6:
+                col = (110, 220, 130)
+            elif hr < 0.85:
+                col = (255, 200, 60)
+            else:
+                col = (255, 90, 50)
+            pygame.draw.rect(screen, col, (tx, ty, int(tw * hr), th), border_radius=3)
+            pygame.draw.rect(screen, (120, 90, 90), (tx, ty, tw, th), 1, border_radius=3)
+            temp_txt = "熱暴走!!" if heat.overheated else f"{heat.display_temp:.1f}℃"
+            temp_col = (255, 80, 50) if heat.overheated else (230, 210, 200)
+            tl = self._label_font.render(f"体温 {temp_txt}", True, temp_col)
+            screen.blit(tl, (tx + tw + 6, ty - 3))
+
+        # ── 持ち駒（コンボ報酬。bomb キーで「打つ」）───────────────
+        if pieces is not None:
+            held = "・".join(pieces) if pieces else "なし"
+            ps = self._label_font.render(f"持駒 [{self._bomb_key}]: {held}", True, (255, 235, 170))
+            screen.blit(ps, (10, 192))
+
         # ボスHPバー
         if boss is not None:
             bar_w, bar_h = 400, 18
@@ -125,3 +156,18 @@ class HUD:
             pygame.draw.rect(screen, (255, 255, 255), (bx, by, bar_w, bar_h), 2, border_radius=4)
             label = self._font.render("BOSS", True, (255, 255, 255))
             screen.blit(label, (bx - label.get_width() - 8, by))
+
+            # 体幹ゲージ（バトルv2）: HPバー直上。ダウン中は点滅表示に切替
+            if getattr(boss, "is_stance_down", False):
+                blink = (pygame.time.get_ticks() // 150) % 2 == 0
+                if blink:
+                    dl = self._label_font.render("BREAK!  DAMAGE UP", True, (255, 215, 70))
+                    screen.blit(dl, (bx + bar_w // 2 - dl.get_width() // 2, by - 13))
+            else:
+                sr = boss.stance_ratio() if hasattr(boss, "stance_ratio") else None
+                if sr is not None:
+                    sy_ = by - 9
+                    pygame.draw.rect(screen, (35, 30, 12), (bx, sy_, bar_w, 6), border_radius=3)
+                    scol = (255, 205, 80) if sr > 0.35 else (255, 120, 70)
+                    pygame.draw.rect(screen, scol, (bx, sy_, int(bar_w * sr), 6), border_radius=3)
+                    pygame.draw.rect(screen, (150, 130, 70), (bx, sy_, bar_w, 6), 1, border_radius=3)
