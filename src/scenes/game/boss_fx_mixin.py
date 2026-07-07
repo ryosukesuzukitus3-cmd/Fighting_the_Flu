@@ -12,6 +12,7 @@ import math
 import pygame
 
 from src.core.constants import SCREEN_HEIGHT
+from src.core.balance import BATTLE_V2_ENABLED
 
 
 class GameSceneBossFxMixin:
@@ -26,14 +27,16 @@ class GameSceneBossFxMixin:
         if getattr(b, "_state", "fight") != "fight":
             return
         self._draw_boss_concept_fx(buf, b, cx, cy, r)
-        if gimmick is None:
-            return
 
         label = ""        # 頭上ラベル
         lcol  = (255, 220, 60)
+        down_now     = bool(getattr(b, "is_stance_down", False))
+        stance_ratio = b.stance_ratio() if hasattr(b, "stance_ratio") else None
 
         if gimmick == "shield":
-            if getattr(b, "_shield_active", False):
+            if getattr(b, "_down_timer", 0.0) > 0:
+                label, lcol = "BREAK!!  DAMAGE UP", (255, 215, 70)
+            elif getattr(b, "_shield_active", False):
                 ring = pygame.Surface((r * 2 + 6, r * 2 + 6), pygame.SRCALPHA)
                 pygame.draw.circle(ring, (80, 200, 255, 90), (r + 3, r + 3), r)
                 pygame.draw.circle(ring, (160, 230, 255, 220), (r + 3, r + 3), r, 3)
@@ -52,11 +55,13 @@ class GameSceneBossFxMixin:
                 label, lcol = "CORE EXPOSED!", (255, 90, 90)
             else:
                 label, lcol = "ARMOR", (180, 190, 210)
-                self._draw_armor_gauge(buf, b, cx, b.rect.top - 30)
+                if not BATTLE_V2_ENABLED:
+                    self._draw_armor_gauge(buf, b, cx, b.rect.top - 30)
 
         elif gimmick == "turrets":
             if getattr(b, "_stun_timer", 0.0) > 0:
-                label, lcol = "STUN  DAMAGE UP", (255, 220, 60)
+                text = "BREAK!!  DAMAGE UP" if BATTLE_V2_ENABLED else "STUN  DAMAGE UP"
+                label, lcol = text, (255, 220, 60)
             else:
                 n = b._summoned_alive() if hasattr(b, "_summoned_alive") else 0
                 if n > 0:
@@ -65,9 +70,25 @@ class GameSceneBossFxMixin:
                     else:
                         label, lcol = f"DRONE SHIELD x{n}", (160, 230, 255)
 
+        elif gimmick is None and getattr(b, "_down_timer", 0.0) > 0:
+            # ギミック無し形態（超サイヤ人ブロリー）の体幹ダウン
+            label, lcol = "BREAK!!  DAMAGE UP", (255, 215, 70)
+
+        # 体幹ゲージ本体は HUD（ボスHPバー直上）が描く。ここは頭上ラベルのみ。
+        _ = (down_now, stance_ratio)
+
         if label:
             surf = self.game.resources.pixelfont(20).render(label, True, lcol)
             buf.blit(surf, (cx - surf.get_width() // 2, b.rect.top - 26))
+
+        # 症状悪化オーラ（Form3 以外・進行度に応じた赤脈動リング）
+        er = float(getattr(b, "enrage_ratio", 0.0))
+        if er > 0.0 and not getattr(b, "_form3", False):
+            pulse = 0.5 + 0.5 * math.sin(getattr(b, "_time", 0.0) * 4.0)
+            aura = pygame.Surface((r * 2 + 24, r * 2 + 24), pygame.SRCALPHA)
+            alpha = int(er * (36 + 44 * pulse))
+            pygame.draw.circle(aura, (255, 60, 40, alpha), (r + 12, r + 12), r + 9, 4)
+            buf.blit(aura, (cx - r - 12, cy - r - 12), special_flags=pygame.BLEND_RGBA_ADD)
 
     def _draw_armor_gauge(self, buf: pygame.Surface, b, cx: int, y: int) -> None:
         """Draw a compact armor gauge for weakpoint gimmicks."""

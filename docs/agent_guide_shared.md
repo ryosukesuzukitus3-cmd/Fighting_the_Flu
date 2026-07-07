@@ -10,7 +10,7 @@
 | ステージ数 | `data/stages/stage*.json` → `registries.stage_ids()` |
 | ボス攻撃パターン一覧 | `src/entities/enemies/boss.py` > `_PHASE_CONFIGS`（`4f3`＝投了王サワグチ含む） |
 | 武器メインレベル | `src/entities/weapon.py` > `_MAIN_LEVELS` |
-| 難易度スケール | `src/core/balance.py` |
+| 難易度スケール・バトルv2定数（体幹/体温/持ち駒/症状悪化） | `src/core/balance.py`（純ロジックは `src/core/battle_systems.py`） |
 | ステージ名・ボス名 | `src/scenes/game/config.py` |
 | セリフ・ナレーション・カットシーン | `src/story/script.py` |
 | ステージ間会話・カットシーンの並び（物語タイムライン） | `src/story/script.py` > `STORY_BEATS`（再生は `src/scenes/story_flow.py`） |
