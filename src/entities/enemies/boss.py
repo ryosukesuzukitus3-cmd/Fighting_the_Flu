@@ -4,6 +4,11 @@ import random
 from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.balance import (
+    BATTLE_V2_ENABLED, ENRAGE_MAX_MULT, STANCE_DOWN_DUR, STANCE_DOWN_MULT,
+    STANCE_MAX, STANCE_REGEN_DELAY, STANCE_REGEN_RATE,
+)
+from src.core.battle_systems import enrage_mult
 from src.entities.bullets.enemy_bullet import EnemyBullet
 from src.entities.bullets.laser_fx import (
     ZUNDA_PALETTE,
@@ -91,7 +96,7 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.30, "vortex3",     0.36),
         (0.16, "shogi_drop",  0.95),
     ],
-    "4f3": [  # 投了王サワグチ Form3（最終形態・盤面崩壊の大技）
+    "4f3": [  # 頑固王サワグチ Form3（最終形態・盤面崩壊の大技）
         (1.00, "board_throw", 1.35),
         (0.82, "shogi_drop",  0.95),
         (0.64, "mega_beam",   1.90),
@@ -118,7 +123,7 @@ _FORM2_CONFIG = {
 _SSJ_HP    = 170
 _SSJ_SCALE = 2.25   # 通常ブロリー(2.0)より一回り大きい
 
-# 第三形態（投了王サワグチ）: max_hp（スプライトはダミー生成）
+# 第三形態（頑固王サワグチ）: max_hp（スプライトはダミー生成）
 #   ※専用画像なし。台本「澤口の影が巨大化」に沿いプレイヤー画像を暗紫・拡大したダミー。
 _FORM3_MAX_HP   = 260   # Act1（反芻再生あり）
 _FORM3_ACT2_HP  = 240   # Act2（最終ゲージ・反芻再生なし）
@@ -153,7 +158,7 @@ _GIMMICKS: dict[str | int, str] = {
     3:     "turrets",    # 婚活要塞マッチング・ゼロ
     4:     "shield",     # 藤井竜王 Form1
     "4f2": "weakpoint",  # 赤眼の真・藤井四段 Form2
-    # Form3（投了王サワグチ）は専用スクリプト演出のためギミックなし
+    # Form3（頑固王サワグチ）は専用スクリプト演出のためギミックなし
 }
 
 # shield ギミック
@@ -224,6 +229,16 @@ class Boss(pygame.sprite.Sprite):
         self.suction_y:      float = 0.0
         self._suction_timer: float = 0.0
 
+        # ── バトルv2: 体幹 / ダウン / 症状悪化 ─────────────────────
+        self._stance_max: float = float(STANCE_MAX.get(stage_id, 0.0))
+        self._stance:     float = self._stance_max
+        self._down_timer: float = 0.0
+        self._stance_regen_wait: float = 0.0
+        self._fight_time: float = 0.0
+        self.down_just_started:   bool = False   # game_scene が消費（BREAK/王手 演出）
+        self.enrage_just_started: bool = False   # game_scene が消費（症状悪化 演出）
+        self._enrage_notified:    bool = False
+
     def _load_image(self, path: str, scale: float) -> pygame.Surface:
         raw = self.game.resources.image(path)
         if scale != 1.0:
@@ -272,6 +287,88 @@ class Boss(pygame.sprite.Sprite):
             return True
         return False
 
+    # ── バトルv2: 体幹 / ダウン / 症状悪化 ───────────────────────
+    @property
+    def is_stance_down(self) -> bool:
+        """ダウン相当（体幹ブレイク/弱点露出/スタン）のいずれかにあるか。"""
+        return self._down_timer > 0 or self._weak_timer > 0 or self._stun_timer > 0
+
+    def stance_ratio(self) -> float | None:
+        """体幹ゲージ比率（None=非表示）。turrets はサクラ子機の生存比率。"""
+        if not BATTLE_V2_ENABLED or self._form3 or self._state == "enter":
+            return None
+        if self._current_gimmick() == "turrets":
+            total = len(self._summoned)
+            if total == 0:
+                return None if self._stun_timer <= 0 else 0.0
+            return self._summoned_alive() / total
+        if self._stance_max <= 0:
+            return None
+        return max(0.0, min(1.0, self._stance / self._stance_max))
+
+    def add_stance(self, pts: float, *, ignore_shield: bool = False) -> None:
+        """体幹を削る。ブレイクでダウン（weakpoint は弱点露出として発現）。"""
+        if not BATTLE_V2_ENABLED or self._form3 or self._state == "enter":
+            return
+        if self._down_timer > 0 or self._weak_timer > 0:
+            return
+        gimmick = self._current_gimmick()
+        if gimmick == "turrets":
+            return   # サクラ子機の撃破が体幹の代替（ボムは子機ごと薙ぎ払える）
+        if gimmick == "shield" and self._shield_active and not ignore_shield:
+            return
+        if self._stance_max <= 0:
+            return
+        self._stance -= pts
+        self._stance_regen_wait = STANCE_REGEN_DELAY
+        if self._stance <= 0:
+            self._stance = 0.0
+            self.down_just_started = True
+            if gimmick == "weakpoint":
+                self._weak_timer = _WEAK_DUR   # 露出＝ダウン（被ダメ倍率は既存）
+                self._armor = 0
+            else:
+                self._down_timer = STANCE_DOWN_DUR
+                if gimmick == "shield":
+                    self._shield_active = False
+
+    def _update_battle_v2_timers(self, dt: float) -> None:
+        if not BATTLE_V2_ENABLED or self._form3:
+            return
+        self._fight_time += dt
+        if self._enrage_mult() > 1.0 and not self._enrage_notified:
+            self._enrage_notified = True
+            self.enrage_just_started = True
+        if self.is_stance_down:
+            return
+        # 体幹の自然回復（削られない時間が続くと戻り始める＝チクチク対策）
+        if self._stance_max > 0 and self._stance < self._stance_max:
+            self._stance_regen_wait -= dt
+            if self._stance_regen_wait <= 0:
+                self._stance = min(self._stance_max,
+                                   self._stance + STANCE_REGEN_RATE * dt)
+
+    def _enrage_mult(self) -> float:
+        if not BATTLE_V2_ENABLED or self._form3:
+            return 1.0
+        return enrage_mult(self._fight_time)
+
+    @property
+    def enrage_ratio(self) -> float:
+        """症状悪化の進行度 0.0〜1.0（オーラ演出用）。"""
+        if ENRAGE_MAX_MULT <= 1.0:
+            return 0.0
+        return (self._enrage_mult() - 1.0) / (ENRAGE_MAX_MULT - 1.0)
+
+    def _reset_battle_v2_for_form(self) -> None:
+        """形態遷移時に体幹・症状悪化タイマーを新形態の値へ引き直す。"""
+        self._stance_max = float(STANCE_MAX.get(self._form_key(), 0.0))
+        self._stance     = self._stance_max
+        self._down_timer = 0.0
+        self._stance_regen_wait = 0.0
+        self._fight_time = 0.0
+        self._enrage_notified = False
+
     # ─────────────────────────────────────────
     def update(self, dt: float, enemy_bullets: pygame.sprite.Group, player: "Player") -> None:
         self._time += dt
@@ -287,8 +384,21 @@ class Boss(pygame.sprite.Sprite):
                 self.sx    = _TARGET_SX
                 self._state = "fight"
         else:
+            # ── バトルv2: 体幹ダウン中は行動停止（撃ち込みチャンス）──
+            if BATTLE_V2_ENABLED and self._down_timer > 0:
+                self._down_timer -= dt
+                if self._down_timer <= 0:
+                    self._down_timer = 0.0
+                    self._stance = self._stance_max   # ダウン明けで体幹全回復
+                    if self._current_gimmick() == "shield":
+                        self._shield_active = False
+                        self._shield_timer  = _SHIELD_VULN
+                self.rect.center = (int(self.sx), int(self.sy))
+                return
+
             gimmick   = self._current_gimmick()
             suppress  = self._update_gimmick(dt, gimmick, enemy_bullets, player)
+            self._update_battle_v2_timers(dt)
 
             pattern = self._phase[1]
             self._update_movement(dt, player, pattern)
@@ -297,7 +407,9 @@ class Boss(pygame.sprite.Sprite):
             if self._shoot_timer <= 0 and not suppress:
                 self._shoot_delay_override = None
                 self._shoot(enemy_bullets, player)
-                self._shoot_timer = self._shoot_delay_override or self._phase[2]
+                interval = self._shoot_delay_override or self._phase[2]
+                # 症状悪化: フェーズ長期化で攻撃間隔を圧縮（Form3 対象外）
+                self._shoot_timer = interval / self._enrage_mult()
 
         self.rect.center = (int(self.sx), int(self.sy))
 
@@ -403,7 +515,8 @@ class Boss(pygame.sprite.Sprite):
             if self._weak_timer > 0:
                 self._weak_timer -= dt
                 if self._weak_timer <= 0:
-                    self._armor = _ARMOR_MAX   # 露出終了で再装甲
+                    self._armor  = _ARMOR_MAX        # 露出終了で再装甲
+                    self._stance = self._stance_max  # v2: 体幹も全回復
             return False
 
         if gimmick == "turrets":
@@ -416,6 +529,8 @@ class Boss(pygame.sprite.Sprite):
                     # 直前まで居た砲台が全滅 → スタン突入
                     self._summoned = []
                     self._stun_timer = _TURRET_STUN_DUR
+                    if BATTLE_V2_ENABLED:
+                        self.down_just_started = True   # BREAK 演出を共通化
                     return True
                 self._summon_cd -= dt
                 if self._summon_cd <= 0 and self.summon_turret_fn is not None:
@@ -949,7 +1064,7 @@ class Boss(pygame.sprite.Sprite):
                                   drop_target=(tx, ty), incoming_speed=dist / incoming,
                                   incoming_time=incoming)
 
-        # ── Form3: 盤面ごと投げつける（投了王の「ちゃぶ台返し」）。
+        # ── Form3: 盤面ごと投げつける（頑固王の「ちゃぶ台返し」）。
         elif pattern == "board_throw":
             board = self._board_surface()
             for _ in range(2 + (variant % 2)):
@@ -1017,15 +1132,22 @@ class Boss(pygame.sprite.Sprite):
             enemy_bullets.add(EnemyBullet(bx, by, nx * 420, ny * 420, radius=7, color=(255, 40, 80)))
 
     # ─────────────────────────────────────────
-    def take_damage(self, amount: int) -> bool:
+    def take_damage(self, amount: int, stance: float | None = None) -> bool:
+        # ── バトルv2: 体幹を並行して削る（stance 未指定はダメージ量相当）──
+        if BATTLE_V2_ENABLED:
+            self.add_stance(float(amount) if stance is None else stance)
         # ── ギミックによる被ダメージ補正 ──────────────────────────
         gimmick = self._current_gimmick()
         dealt = amount
-        if gimmick == "shield" and self._shield_active:
+        if BATTLE_V2_ENABLED and self._down_timer > 0:
+            dealt = int(amount * STANCE_DOWN_MULT)   # 体幹ダウン中は大ダメージ
+        elif gimmick == "shield" and self._shield_active:
             return False   # シールド中は無敵（ダメージ無効）
         elif gimmick == "weakpoint":
             if self._weak_timer > 0:
                 dealt = int(amount * _WEAK_MULT)   # 弱点露出中は大ダメージ
+            elif BATTLE_V2_ENABLED:
+                dealt = 0   # v2: 装甲の役は体幹ゲージ（add_stance）が担う
             else:
                 self._armor -= amount              # 装甲を削る（HP は守られる）
                 if self._armor <= 0:
@@ -1034,7 +1156,8 @@ class Boss(pygame.sprite.Sprite):
                 dealt = 0
         elif gimmick == "turrets":
             if self._stun_timer > 0:
-                dealt = int(amount * _TURRET_STUN_MULT)   # スタン中は被ダメ増
+                mult = STANCE_DOWN_MULT if BATTLE_V2_ENABLED else _TURRET_STUN_MULT
+                dealt = int(amount * mult)                # スタン中は被ダメ増
             elif self._summoned_alive() > 0:
                 dealt = int(amount * _TURRET_GUARD_MULT)  # 砲台健在中は本体シールド
         if dealt > 0:
@@ -1054,7 +1177,7 @@ class Boss(pygame.sprite.Sprite):
                 return False  # まだ死なない
             if self._stage_id == 4 and self._form2 and not self._form3:
                 self._transform_form3()
-                return False  # 投了王サワグチへ
+                return False  # 頑固王サワグチへ
             if self._stage_id == 2 and not self._form2:
                 self._transform_super_saiyan()
                 return False  # 超サイヤ人ブロリーへ
@@ -1075,6 +1198,7 @@ class Boss(pygame.sprite.Sprite):
         self._shield_active = False
         self._armor         = _ARMOR_MAX
         self._weak_timer    = 0.0
+        self._reset_battle_v2_for_form()
         # SE なし（演出は game_scene 側の form2 検知で行う）
 
     def _make_super_saiyan_sprite(self) -> pygame.Surface:
@@ -1113,12 +1237,13 @@ class Boss(pygame.sprite.Sprite):
         self._weak_timer    = 0.0
         self.suction_active = False
         self._suction_timer = 0.0
+        self._reset_battle_v2_for_form()
         if self.camera is not None:
             self.camera.shake(20.0)
         self.game.sound.play_se_alias("SE_BOSS_SHOT", volume=0.6)
 
     def _make_form3_sprite(self) -> pygame.Surface:
-        """投了王サワグチのダミースプライト（差し替え前提）。
+        """頑固王サワグチのダミースプライト（差し替え前提）。
 
         台本「澤口の影が巨大化」に沿い、プレイヤー画像を暗紫シルエット化＋拡大。
         """
@@ -1155,6 +1280,7 @@ class Boss(pygame.sprite.Sprite):
         self._shoot_timer  = 1.2
         self._spiral_angle = 0.0
         self._shot_variant = 0
+        self._reset_battle_v2_for_form()   # Form3 は体幹対象外（max=0）へ引き直し
         # 演出（バナー・セリフ）は game_scene の form3 検知で行う
 
     def regen(self, amount: int) -> None:

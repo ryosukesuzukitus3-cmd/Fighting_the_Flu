@@ -426,7 +426,7 @@ _PHASE_CONFIGS = {
 ```
 
 ボスの静止画確認は `tools/capture_boss_concepts.py` で `captures/boss*_*.png` に出力できる。
-Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/graphic/boss_matching_zero.png` を原画として保存している。戦闘中は `boss_matching_zero_body.png` と3枚の `boss_matching_zero_drone_*.png` に分割した素材を使い、子機は破壊可能なシールドノードとして本体防御に関わる。奥の子機は本体の陰に隠れている扱いで通常弾を弾き、`LaserBeam` の貫通ダメージでのみ破壊できる。`rock_fall` の落石は地形反射/衝突演出を出さない貫通弾として扱う。
+Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/graphic/boss_matching_zero.png` を原画として保存している。戦闘中は `boss_matching_zero_body.png` と3枚の `sakura_drone_*.png`（マッチングアプリ風の円形サクラアイコン）を使い、子機「サクラ」は破壊可能なシールドノードとして本体防御に関わる。奥の子機は本体の陰に隠れている扱いで通常弾を弾き、`LaserBeam` の貫通ダメージでのみ破壊できる。`rock_fall` の落石は地形反射/衝突演出を出さない貫通弾として扱う。
 
 ### 5.7 balance.py（ステージ別スケーリング定数）
 
@@ -438,6 +438,26 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 | Stage3 | 3.0× | 1.7× |
 | Stage4 | 5.0× | 2.0× |
 <!-- AUTOGEN:balance END -->
+
+### 5.8 バトルシステムv2（battle_systems.py / balance.py）
+
+戦闘の意思決定を「押しっぱなし最強」から「いつ溜めて、いつ吐き出すか」へ移すための4系統。
+数値は全て `balance.py`（SSOT）、pygame 非依存の純ロジックは `battle_systems.py`、配線は
+`game_scene.py` / `boss.py`。`BATTLE_V2_ENABLED = False` で一括無効化できる。
+
+- **体幹（ボス）**: 武器別の体幹ダメージ（レーザー＝ブレイカー、メイン＝中、ホーミング＝小）で
+  ゲージを削り切るとダウン（被ダメ×2・行動停止・体幹全回復で復帰）。既存ギミックとの統合は
+  「shield＝解除中のみ削れる」「weakpoint＝旧装甲を体幹へ置換（露出＝ダウン）」
+  「turrets＝サクラ子機の撃破が体幹の代替」「ギミック無し形態（超サイヤ人）＝素の体幹」。
+  Form3（頑固王）はスクリプト演出が主役のため対象外。削られない時間が続くと自然回復する。
+- **体温オーバーヒート（プレイヤー）**: 射撃で体温が上がり 39.9℃で「熱暴走」＝一定時間
+  メイン/レーザー射撃不可（ホーミングは可）。無強化の初期連射では過熱しない冷却設計で、
+  先輩の解熱弾Lvが冷却を強化（解熱鎮痛剤の物語的役割とメカニクスを一致させる）。
+  ボスダウン中は冷却2倍＝ダウン中の全弾放出を推奨する損得構造。
+- **持ち駒ボム**: コンボ閾値の通過で歩/金/龍を獲得（最大3、FIFO）。bomb キーで「打つ」＝
+  弾消し＋全体ダメージ＋ボス体幹へ大ダメージ（シールド貫通）。S4 ボスの持ち駒打ちと対になる。
+- **症状悪化（エンレイジ）**: フェーズ長期化で攻撃間隔が線形圧縮（最大1.4倍）。熱温存の
+  待ち戦法への対抗。Form3 対象外。
 
 ---
 
@@ -804,25 +824,31 @@ python main.py
 
 ### 9.3 PyInstaller で exe ビルド
 
-PyInstaller はソースからビルドする必要がある（Windows 環境での互換性確保のため）。
+ビルド定義はリポジトリ直下の `game.spec`（onedir モード。理由・アセット解決の前提は spec 内コメント参照）。
 
-```bash
-# 1. VC Build Tools のインストール（初回のみ）
-choco install -y visualstudio2019-workload-vctools
-
-# 2. PyInstaller リポジトリをクローン
-git clone https://github.com/pyinstaller/pyinstaller
-
-# 3. ブートローダーをビルド
-cd pyinstaller/bootloader
-python ./waf all
-
-# 4. ゲームをビルド
-cd ../../
-pyinstaller game.spec --onefile
+```powershell
+# ローカルビルド
+.venv/Scripts/python -m pip install pyinstaller
+.venv/Scripts/python -m PyInstaller game.spec --noconfirm
+# → dist/InfuruToNoShito/InfuruToNoShito.exe
 ```
 
-参考: https://pyinstaller.org/en/latest/bootloader-building.html
+### 9.4 リリース自動化（GitHub Actions）
+
+`v` で始まるタグを push すると、`.github/workflows/release.yml` が Windows ランナーで
+exe をビルド → 起動スモークテスト → zip 化 → GitHub Release に添付する。
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+# → Releases に InfuruToNoShito-win64.zip が付く（解凍して InfuruToNoShito.exe を実行）
+```
+
+Release を作らずビルドだけ検証したい場合は、Actions の Release ワークフローを
+workflow_dispatch で手動実行する（zip は Artifacts に置かれる）。
+
+補足: ウイルス対策ソフトの誤検知が問題になった場合は、PyInstaller のブートローダーを
+ソースからビルドする回避策がある（https://pyinstaller.org/en/latest/bootloader-building.html ）。
 
 ---
 

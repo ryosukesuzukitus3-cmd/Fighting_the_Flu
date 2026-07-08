@@ -914,7 +914,9 @@ def test_story_speakers_are_registered() -> None:
     for grp in (list(script.BOSS_INTRO.values()) + list(script.BOSS_MID.values())
                 + list(script.BOSS_DEFEAT.values())
                 + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())
-                + list(script.TUTORIAL.values())):
+                + list(script.TUTORIAL.values())
+                + [script.BILLY_SPAWN_BARKS, script.BILLY_KILL_BARKS,
+                   script.SAKURA_LAST_WORDS, script.OVERHEAT_BARKS]):
         used.update(ln.speaker for ln in grp)
     # 全画面会話の話者は STORY_BEATS のページから収集する。
     for beat in script.STORY_BEATS:
@@ -981,7 +983,7 @@ def test_story_aliases_resolve_to_existing_files() -> None:
 
 def test_boss_form3_phase_config_exists() -> None:
     from src.entities.enemies.boss import _PHASE_CONFIGS
-    assert "4f3" in _PHASE_CONFIGS, "boss._PHASE_CONFIGS に '4f3'（投了王サワグチ）が未定義"
+    assert "4f3" in _PHASE_CONFIGS, "boss._PHASE_CONFIGS に '4f3'（頑固王サワグチ）が未定義"
 
 
 def test_stage_backgrounds_draw_all_stages() -> None:
@@ -1739,7 +1741,7 @@ def test_laser_beam_reports_boss_kill() -> None:
         def suppresses_hit_feedback(self) -> bool:
             return False
 
-        def take_damage(self, amount: int) -> bool:
+        def take_damage(self, amount: int, stance: float | None = None) -> bool:
             return amount >= 1
 
     laser = LaserBeam()

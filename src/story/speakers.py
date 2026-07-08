@@ -21,10 +21,14 @@ BOSS2_FORM2    = "超サイヤ人ブロリー"
 BOSS3          = "婚活要塞マッチング・ゼロ"
 BOSS4          = "棋理の化身　藤井竜王"
 BOSS4_FORM2    = "赤眼の真・藤井四段"
-BOSS_SAWAGUCHI = "投了王サワグチ"
+BOSS_SAWAGUCHI = "頑固王サワグチ"
 
 # チュートリアル専用（練習用の的。registries には載せない）
 TUTORIAL_DUMMY = "練習用インフル人形"
+
+# 道中キャラ（各章の中ボス格）／S3 ボス子機
+BILLY          = "ビリー"
+SAKURA         = "サクラ"
 
 
 # ダミーポートレート（tools/gen_dummy_portraits.py で生成。専用素材が来たら差し替え）
@@ -60,6 +64,8 @@ SPEAKERS: dict[str, Speaker] = {
     BOSS4_FORM2:    Speaker(BOSS4_FORM2,    BOSS4_FORM2,           (255, 60, 60),  "graphic/藤井四段第二形態_もう一度.png"),
     BOSS_SAWAGUCHI: Speaker(BOSS_SAWAGUCHI, BOSS_SAWAGUCHI,        (200, 60, 200), "graphic/sawaguchi_49_64.png"),
     TUTORIAL_DUMMY: Speaker(TUTORIAL_DUMMY, TUTORIAL_DUMMY,        (150, 200, 140), "graphic/enemy_バイキンマン68x80.png"),
+    BILLY:          Speaker(BILLY,          BILLY,                 (235, 190, 130), "graphic/enemy_billy-herrington.jpg"),
+    SAKURA:         Speaker(SAKURA,         SAKURA,                (255, 150, 190), "graphic/portrait_sakura.png"),
 }
 
 # テキスト本体の既定色（ネームプレートとは別。読みやすさ優先で統一）

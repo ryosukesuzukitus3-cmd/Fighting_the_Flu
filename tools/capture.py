@@ -11,7 +11,7 @@
   # ステージ1 を 90 フレーム進めて1枚
   python tools/capture.py --stage 1 --frames 90
 
-  # ステージ4 のボス戦・第3形態（投了王サワグチ）を撮る
+  # ステージ4 のボス戦・第3形態（頑固王サワグチ）を撮る
   python tools/capture.py --stage 4 --boss --form 3 --frames 60
 
   # 武器フル強化で弾を撃たせて 5 枚連番

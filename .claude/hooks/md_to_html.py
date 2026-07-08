@@ -31,7 +31,7 @@ TEMPLATE    = HOOK_DIR / "template.html"
 # ── モデル設定（新モデル追加時はここだけ更新） ──────────────────────────────
 FANCY_MODELS = {
     "light":  "claude-haiku-4-5-20251001",
-    "medium": "claude-sonnet-4-6",
+    "medium": "claude-sonnet-5",
     "heavy":  "claude-opus-4-8",
 }
 
@@ -319,13 +319,23 @@ def render_fancy(md: str, src: Path) -> str:
 
 HTMLコードのみを出力してください（```html ... ``` で囲んでも構いません）。"""
 
+    kwargs = {}
+    if model == "claude-sonnet-5":
+        # Sonnet 5 defaults to adaptive thinking when `thinking` is omitted,
+        # which would burn max_tokens on reasoning for this purely mechanical
+        # markdown→HTML conversion. Disable it explicitly (haiku/opus untouched).
+        kwargs["thinking"] = {"type": "disabled"}
+
     message = client.messages.create(
         model=model,
         max_tokens=16384,
         messages=[{"role": "user", "content": prompt}],
+        **kwargs,
     )
 
-    content = message.content[0].text.strip()
+    content = next(
+        (block.text for block in message.content if block.type == "text"), ""
+    ).strip()
     content = re.sub(r"^```html\s*\n", "", content)
     content = re.sub(r"\n```\s*$", "", content)
     return content

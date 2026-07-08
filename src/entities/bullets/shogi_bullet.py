@@ -214,7 +214,7 @@ class ShogiBullet(EnemyBullet):
 
 
 class ThrownBoardBullet(EnemyBullet):
-    """投げつけられる将棋盤（Form3 投了王の「ちゃぶ台返し」）。回転しながら飛ぶ大型弾・撃墜可能。"""
+    """投げつけられる将棋盤（Form3 頑固王の「ちゃぶ台返し」）。回転しながら飛ぶ大型弾・撃墜可能。"""
 
     def __init__(
         self,

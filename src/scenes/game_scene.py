@@ -24,7 +24,7 @@ from src.scenes.game.overlay_mixin  import GameSceneOverlayMixin
 from src.scenes.game.post_boss_mixin import GameScenePostBossMixin
 from src.scenes.game.debug_mixin    import GameSceneDebugMixin
 from src.scenes.game.boss_fx_mixin  import GameSceneBossFxMixin
-# 最終決戦（Form3 投了王サワグチ）の演出シーケンス
+# 最終決戦（Form3 頑固王サワグチ）の演出シーケンス
 from src.scenes.game.final_battle import FinalBattleDirector
 
 # ゲームシーン専用定数
@@ -40,12 +40,16 @@ from src.scenes.game.config import (
 # セリフ内容の SSOT
 from src.story.script import (
     BOSS_INTRO, BOSS_MID, STAGE_BG_TEXT,
+    BILLY_SPAWN_BARKS, BILLY_KILL_BARKS, SAKURA_LAST_WORDS, OVERHEAT_BARKS,
 )
 # 被ダメージ／反撃ダメージ定数
 from src.core.balance import (
     PLAYER_DMG_ENEMY, PLAYER_DMG_BULLET, PLAYER_DMG_BOSS, PLAYER_DMG_TERRAIN,
     KARONARU_CONTACT_DMG,
+    BATTLE_V2_ENABLED, HEAT_PER_LASER, HEAT_PER_SHOT, PIECE_EFFECTS,
+    STANCE_HOMING, STANCE_MAIN,
 )
+from src.core.battle_systems import HeatSystem, award_pieces
 
 # ボス演出シーケンス状態
 # "" -> alert -> entering -> boss_name -> boss_dialogue -> fight_banner -> fighting
@@ -205,6 +209,11 @@ class GameScene(
         # ポップアップテキスト
         self._popups: list = []
 
+        # ── バトルv2: 体温（オーバーヒート）/ 持ち駒 ────────────────
+        self._heat = HeatSystem() if BATTLE_V2_ENABLED else None
+        self._pieces: list[str] = []
+        self._overheat_barked = False   # 先輩バークはステージ1回まで
+
         # 相棒（カロナール先輩）
         self._companion = None
         if self.game.story.karonaru_available:
@@ -212,7 +221,7 @@ class GameScene(
             self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
                                        spawn_heal_fn=self._companion_spawn_heal)
 
-        # 最終決戦（Form3 投了王サワグチ）の状態・演出は専用ディレクタが所有
+        # 最終決戦（Form3 頑固王サワグチ）の状態・演出は専用ディレクタが所有
         self._final = FinalBattleDirector(self)
 
         self._player_prev_rect = self.player.rect.copy()
@@ -370,6 +379,12 @@ class GameScene(
             self._pause_cursor = 0
             return
 
+        # バトルv2: 持ち駒ボム（「打つ」。熱暴走中でも使える緊急手段）
+        if (BATTLE_V2_ENABLED and self._pieces and self._combat_active
+                and not self._upgrading and not self._paused
+                and inp.is_action_just_pressed("bomb")):
+            self._fire_bomb()
+
         # Open weapon upgrade when stock is available (自機 or 先輩).
         comp_stock = self._companion.stock if self._companion is not None else 0
         if (not self._upgrading and not self._paused
@@ -430,6 +445,7 @@ class GameScene(
 
         if self._stage_banner_timer <= 0 and self._is_normal_play:
             self.spawner.update(dt, self.camera)
+            self._check_billy_spawn_bark()
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
 
         if self.spawner.boss_gate_pending and self._is_normal_play:
@@ -458,6 +474,27 @@ class GameScene(
             elif self._boss_intro_state == "fighting":
                 self._boss.update(dt, self.enemy_bullets, self.player)
 
+        # バトルv2: 体幹ブレイク/症状悪化の演出（boss が旗を立て scene が消費）
+        if BATTLE_V2_ENABLED and self._boss is not None:
+            if getattr(self._boss, "down_just_started", False):
+                self._boss.down_just_started = False
+                self._on_boss_break()
+            if getattr(self._boss, "enrage_just_started", False):
+                self._boss.enrage_just_started = False
+                ebx, eby = self._boss.rect.center
+                self._spawn_popup("症状悪化", ebx, eby - 62, color=(255, 80, 60), life=1.8)
+
+        # バトルv2: 体温の冷却と熱暴走ロック（ボスダウン中は冷却2倍＝放出推奨）
+        if self._heat is not None:
+            if self._heat.overheated:
+                self.player.shoot_requested = False
+                self.player.laser_fire_held = False
+            boss_down = (self._boss is not None
+                         and getattr(self._boss, "is_stance_down", False))
+            k_lv = (self._companion.lv_shot
+                    if self._companion is not None and self._companion.is_active else 0)
+            self._heat.update(dt, karonaru_lv=k_lv, boss_down=boss_down)
+
         # 通常射撃
         if self._combat_active:
             if self.player.shoot_requested:
@@ -471,6 +508,8 @@ class GameScene(
                     self.game.sound.play_se("music/se/ウェポン：missile_shot.mp3", volume=0.5)
                 if any(not isinstance(b, HomingBullet) for b in new_bullets):
                     self.game.sound.play_se("music/se/ウェポン：normalshot_shot.mp3", volume=0.4)
+                if self._heat is not None and self._heat.add(HEAT_PER_SHOT):
+                    self._on_overheat_started()
 
             # レーザー
             if self.player.weapon.has_laser:
@@ -486,6 +525,8 @@ class GameScene(
                     self.game.sound.play_se(se, volume=0.225)
                     self.camera.shake(6.0)
                     self._laser_flash_timer = 0.08
+                    if self._heat is not None and self._heat.add(HEAT_PER_LASER):
+                        self._on_overheat_started()
                 if just_ended:
                     self.particles.spawn_hit(int(msx), int(msy))
                 laser_killed, laser_hit, laser_boss_killed = self.laser.hit_check(
@@ -744,6 +785,8 @@ class GameScene(
             boss=self._boss,
             laser=self.laser if self.player.weapon.has_laser else None,
             lives=self.game.shared.lives,
+            heat=self._heat,
+            pieces=self._pieces if BATTLE_V2_ENABLED else None,
         )
 
         self._draw_popups(screen)
@@ -1028,9 +1071,10 @@ class GameScene(
                     if self._combo_count > 0:
                         self._combo_timer = COMBO_WINDOW
                     bullet.kill()
+                    stance_pts = STANCE_HOMING if isinstance(bullet, HomingBullet) else STANCE_MAIN
                     was_form2 = self._boss._form2
                     was_form3 = self._boss._form3
-                    if self._boss.take_damage(bullet.damage):
+                    if self._boss.take_damage(bullet.damage, stance=stance_pts):
                         self._on_boss_killed()
                         if not self._is_debug_stage:
                             return True
@@ -1131,10 +1175,12 @@ class GameScene(
             self.particles.spawn_spark(sx, sy, color=(190, 168, 130), count=7, speed=240.0)
             self.game.sound.play_se("music/se/hit.wav", volume=0.3)
             score = 15
+        prev_combo = self._combo_count
         self._combo_count += 1
         self._combo_timer = COMBO_WINDOW
         self._combo_pulse = 0.8
         self.game.shared.score += score * combo_multiplier(self._combo_count)
+        self._award_combo_pieces(prev_combo)
 
     def _on_enemy_killed(self, enemy) -> None:
         sx = self.camera.to_screen_x(enemy.world_x)
@@ -1152,15 +1198,18 @@ class GameScene(
                 sx2 = self.camera.to_screen_x(shard.world_x)
                 self.particles.spawn_spark(int(sx2), int(shard.world_y), count=6, speed=280.0)
         enemy.kill()
+        prev_combo = self._combo_count
         self._combo_count += 1
         self._combo_timer  = COMBO_WINDOW
         self._combo_pulse  = 1.0
+        self._award_combo_pieces(prev_combo)
         mult = combo_multiplier(self._combo_count)
         self.game.shared.score      += 100 * mult
         self.game.shared.kill_count += 1
         self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.3)
 
         if etype == "EnemyBilly":
+            self._enqueue_boss_dialogue([random.choice(BILLY_KILL_BARKS)], BOSS_MID_LINE_DURATION)
             from src.entities.items.heal import HealItem
             self._add_weapon_drop(
                 enemy.world_x + random.uniform(-40, 40),
@@ -1171,6 +1220,10 @@ class GameScene(
                     enemy.world_x + random.uniform(-60, 60),
                     enemy.world_y + random.uniform(-40, 40),
                 ))
+        elif etype == "MatchingZeroDrone":
+            # enemy.kill() 済みなので残存数 0 ＝最後の1機を撃破した瞬間
+            if not any(type(e).__name__ == "MatchingZeroDrone" for e in self.enemies):
+                self._enqueue_boss_dialogue(list(SAKURA_LAST_WORDS), BOSS_MID_LINE_DURATION)
         else:
             if self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y):
                 return
@@ -1243,6 +1296,81 @@ class GameScene(
             txt  = font.render(it["text"], True, (70, 70, 95))
             txt.set_alpha(70)
             surf.blit(txt, (int(it["x"]), int(it["y"])))
+
+    # ── バトルv2: ボム / 熱暴走 / 体幹ブレイク演出 ─────────────────
+    def _fire_bomb(self) -> None:
+        """持ち駒を「打つ」: 弾消し＋全体ダメージ＋ボス体幹へ大ダメージ。"""
+        piece = self._pieces.pop(0)
+        zako_dmg, boss_dmg, stance_pts, inv = PIECE_EFFECTS[piece]
+        px, py = int(self.player.sx), int(self.player.sy)
+        self._spawn_popup(f"「{piece}」、打つ！", px + 16, py - 30,
+                          color=(255, 235, 170), life=1.5)
+        self._play_shogi_snap(px + 30, py)
+        self.particles.spawn_big_explosion(px + 60, py)
+        self.camera.shake(12.0)
+        self._laser_flash_timer = max(self._laser_flash_timer, 0.1)
+        self.enemy_bullets.empty()
+        if inv > 0:
+            self.player._invincible_timer = max(self.player._invincible_timer, inv)
+        for enemy in list(self.enemies):
+            # 「打つ」はレーザー限定の子機（サクラ）にも通る特別扱い
+            damage_fn = getattr(enemy, "take_laser_damage", enemy.take_damage)
+            if damage_fn(zako_dmg):
+                self._on_enemy_killed(enemy)
+        if self._boss is not None and self._in_boss_fight:
+            was_form2 = self._boss._form2
+            was_form3 = self._boss._form3
+            self._boss.add_stance(stance_pts, ignore_shield=True)
+            if self._boss.take_damage(boss_dmg, stance=0.0):
+                self._on_boss_killed()
+                return
+            if self._boss is not None and not was_form2 and self._boss._form2:
+                self._final.on_form2_transition()
+            if self._boss is not None and not was_form3 and self._boss._form3:
+                self._final.on_form3_transition()
+
+    def _award_combo_pieces(self, prev_combo: int) -> None:
+        """コンボ閾値の通過で持ち駒を獲得（バトルv2）。"""
+        if not BATTLE_V2_ENABLED:
+            return
+        for piece in award_pieces(prev_combo, self._combo_count, len(self._pieces)):
+            self._pieces.append(piece)
+            px, py = int(self.player.sx), int(self.player.sy)
+            self._spawn_popup(f"持ち駒「{piece}」獲得", px + 16, py - 44,
+                              color=(255, 235, 170), life=1.6)
+            self._play_shogi_snap(px + 24, py - 30)
+
+    def _on_overheat_started(self) -> None:
+        """熱暴走の開始演出（ポップアップ＋湯気＋初回のみ先輩バーク）。"""
+        px, py = int(self.player.sx), int(self.player.sy)
+        self._spawn_popup("熱暴走！！", px + 20, py - 26, color=(255, 90, 50), life=1.6)
+        self.particles.spawn_glow(px + 24, py, color=(255, 120, 80), count=10, speed=60.0)
+        self.game.sound.play_se_alias("SE_ALERT", volume=0.3)
+        if not self._overheat_barked and self._boss_dialogue_timer <= 0:
+            self._overheat_barked = True
+            self._enqueue_boss_dialogue([random.choice(OVERHEAT_BARKS)], BOSS_MID_LINE_DURATION)
+
+    def _on_boss_break(self) -> None:
+        """体幹ブレイク共通演出（S4 は「王手」）。"""
+        b = self._boss
+        if b is None:
+            return
+        bx, by = b.rect.center
+        text = "王手！！" if self._boss_stage_id() == 4 else "BREAK!!"
+        self._spawn_popup(text, bx, by - 46, color=(255, 215, 70), life=1.6)
+        self.particles.spawn_big_explosion(bx, by)
+        self.camera.shake(10.0)
+        if self._boss_stage_id() == 4:
+            self._play_shogi_snap(bx, by)
+        else:
+            self.game.sound.play_se("music/se/hit.wav", volume=0.5)
+
+    def _check_billy_spawn_bark(self) -> None:
+        """ビリー（中ボス格）の初登場時に語録バークをランダムで1つ流す。"""
+        for enemy in self.enemies:
+            if type(enemy).__name__ == "EnemyBilly" and not getattr(enemy, "_bark_done", False):
+                enemy._bark_done = True
+                self._enqueue_boss_dialogue([random.choice(BILLY_SPAWN_BARKS)], BOSS_MID_LINE_DURATION)
 
     def _enqueue_boss_dialogue(self, lines: list, line_duration: float | None = None) -> None:
         """Start timed boss dialogue and queue remaining lines."""

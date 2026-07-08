@@ -17,6 +17,7 @@ _DEFAULTS: dict = {
         "fire":          "K_z",
         "laser":         "K_SPACE",
         "weapon_select": "K_v",
+        "bomb":          "K_b",
         "pause":         "K_x",
     },
 }
