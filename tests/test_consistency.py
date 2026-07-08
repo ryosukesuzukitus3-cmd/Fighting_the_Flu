@@ -980,7 +980,7 @@ def test_story_aliases_resolve_to_existing_files() -> None:
 
 def test_boss_form3_phase_config_exists() -> None:
     from src.entities.enemies.boss import _PHASE_CONFIGS
-    assert "4f3" in _PHASE_CONFIGS, "boss._PHASE_CONFIGS に '4f3'（投了王サワグチ）が未定義"
+    assert "4f3" in _PHASE_CONFIGS, "boss._PHASE_CONFIGS に '4f3'（頑固王サワグチ）が未定義"
 
 
 def test_stage_backgrounds_draw_all_stages() -> None:

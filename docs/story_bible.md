@@ -1,5 +1,7 @@
 # インフルとの死闘 — 現行フル台本（実装＋演出・ブラッシュアップ入力用）
 
+> ⚠️ **2026-07-08 注記**: 第4章まわりは「投了王→頑固王」リワーク（`docs/story_rework_stubborn.md`）**反映前**の旧台本。最新のセリフは SSOT（`src/story/script.py`）を参照。本書の全文更新は実機確認後の別タスク。
+>
 > **この文書の目的**：現行ゲームで実際に流れるセリフ・ナレーションに加え、コードにしか無い**演出・音・ゲーム動作**（「ここで重低音」「ここで画面シェイク」等）を統合した、**漏れの無い一本の台本**。ストーリーラインのブラッシュアップ入力として使う。
 >
 > **出典（SSOT）**：セリフ＝`src/story/script.py` ／ 話者＝`src/story/speakers.py` ／ 音＝`src/story/aliases.py`＋各ステージ JSON＋`src/scenes/game/config.py` ／ ボス挙動＝`src/entities/enemies/boss.py` ／ 演出＝各 `src/scenes/*`。

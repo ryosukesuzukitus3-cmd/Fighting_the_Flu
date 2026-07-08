@@ -392,7 +392,7 @@ def check_story() -> None:
     # Form3 攻撃パターンが _PHASE_CONFIGS に存在するか
     from src.entities.enemies.boss import _PHASE_CONFIGS
     if "4f3" in _PHASE_CONFIGS:
-        _ok("boss._PHASE_CONFIGS に '4f3'（投了王サワグチ）が存在")
+        _ok("boss._PHASE_CONFIGS に '4f3'（頑固王サワグチ）が存在")
     else:
         _fail("boss._PHASE_CONFIGS に '4f3' が未定義")
 

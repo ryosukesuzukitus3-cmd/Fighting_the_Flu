@@ -15,7 +15,7 @@ class StoryState:
     karonaru_lost:        bool = False   # Stage3 後に消息不明
     karonaru_max:         bool = False   # 薬効最大形態で復帰済み
     blackhole_event_done: bool = False   # 承認欲求ブラックホールイベント済み
-    final_self_distanced: bool = False   # 投了王と自分の分離に成功
+    final_self_distanced: bool = False   # 頑固王と自分の分離に成功
     tutorial_done:        bool = False   # 対話型チュートリアル（準備運動）を提示済み
 
     def reset(self) -> None:

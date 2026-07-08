@@ -1,4 +1,4 @@
-"""最終決戦（Form3 投了王サワグチ）の演出シーケンスを集約するディレクタ。
+"""最終決戦（Form3 頑固王サワグチ）の演出シーケンスを集約するディレクタ。
 
 `GameScene` から最終決戦まわりの状態と振る舞いを切り出したもの。
 state（フェーズ・各種タイマー・カロナール帰還モーション等）はこの
@@ -25,7 +25,7 @@ from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNER
 class FinalBattleDirector:
     def __init__(self, scene) -> None:
         self.scene = scene
-        # 最終決戦（Form3 投了王サワグチ）
+        # 最終決戦（Form3 頑固王サワグチ）
         self._final_phase: int = 0     # 0=非Form3 / 1=Act1 / 2=Act2
         self._final_seq:   str = ""    # ""/fakeout/sengen/return/final_sengen/final_chance
         self._final_dialogue_pages:  list = []

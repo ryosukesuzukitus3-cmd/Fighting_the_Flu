@@ -21,7 +21,7 @@ BOSS2_FORM2    = "超サイヤ人ブロリー"
 BOSS3          = "婚活要塞マッチング・ゼロ"
 BOSS4          = "棋理の化身　藤井竜王"
 BOSS4_FORM2    = "赤眼の真・藤井四段"
-BOSS_SAWAGUCHI = "投了王サワグチ"
+BOSS_SAWAGUCHI = "頑固王サワグチ"
 
 # チュートリアル専用（練習用の的。registries には載せない）
 TUTORIAL_DUMMY = "練習用インフル人形"
