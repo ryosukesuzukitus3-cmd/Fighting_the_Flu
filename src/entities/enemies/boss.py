@@ -96,7 +96,7 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
         (0.30, "vortex3",     0.36),
         (0.16, "shogi_drop",  0.95),
     ],
-    "4f3": [  # 投了王サワグチ Form3（最終形態・盤面崩壊の大技）
+    "4f3": [  # 頑固王サワグチ Form3（最終形態・盤面崩壊の大技）
         (1.00, "board_throw", 1.35),
         (0.82, "shogi_drop",  0.95),
         (0.64, "mega_beam",   1.90),
@@ -123,7 +123,7 @@ _FORM2_CONFIG = {
 _SSJ_HP    = 170
 _SSJ_SCALE = 2.25   # 通常ブロリー(2.0)より一回り大きい
 
-# 第三形態（投了王サワグチ）: max_hp（スプライトはダミー生成）
+# 第三形態（頑固王サワグチ）: max_hp（スプライトはダミー生成）
 #   ※専用画像なし。台本「澤口の影が巨大化」に沿いプレイヤー画像を暗紫・拡大したダミー。
 _FORM3_MAX_HP   = 260   # Act1（反芻再生あり）
 _FORM3_ACT2_HP  = 240   # Act2（最終ゲージ・反芻再生なし）
@@ -158,7 +158,7 @@ _GIMMICKS: dict[str | int, str] = {
     3:     "turrets",    # 婚活要塞マッチング・ゼロ
     4:     "shield",     # 藤井竜王 Form1
     "4f2": "weakpoint",  # 赤眼の真・藤井四段 Form2
-    # Form3（投了王サワグチ）は専用スクリプト演出のためギミックなし
+    # Form3（頑固王サワグチ）は専用スクリプト演出のためギミックなし
 }
 
 # shield ギミック
@@ -1064,7 +1064,7 @@ class Boss(pygame.sprite.Sprite):
                                   drop_target=(tx, ty), incoming_speed=dist / incoming,
                                   incoming_time=incoming)
 
-        # ── Form3: 盤面ごと投げつける（投了王の「ちゃぶ台返し」）。
+        # ── Form3: 盤面ごと投げつける（頑固王の「ちゃぶ台返し」）。
         elif pattern == "board_throw":
             board = self._board_surface()
             for _ in range(2 + (variant % 2)):
@@ -1177,7 +1177,7 @@ class Boss(pygame.sprite.Sprite):
                 return False  # まだ死なない
             if self._stage_id == 4 and self._form2 and not self._form3:
                 self._transform_form3()
-                return False  # 投了王サワグチへ
+                return False  # 頑固王サワグチへ
             if self._stage_id == 2 and not self._form2:
                 self._transform_super_saiyan()
                 return False  # 超サイヤ人ブロリーへ
@@ -1243,7 +1243,7 @@ class Boss(pygame.sprite.Sprite):
         self.game.sound.play_se_alias("SE_BOSS_SHOT", volume=0.6)
 
     def _make_form3_sprite(self) -> pygame.Surface:
-        """投了王サワグチのダミースプライト（差し替え前提）。
+        """頑固王サワグチのダミースプライト（差し替え前提）。
 
         台本「澤口の影が巨大化」に沿い、プレイヤー画像を暗紫シルエット化＋拡大。
         """

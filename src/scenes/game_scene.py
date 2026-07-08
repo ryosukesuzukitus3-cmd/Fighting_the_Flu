@@ -24,7 +24,7 @@ from src.scenes.game.overlay_mixin  import GameSceneOverlayMixin
 from src.scenes.game.post_boss_mixin import GameScenePostBossMixin
 from src.scenes.game.debug_mixin    import GameSceneDebugMixin
 from src.scenes.game.boss_fx_mixin  import GameSceneBossFxMixin
-# 最終決戦（Form3 投了王サワグチ）の演出シーケンス
+# 最終決戦（Form3 頑固王サワグチ）の演出シーケンス
 from src.scenes.game.final_battle import FinalBattleDirector
 
 # ゲームシーン専用定数
@@ -221,7 +221,7 @@ class GameScene(
             self._companion = Karonaru(self.game, popup_fn=self._spawn_popup,
                                        spawn_heal_fn=self._companion_spawn_heal)
 
-        # 最終決戦（Form3 投了王サワグチ）の状態・演出は専用ディレクタが所有
+        # 最終決戦（Form3 頑固王サワグチ）の状態・演出は専用ディレクタが所有
         self._final = FinalBattleDirector(self)
 
         self._player_prev_rect = self.player.rect.copy()

@@ -57,7 +57,7 @@ STANCE_MAX: dict[str | int, float] = {
     3: 0.0,         # マッチング・ゼロ（サクラ子機が体幹の代替）
     4: 80.0,        # 藤井竜王 Form1（shield）
     "4f2": 75.0,    # 赤眼の真・藤井四段（weakpoint）
-    # "4f3" 投了王サワグチはスクリプト演出が主役のため体幹対象外
+    # "4f3" 頑固王サワグチはスクリプト演出が主役のため体幹対象外
 }
 STANCE_DOWN_DUR    = 4.0    # 体幹ブレイク時のダウン時間（秒。weakpoint は既存の露出5秒）
 STANCE_DOWN_MULT   = 2.0    # ダウン中の被ダメ倍率（weakpoint 露出 / turrets スタンも統一）

@@ -213,14 +213,13 @@ BOSS_INTRO: dict[int, list[Line]] = {
         Line(K,     "いいね0が出す条件じゃないにょ。"),
         Line(S,     "こだわりと言え。"),
         Line(BOSS3, "ようこそ。あなたに、ぴったりの提案があります。"),
-        Line(BOSS3, "——「マッチングを終了する」。"),
-        Line(BOSS3, "押せば、もう審査されない。誰にも採点されない。"),
-        Line(BOSS3, "楽になれますよ。"),
-        Line(S,     "……それは、ちょっと、いいな。"),
-        Line(K,     "押すなにょ。"),
-        Line(S,     "押すかどうかは、俺の自由だろ。"),
-        Line(K,     "自由だにょ。それは管理外だにょ。",
-                    "……ただ、押した後の熱は、下げてやれないにょ。"),
+        Line(BOSS3, "——「希望条件を、すべて緩和する」。"),
+        Line(BOSS3, "押せば、マッチ率は40倍に上がります。"),
+        Line(S,     "断る。"),
+        Line(K,     "そこは押せにょ。"),
+        Line(S,     "こだわりを捨てたら、俺が俺じゃなくなる。"),
+        Line(K,     "こだわりしか残ってない男の台詞だにょ。"),
+        Line(BOSS3, "交渉決裂。では、審査を続行します。"),
         Line(S,     "……。"),
         Line(K,     "奥に子機が隠れてるにょ。本体の陰だにょ。",
                     "普通の弾じゃ届かないにょ。貫くやつなら、抜けるかもにょ。"),
@@ -240,9 +239,10 @@ BOSS_INTRO: dict[int, list[Line]] = {
         Line(S,     "……逃げてきたんじゃない。"),
         Line(S,     "ここだけは、正直だと思ったからだ。"),
         Line(BOSS4, "その正直な盤でも、"),
-        Line(BOSS4, "あなたはもう、投げる手を探している。"),
+        Line(BOSS4, "あなたは、読み直さない。"),
         Line(S,     "……。"),
-        Line(BOSS4, "いつものあなたです。負ける前に、自分から投げる。"),
+        Line(BOSS4, "いつものあなたです。最初に決めた読み筋を、"),
+        Line(BOSS4, "盤面が変わっても、指し続ける。"),
     ],
 }
 
@@ -281,7 +281,7 @@ BOSS_MID: dict[str, list[Line]] = {
     ],
     "4mid": [
         Line(BOSS4, "あなたは才能に負けるのではありません。"),
-        Line(BOSS4, "誰かと比べて、勝手に投げる癖に負けるのです。"),
+        Line(BOSS4, "一つの読み筋に、しがみつく癖に負けるのです。"),
         Line(S,     "黙れ。"),
         Line(BOSS4, "黙らせたいのは、私ではない。"),
         Line(BOSS4, "あなた自身の声でしょう。"),
@@ -306,41 +306,42 @@ BOSS_MID: dict[str, list[Line]] = {
         Line(S,           "俺は……何と戦ってるんだ。"),
         Line(BOSS4_FORM2, "それを知るために、ここまで来たのでしょう。"),
     ],
-    # Form3 投了王サワグチ Act1 中盤（反芻再生の気づき・SCENE085 HP60%）
+    # Form3 頑固王サワグチ Act1 中盤（反芻再生の気づき・SCENE085 HP60%）
     "4f3mid": [
         Line(S,              "回復してる……？"),
-        Line(BOSS_SAWAGUCHI, "その後悔、何度目だ。"),
-        Line(BOSS_SAWAGUCHI, "繰り返すほど、俺は強くなる。"),
+        Line(BOSS_SAWAGUCHI, "その言い訳、何度目だ。"),
+        Line(BOSS_SAWAGUCHI, "繰り返すほど、俺は硬くなる。"),
     ],
     # Form3 Act2 中盤（SCENE095 HP50%/20%）
     "4f3act2mid": [
-        Line(BOSS_SAWAGUCHI, "また負けるぞ。また選ばれないぞ。"),
-        Line(BOSS_SAWAGUCHI, "また期待外れで終わるぞ。"),
+        Line(BOSS_SAWAGUCHI, "また周りをいらつかせるぞ。また空回りするぞ。"),
+        Line(BOSS_SAWAGUCHI, "また、誰にも伝わらないぞ。"),
         Line(S,              "そうかもしれない。"),
-        Line(BOSS_SAWAGUCHI, "なら、なぜ投げない。"),
-        Line(S,              "それは、今ここで投げる理由にはならない。"),
+        Line(BOSS_SAWAGUCHI, "なら、なぜ変えない。"),
+        Line(S,              "変えている。……お前には、見えない速度でな。"),
     ],
 }
 
 
 # ════════════════════════════════════════════════════════════════════
-# SCENE 085  Final Boss Form3 — 投了王サワグチ 登場（Form2 撃破後）
-#   ラスボスは澤口の「負ける前に投げる声」そのもの。ここは芯なので維持。
+# SCENE 085  Final Boss Form3 — 頑固王サワグチ 登場（Form2 撃破後）
+#   ラスボスは澤口の「聞かない・一人で背負う・変わらない声」＝自分の頑固さ。
+#   ここは芯なので維持（設計: docs/story_rework_stubborn.md §3.5）。
 # ════════════════════════════════════════════════════════════════════
 BOSS_FORM3_INTRO: list[Line] = [
     Line(BOSS_SAWAGUCHI, "もういいだろ。"),
     Line(BOSS_SAWAGUCHI, "仕事も、婚活も、人生も。"),
-    Line(BOSS_SAWAGUCHI, "ここで投了すれば、もう傷つかない。"),
+    Line(BOSS_SAWAGUCHI, "お前のやり方で、押し通せばいい。"),
     Line(S,              "お前は……俺なのか。"),
     Line(BOSS_SAWAGUCHI, "そうだ。"),
-    Line(BOSS_SAWAGUCHI, "お前が傷つく前に、お前を守ってきた声だ。"),
+    Line(BOSS_SAWAGUCHI, "お前が間違いにならないように、お前を守ってきた声だ。"),
     Line(S,              "守ってきた？"),
-    Line(BOSS_SAWAGUCHI, "負ける前に、自分で負けたことにする。"),
-    Line(BOSS_SAWAGUCHI, "選ばれない前に、自分には価値がないことにする。"),
-    Line(BOSS_SAWAGUCHI, "期待外れになる前に、"),
-    Line(BOSS_SAWAGUCHI, "最初から期待されていないことにする。"),
-    Line(BOSS_SAWAGUCHI, "そうすれば、誰にも負けない。"),
-    Line(BOSS_SAWAGUCHI, "最初から勝負していないからな。"),
+    Line(BOSS_SAWAGUCHI, "聞かなければ、否定されずに済む。"),
+    Line(BOSS_SAWAGUCHI, "変わらなければ、間違ってなかったことにできる。"),
+    Line(BOSS_SAWAGUCHI, "一人で背負えば、"),
+    Line(BOSS_SAWAGUCHI, "誰にも文句を言わせずに済む。"),
+    Line(BOSS_SAWAGUCHI, "そうすれば、お前は一生正しい。"),
+    Line(BOSS_SAWAGUCHI, "一度も、答え合わせをしないからな。"),
 ]
 
 
@@ -355,15 +356,19 @@ FINAL_SEQ: dict[str, list[Line]] = {
         Line(S,              "倒した……はずだ。"),
         Line(BOSS_SAWAGUCHI, "俺を倒しても無駄だ。"),
         Line(BOSS_SAWAGUCHI, "お前が、俺を必要としている。"),
-        Line(BOSS_SAWAGUCHI, "傷つく前に、自分から投げるためにな。"),
+        Line(BOSS_SAWAGUCHI, "「俺は間違ってない」と言い続けるためにな。"),
     ],
-    # 投了勧告（回避不能 → 澤口 HP1）
+    # 必至宣言（回避不能 → 澤口 HP1）
     "sengen": [
-        Line(BOSS_SAWAGUCHI, "詰みだ。"),
-        Line(SYS,            "投了勧告：澤口のHPを1に固定。"),
+        Line(BOSS_SAWAGUCHI, "必至だ。"),
+        Line(SYS,            "必至宣言：澤口のHPを1に固定。"),
         Line(S,              "避けられない……。"),
         Line(BOSS_SAWAGUCHI, "当然だ。これは外から飛んでくる弾じゃない。"),
         Line(BOSS_SAWAGUCHI, "お前の内側から聞こえる、お前の声だ。"),
+        Line(BOSS_SAWAGUCHI, "……受かる手は、一つだけある。"),
+        Line(BOSS_SAWAGUCHI, "人の手を借りる、という一手だ。"),
+        Line(BOSS_SAWAGUCHI, "だが、お前は指さない。"),
+        Line(BOSS_SAWAGUCHI, "31年、一度も指さなかった手だからな。"),
         Line(SYS,            "次の被弾で終局。"),
         Line(S,              "ここまで、か……。"),
     ],
@@ -387,27 +392,28 @@ FINAL_SEQ: dict[str, list[Line]] = {
         Line(KM,             "熱が下がれば、こいつは聞き分けられるにょ。",
                              "——お前の声と、こいつの声を。"),
         Line(S,              "そうか。お前は、俺じゃない。"),
-        Line(S,              "お前は、俺が傷つかないために用意した、"),
-        Line(S,              "投了の言い訳だ。"),
+        Line(S,              "お前は、間違いを認めずに済むように、"),
+        Line(S,              "俺が飼ってきた——ただの、癖だ。"),
     ],
     # SCENE095 最終フェーズ開始
     "act2_start": [
-        Line(SYS, "HP回復。抗反芻フィールド展開。投了王の再生を停止。"),
+        Line(SYS, "HP回復。抗反芻フィールド展開。頑固王の再生を停止。"),
         Line(KM, "俺にできるのは、"),
         Line(KM, "痛みを少し遠ざけることだけだにょ。"),
         Line(KM, "倒すのは、お前だにょ、澤口。"),
         Line(S,  "十分だ。"),
     ],
-    # 投了勧告・終局（カロナールが一手猶予バリアで受け止める）
+    # 必至・終局（カロナールが一手猶予バリアで受け止める）
     "final_sengen": [
-        Line(SYS, "投了勧告・終局：次の一撃を受ければ終わる。"),
+        Line(SYS, "必至・終局：次の一撃を受ければ終わる。"),
         Line(KM, "一手猶予バリア、展開にょ。"),
         Line(S,  "また身代わりになる気か！"),
         Line(KM, "違うにょ。今度は落ちないにょ。",
                  "今度は——横にいるにょ。"),
-        Line(SYS, "バリア成立。投了王のHPは1。次に当てれば終局。"),
+        Line(SYS, "バリア成立。頑固王のHPは1。次に当てれば終局。"),
         Line(KM, "だから、指せにょ、澤口。"),
-        Line(S,  "ああ。まだ俺の手番だ。"),
+        Line(S,  "ああ。この一手は、借り物だ。"),
+        Line(S,  "——それでも、俺の手番だ。"),
     ],
 }
 
@@ -415,11 +421,11 @@ FINAL_SEQ: dict[str, list[Line]] = {
 FINAL_BANNERS: dict[str, tuple[str, ...]] = {
     "awaken":      ("覚醒", BOSS4_FORM2),   # 第1→2形態遷移バナー（赤眼の真・藤井四段）
     "awaken2":     ("覚醒", BOSS2_FORM2),   # S2 第二形態遷移バナー（超サイヤ人ブロリー）
-    "true_final":  ("TRUE FINAL BOSS", "投了王サワグチ"),
-    "sengen":      ("投了勧告",),
+    "true_final":  ("TRUE FINAL BOSS", "頑固王サワグチ"),
+    "sengen":      ("必至宣言",),
     "kouhatsu":    ("薬効発現", "カロナール先輩・薬効最大"),
     "anti_rumin":  ("HP全回復", "抗反芻フィールド 展開"),
-    "final_sengen": ("投了勧告・終局",),
+    "final_sengen": ("必至・終局",),
     "final_chance": ("LAST CHANCE", "次の一撃で終局"),
 }
 
@@ -468,14 +474,14 @@ BOSS_DEFEAT: dict[int, list[Line]] = {
         Line(K, "ただ、病み上がりの自己分析は、"),
         Line(K, "ほどほどにしとけにょ。"),
     ],
-    4: [   # SCENE100 投了王サワグチ撃破
-        Line(BOSS_SAWAGUCHI, "どうせ、また負けるぞ。"),
+    4: [   # SCENE100 頑固王サワグチ撃破
+        Line(BOSS_SAWAGUCHI, "どうせ、また同じ手を指すぞ。"),
         Line(S,              "そうかもしれない。"),
-        Line(BOSS_SAWAGUCHI, "また傷つくぞ。"),
+        Line(BOSS_SAWAGUCHI, "また、誰の話も聞かないぞ。"),
         Line(S,              "そうかもしれない。"),
         Line(BOSS_SAWAGUCHI, "なら、なぜ——"),
-        Line(S,              "負ける可能性があることと、今投げることは、別だ。"),
-        Line(S,              "俺はまだ、投了していない。"),
+        Line(S,              "すぐ変われないことと、聞かないことは、別だ。"),
+        Line(S,              "俺は聞いてる。……届くのが、人より遅いだけだ。"),
         Line(KM,             "いい終盤だったにょ。"),
         Line(S,              "お前に将棋が分かるのか。"),
         Line(KM,             "分からんにょ。でも、今のは効いたにょ。"),
@@ -645,7 +651,8 @@ EPILOGUE: list[Page] = [
             "たぶん、また傷つく。"),
     page(N, "何ひとつ、片付いてはいなかった。",
             "それでも——"),
-    page(S, "俺はまだ、投了してない。"),
+    page(S, "……一個ずつ、直す。"),
+    page(S, "長い将棋に、なるだけだ。"),
     page(S, "薬を飲んで、もう少し寝る。",
             "話は、それからだ。"),
     page(N, "枕元の薬箱に、手を伸ばす。"),
@@ -666,7 +673,7 @@ EPILOGUE: list[Page] = [
 # SCENE 120  ゲームクリア
 # ════════════════════════════════════════════════════════════════════
 GAME_CLEAR = {
-    "subtitle":     "澤口修平は、まだ投了していない。",
+    "subtitle":     "澤口修平は、今夜、人の手を借りた。——31年目にして、初めて。",
     "next_preview": "次回　会社復帰編",
 }
 
@@ -709,7 +716,7 @@ CREDITS: list[Page] = [
     page(SYS, "情報汚染超人野獣ブロリー"),
     page(SYS, "婚活要塞マッチング・ゼロ"),
     page(SYS, "棋理の化身　藤井竜王"),
-    page(SYS, "投了王サワグチ"),
+    page(SYS, "頑固王サワグチ"),
     page(SYS, "ビリー"),
     page(SYS, "サクラ"),
     page(SYS, "/ 全役 …… ゾル鈴木"),
@@ -777,7 +784,8 @@ def intro_beats(stage_id: int) -> list[StoryBeat]:
 # SCENE 8  ゲームオーバー（ランダム表示プール）
 # ════════════════════════════════════════════════════════════════════
 GAMEOVER_LINES: list[list[str]] = [
-    ["澤口修平は投了した。", "しかし有給は消費された。"],
+    ["澤口修平は、同じ手で三連敗した。", "有給も、三日消費された。"],
+    ["先輩の助言は、五回目だった。", "澤口に届くのは、六回目である。"],
     ["熱は下がらなかった。", "自己肯定感も下がった。"],
     ["敗因：序盤の、自己紹介文。"],
     ["先輩は言った。「水を飲めにょ」", "澤口は、聞いていなかった。"],

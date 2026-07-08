@@ -80,7 +80,7 @@ def test_stage_boss_fight_runs_without_crash(game, stage_id):
 
 @pytest.mark.parametrize("form", [2, 3])
 def test_stage4_boss_forms_run_without_crash(game, form):
-    """ステージ4の第2/第3形態（投了王サワグチ）の update/draw 経路を保護する。
+    """ステージ4の第2/第3形態（頑固王サワグチ）の update/draw 経路を保護する。
     最終決戦演出（FinalBattleDirector）やボスギミック描画の回帰を捕まえる。"""
     scene = _fresh_scene(game, 4)
     assert skip_to_fight(scene, 4, form=form, hold=()), \
