@@ -162,13 +162,19 @@ class GameScene(
                 SCREEN_WIDTH, SCREEN_HEIGHT,
                 lambda s: self.game.resources.sysfont("msgothic", s))
 
-        # 戦闘中自動タイムアウトセリフ
+        # 戦闘中自動タイムアウトセリフ（単発バーク用: ビリー/サクラ/熱暴走）
         self._boss_dialogue_timer:   float = 0.0
         self._boss_dialogue_lines:   tuple[str, ...] = ()
         self._boss_dialogue_speaker: str   = ""
         self._boss_dialogue_queue:   list  = []
         self._boss_dialogue_font   = None
         self._boss_mid_dialogue_shown: bool = False
+
+        # 戦闘中カットイン（複数行の会話ビート用: 戦闘を停止して ENTER 送り。
+        # 実機FB「自動送りは忙しくて読めない」対応。単発バークは従来どおり）
+        self._cutin_pages:  list = []
+        self._cutin_idx:    int  = 0
+        self._cutin_active: bool = False
 
         # ボス演出ステートマシン
         self._boss_intro_state: str   = ""
@@ -420,6 +426,12 @@ class GameScene(
             self.particles.update(dt)
             return
 
+        # Freeze gameplay during combat cut-in dialogue (ENTER to advance).
+        if self._cutin_active:
+            self._update_combat_cutin()
+            self.particles.update(dt)
+            return
+
         # Freeze gameplay during final scripted dialogue.
         if self._final.dialogue_active:
             self._final.update_dialogue()
@@ -628,7 +640,7 @@ class GameScene(
             in_form2 = getattr(self._boss, "_form2", False)
             mid_key = "4f2mid" if (boss_stage_id == 4 and in_form2) else f"{boss_stage_id}mid"
             if mid_key in BOSS_MID:
-                self._enqueue_boss_dialogue(BOSS_MID[mid_key], BOSS_MID_LINE_DURATION)
+                self._start_combat_cutin(BOSS_MID[mid_key])
                 self._boss_mid_dialogue_shown = True
 
         # Update final-battle special effects and companion sequence.
@@ -831,6 +843,9 @@ class GameScene(
 
         if self._boss_dialogue_timer > 0:
             self._draw_boss_dialogue(screen)
+
+        if self._cutin_active:
+            self._draw_combat_cutin(screen)
 
         self._final.draw_overlays(screen)
 
@@ -1371,6 +1386,28 @@ class GameScene(
             if type(enemy).__name__ == "EnemyBilly" and not getattr(enemy, "_bark_done", False):
                 enemy._bark_done = True
                 self._enqueue_boss_dialogue([random.choice(BILLY_SPAWN_BARKS)], BOSS_MID_LINE_DURATION)
+
+    def _start_combat_cutin(self, lines: list) -> None:
+        """戦闘を停止して ENTER 送りで読ませる会話カットインを開始する。
+
+        複数行の会話ビート（BOSS_MID 系）用。単発バークは
+        _enqueue_boss_dialogue（自動タイムアウト・非停止）を使う。
+        """
+        if not lines:
+            return
+        self._cutin_pages  = list(lines)
+        self._cutin_idx    = 0
+        self._cutin_active = True
+
+    def _update_combat_cutin(self) -> None:
+        """カットインの ENTER/SPACE 送り。最終ページで閉じて戦闘再開。"""
+        inp = self.game.input
+        if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
+                or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+            self._cutin_idx += 1
+            if self._cutin_idx >= len(self._cutin_pages):
+                self._cutin_active = False
+                self._cutin_pages = []
 
     def _enqueue_boss_dialogue(self, lines: list, line_duration: float | None = None) -> None:
         """Start timed boss dialogue and queue remaining lines."""

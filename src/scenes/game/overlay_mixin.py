@@ -186,6 +186,26 @@ class GameSceneOverlayMixin:
             alpha=alpha,
         )
 
+    # ── 戦闘中カットイン（戦闘停止・ENTERで送る）───────────────
+    def _draw_combat_cutin(self, screen: pygame.Surface) -> None:
+        pages = self._cutin_pages   # type: ignore[attr-defined]   # list[Line]
+        idx   = self._cutin_idx     # type: ignore[attr-defined]
+        if not pages or idx >= len(pages):
+            return
+        line  = pages[idx]
+        total = len(pages)
+        hint = f"{idx + 1}/{total}  ENTER: 次へ" if idx < total - 1 else "ENTER: 戦闘再開"
+        draw_combat_panel(
+            screen,
+            self.game.resources,  # type: ignore[attr-defined]
+            line.speaker,
+            line.lines,
+            page_index=idx,
+            total_pages=total,
+            hint_text=hint,
+            style=COMBAT_PURPLE_STYLE,
+        )
+
     # ── ボス撃破後セリフ（ENTERで送る）────────────────────────
     def _draw_defeat_dialogue(self, screen: pygame.Surface) -> None:
         if not hasattr(self, "_defeat_dialogue_font") or self._defeat_dialogue_font is None:  # type: ignore[attr-defined]

@@ -182,7 +182,9 @@ def _draw_arrow(screen, rect, alpha, arrow_on, complete):
 # 2 行ぶんの固定サイズにして自動拡張しない（サイズが暴れる違和感を避ける）。
 _COMBAT_BODY_SIZE = 22
 _COMBAT_PORTRAIT_SIZE = 68        # 顔アイコンは固定
-COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 144, SCREEN_WIDTH - 52, 108)
+# 下端はボスHPバー（y=564〜）直上の体幹ゲージ（y=555〜561）に掛からない位置に置く
+# （実機FB: 旧 y=456..564 は体幹ゲージを完全に隠していた）。
+COMBAT_PANEL_RECT = pygame.Rect(26, SCREEN_HEIGHT - 164, SCREEN_WIDTH - 52, 108)
 
 
 def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,

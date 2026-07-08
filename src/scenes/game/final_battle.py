@@ -17,7 +17,7 @@ import pygame
 
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
-from src.scenes.game.config import BOSS_BGM, BOSS_MID_LINE_DURATION
+from src.scenes.game.config import BOSS_BGM
 from src.story.aliases import bgm_path
 from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS
 
@@ -127,14 +127,14 @@ class FinalBattleDirector:
                     self._regen_timer = 1.0
                     boss.regen(2)
             if not self._f3_act1_mid_shown and ratio <= 0.6:
-                self.scene._enqueue_boss_dialogue(BOSS_MID.get("4f3mid", []), BOSS_MID_LINE_DURATION)
+                self.scene._start_combat_cutin(BOSS_MID.get("4f3mid", []))
                 self._f3_act1_mid_shown = True
             if not self._fakeout_triggered and ratio <= 0.3:
                 self._fakeout_triggered = True
                 self._start_fakeout()
         elif self._final_phase == 2:
             if not self._f3_act2_mid_shown and ratio <= 0.5:
-                self.scene._enqueue_boss_dialogue(BOSS_MID.get("4f3act2mid", []), BOSS_MID_LINE_DURATION)
+                self.scene._start_combat_cutin(BOSS_MID.get("4f3act2mid", []))
                 self._f3_act2_mid_shown = True
             if not self._final_sengen_triggered and boss.hp <= 1:
                 self._final_sengen_triggered = True
@@ -161,7 +161,7 @@ class FinalBattleDirector:
             # S2 はキーが "2mid" のままなので再アームすると同じ台詞が二重再生される。
             scene._boss_mid_dialogue_shown = False
         self._show_final_banner("awaken" if stage_id == 4 else "awaken2", 2.6)
-        scene._enqueue_boss_dialogue(BOSS_MID.get(f"{stage_id}f2", []), BOSS_MID_LINE_DURATION)
+        scene._start_combat_cutin(BOSS_MID.get(f"{stage_id}f2", []))
 
     def on_form3_transition(self) -> None:
         """Transition from form 2 to the true final form."""
