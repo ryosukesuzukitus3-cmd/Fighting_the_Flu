@@ -824,25 +824,31 @@ python main.py
 
 ### 9.3 PyInstaller で exe ビルド
 
-PyInstaller はソースからビルドする必要がある（Windows 環境での互換性確保のため）。
+ビルド定義はリポジトリ直下の `game.spec`（onedir モード。理由・アセット解決の前提は spec 内コメント参照）。
 
-```bash
-# 1. VC Build Tools のインストール（初回のみ）
-choco install -y visualstudio2019-workload-vctools
-
-# 2. PyInstaller リポジトリをクローン
-git clone https://github.com/pyinstaller/pyinstaller
-
-# 3. ブートローダーをビルド
-cd pyinstaller/bootloader
-python ./waf all
-
-# 4. ゲームをビルド
-cd ../../
-pyinstaller game.spec --onefile
+```powershell
+# ローカルビルド
+.venv/Scripts/python -m pip install pyinstaller
+.venv/Scripts/python -m PyInstaller game.spec --noconfirm
+# → dist/InfuruToNoShito/InfuruToNoShito.exe
 ```
 
-参考: https://pyinstaller.org/en/latest/bootloader-building.html
+### 9.4 リリース自動化（GitHub Actions）
+
+`v` で始まるタグを push すると、`.github/workflows/release.yml` が Windows ランナーで
+exe をビルド → 起動スモークテスト → zip 化 → GitHub Release に添付する。
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+# → Releases に InfuruToNoShito-win64.zip が付く（解凍して InfuruToNoShito.exe を実行）
+```
+
+Release を作らずビルドだけ検証したい場合は、Actions の Release ワークフローを
+workflow_dispatch で手動実行する（zip は Artifacts に置かれる）。
+
+補足: ウイルス対策ソフトの誤検知が問題になった場合は、PyInstaller のブートローダーを
+ソースからビルドする回避策がある（https://pyinstaller.org/en/latest/bootloader-building.html ）。
 
 ---
 
