@@ -694,13 +694,40 @@ class StageDesigner:
         self._piece_layout_cache_key = None
         self._piece_layout_cache = None
 
+    def _composer_asset_paths(self, event: dict[str, Any] | None = None) -> tuple[Path, Path]:
+        profile = getattr(self, "profile", None)
+        rects_path = getattr(self, "rects_path", None)
+        mask_dir = getattr(self, "mask_dir", None)
+
+        if rects_path is None:
+            if profile is not None:
+                rects_path = _profile_path(profile.rects, profile.fallback_rects)
+            elif event is not None and event.get("kind") == "data_block":
+                rects_path = STAGE2_RECTS
+            else:
+                rects_path = DEFAULT_RECTS
+        rects_path = Path(rects_path)
+
+        if mask_dir is None:
+            if profile is not None:
+                if rects_path == profile.rects:
+                    mask_dir = profile.mask_dir
+                else:
+                    mask_dir = _profile_path(profile.mask_dir, profile.fallback_mask_dir)
+            elif event is not None and event.get("kind") == "data_block":
+                mask_dir = STAGE2_MASK_DIR
+            else:
+                mask_dir = DEFAULT_MASK_DIR
+        return rects_path, Path(mask_dir)
+
     def _terrain(self) -> tuple[list[Any], dict[str, list[Any]]]:
         key = json.dumps(_layout(self.data), sort_keys=True, ensure_ascii=False)
         if self._terrain_cache is not None and self._terrain_cache_key == key:
             return self._terrain_cache
         start_x = float(_layout(self.data).get("start_offset", 0))
         segments = make_terrain_segments_from_event(_layout(self.data), start_x, default_seed=int(self.data.get("stage_id", 3)))
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        rects_path, mask_dir = self._composer_asset_paths()
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         self._terrain_cache_key = key
         self._terrain_cache = (segments, pieces)
         return self._terrain_cache
@@ -747,7 +774,8 @@ class StageDesigner:
             and getattr(self, "_piece_layout_cache", None) is not None
         ):
             return self._piece_layout_cache
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        rects_path, mask_dir = self._composer_asset_paths()
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         composer_layout = build_stage3_piece_layout(
             layout,
             pieces,
@@ -759,14 +787,15 @@ class StageDesigner:
         self._piece_layout_cache = (composer_layout, pieces)
         return self._piece_layout_cache
 
-    def _composer_pieces(self) -> dict[str, list[Any]]:
-        key = (str(self.rects_path), str(self.mask_dir))
+    def _composer_pieces(self, event: dict[str, Any] | None = None) -> dict[str, list[Any]]:
+        rects_path, mask_dir = self._composer_asset_paths(event)
+        key = (str(rects_path), str(mask_dir))
         if (
             getattr(self, "_composer_piece_cache_key", None) == key
             and getattr(self, "_composer_piece_cache", None) is not None
         ):
             return self._composer_piece_cache  # type: ignore[return-value]
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         self._composer_piece_cache_key = key
         self._composer_piece_cache = pieces
         if not hasattr(self, "_piece_preview_cache"):
@@ -815,7 +844,7 @@ class StageDesigner:
         role = _event_material_role(event)
         if role is None:
             return None
-        pieces_by_group = self._composer_pieces()
+        pieces_by_group = self._composer_pieces(event)
         asset = event.get("material_asset")
         if isinstance(asset, str) and ":" in asset:
             group, index_text = asset.split(":", 1)
@@ -844,6 +873,8 @@ class StageDesigner:
         return ranked[0]
 
     def _apply_event_rect_asset(self, event: dict[str, Any]) -> None:
+        if event.get("kind") != "data_block":
+            return
         role = _event_material_role(event)
         if role is None:
             return
@@ -1404,7 +1435,8 @@ class StageDesigner:
             "top": top,
             "bottom": bottom,
         }
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        rects_path, mask_dir = self._composer_asset_paths()
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         segments = make_terrain_segments_from_event(authored, start, default_seed=int(self.data.get("stage_id", 3)))
         composer = build_stage3_composer_layout(
             segments,
