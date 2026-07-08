@@ -114,6 +114,15 @@
     ],
     "breakable_block": [
       {
+        "group": "block_tall",
+        "indices": [
+          4,
+          7,
+          9,
+          11
+        ]
+      },
+      {
         "group": "block_square",
         "indices": [
           7,

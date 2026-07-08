@@ -454,6 +454,9 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "meme_static"
+    assert layout["renderer"] == "stage3_composer"
+    assert layout["composer_rects"] == "tools/stage2_terrain_rects.json"
+    assert layout["composer_mask_dir"] == "tools/stage2_terrain_alpha_masks"
     assert layout["length"] >= boss_x + 800
     assert layout["breakable_drop_chance"] <= 0.05
     assert len(world_events) >= 40
@@ -1864,11 +1867,17 @@ def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:
 
 
 def test_stage_designer_stage2_block_previews_use_rect_roles() -> None:
-    from tools.stage_designer import StageDesigner, _event_material_role, _event_templates_for_kind
+    from tools.stage_designer import Selection, StageDesigner, _event_material_role, _event_templates_for_kind, _piece_asset_id
 
     designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainStrip", "length": 1000}], "world_events": []}
     designer.rects_path = ROOT / "tools" / "stage2_terrain_rects.json"
     designer.mask_dir = ROOT / "tools" / "stage2_terrain_alpha_masks"
+    designer.event_templates = _event_templates_for_kind("data_block")
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
     designer._composer_piece_cache_key = None
     designer._composer_piece_cache = None
 
@@ -1884,10 +1893,45 @@ def test_stage_designer_stage2_block_previews_use_rect_roles() -> None:
     for name, role in expected.items():
         event = templates[name]
         image = designer._event_rect_image(event, int(event["w"]), int(event["h"]))
+        piece = designer._event_rect_piece(event, int(event["w"]), int(event["h"]))
         role_images = [piece.image for piece in designer._composer_pieces()[role]]
 
         assert _event_material_role(event) == role
         assert any(image is role_image for role_image in role_images)
+        assert image.get_size() == piece.image.get_size()
+
+    index = next(i for i, (name, _event) in enumerate(designer.event_templates) if name == "weapon gate")
+    designer._add_event_template_at(index, 420, 180)
+    added = designer.data["world_events"][0]
+    added_piece = designer._event_rect_piece(added, int(added["w"]), int(added["h"]))
+
+    assert added["material_role"] == "breakable_block"
+    assert added["material_asset"] == _piece_asset_id(added_piece)
+    assert (added["w"], added["h"]) == added_piece.image.get_size()
+    assert designer.selection == Selection("event", 0)
+
+
+def test_stage2_data_block_runtime_uses_rect_material_asset() -> None:
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+    from src.entities.terrain import Terrain
+
+    pieces = load_stage3_composer_pieces(
+        ROOT / "tools" / "stage2_terrain_rects.json",
+        mask_dir=ROOT / "tools" / "stage2_terrain_alpha_masks",
+    )
+    piece = pieces["turret_mount"][0]
+    terrain = Terrain(
+        0,
+        0,
+        piece.image.get_width(),
+        piece.image.get_height(),
+        "data_block",
+        material_role="turret_mount",
+        material_asset=f"{piece.group}:{piece.index + 1}",
+    )
+
+    assert terrain.image.get_size() == piece.image.get_size()
+    assert terrain.image.get_at((10, 10)) == piece.image.get_at((10, 10))
 
 
 def test_stage_designer_piece_palette_uses_stable_asset_identity() -> None:

@@ -808,12 +808,31 @@ class StageDesigner:
         return f"piece palette: {self._current_piece_role()} {asset}"
 
     def _event_rect_image(self, event: dict[str, Any], w: int, h: int) -> pygame.Surface | None:
+        piece = self._event_rect_piece(event, w, h)
+        return None if piece is None else piece.image
+
+    def _event_rect_piece(self, event: dict[str, Any], w: int, h: int) -> Any | None:
         role = _event_material_role(event)
         if role is None:
             return None
-        pieces = list(self._composer_pieces().get(role, []))
+        pieces_by_group = self._composer_pieces()
+        asset = event.get("material_asset")
+        if isinstance(asset, str) and ":" in asset:
+            group, index_text = asset.split(":", 1)
+            try:
+                index = int(index_text) - 1
+            except ValueError:
+                index = -1
+            group_pieces = pieces_by_group.get(group, [])
+            if 0 <= index < len(group_pieces):
+                return group_pieces[index]
+        pieces = list(pieces_by_group.get(role, []))
         if not pieces:
             return None
+        if str(event.get("type", "")) in {"breakable_gate", "weapon_gate"}:
+            block_pieces = [piece for piece in pieces if piece.group in {"block_tall", "block_square", "block_wide"}]
+            if block_pieces:
+                pieces = block_pieces
         aspect = w / max(1, h)
         ranked = sorted(
             pieces,
@@ -822,7 +841,19 @@ class StageDesigner:
                 abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
             ),
         )
-        return ranked[0].image
+        return ranked[0]
+
+    def _apply_event_rect_asset(self, event: dict[str, Any]) -> None:
+        role = _event_material_role(event)
+        if role is None:
+            return
+        piece = self._event_rect_piece(event, int(event.get("w", 1)), int(event.get("h", 1)))
+        if piece is None:
+            return
+        event["material_role"] = role
+        event["material_asset"] = _piece_asset_id(piece)
+        event["w"] = int(piece.image.get_width())
+        event["h"] = int(piece.image.get_height())
 
     def _event_templates(self) -> list[tuple[str, dict[str, Any]]]:
         return getattr(self, "event_templates", EVENT_TEMPLATES)
@@ -937,7 +968,7 @@ class StageDesigner:
             image = pygame.Surface((42, 42), pygame.SRCALPHA)
             pygame.draw.circle(image, _event_color(event), (21, 21), 18)
             pygame.draw.circle(image, (240, 248, 245), (21, 21), 18, 2)
-        fitted = _fit_surface(image, max_w, max_h)
+        fitted = image.copy() if etype in RECT_TERRAIN_TYPES else _fit_surface(image, max_w, max_h)
         if bool(event.get("enhanced", False)):
             fitted = fitted.copy()
             tint = pygame.Surface(fitted.get_size(), pygame.SRCALPHA)
@@ -1429,6 +1460,7 @@ class StageDesigner:
         templates = self._event_templates()
         _name, template = templates[index % len(templates)]
         event = copy.deepcopy(template)
+        self._apply_event_rect_asset(event)
         _position_new_event(event, wx, wy)
         events = self.data.setdefault("world_events", [])
         events.append(event)
@@ -1960,7 +1992,6 @@ class StageDesigner:
                     max(1, int(round(world_rect.height * self.zoom))),
                 )
                 preview = self._event_image(event, max_w=rect.width, max_h=rect.height)
-                preview = pygame.transform.smoothscale(preview, (rect.width, rect.height))
                 target.blit(preview, rect.topleft)
                 if self.show_overlays:
                     fill = (*color, 42 if selected else 20)
@@ -2108,12 +2139,56 @@ class StageDesigner:
         color = (255, 175, 98) if selected else _event_color(template)
         pygame.draw.rect(target, (8, 12, 15), rect)
         pygame.draw.rect(target, color, rect, 2 if selected else 1)
+        if _event_material_role(template):
+            preview = self._event_image(template, max_w=rect.width, max_h=rect.height)
+            target.blit(preview, (rect.x + 7, rect.y + 6))
+            label = self.small_font.render(name, True, (230, 235, 232))
+            target.blit(label, (rect.x + 7, rect.y + 8 + preview.get_height()))
+            type_label = self.small_font.render(str(template.get("type", "")), True, (160, 178, 178))
+            target.blit(type_label, (rect.x + 7, rect.bottom - 18))
+            return
         preview = self._event_image(template, max_w=28, max_h=28)
         target.blit(preview, (rect.x + 7, rect.y + 6))
         label = self.small_font.render(name, True, (230, 235, 232))
         target.blit(label, (rect.x + 36, rect.y + 9))
         type_label = self.small_font.render(str(template.get("type", "")), True, (160, 178, 178))
         target.blit(type_label, (rect.x + 7, rect.bottom - 18))
+
+    def _event_palette_cell_height(self, template: dict[str, Any]) -> int:
+        if not _event_material_role(template):
+            return 58
+        image = self._event_image(template, max_w=PALETTE_W, max_h=SCREEN_HEIGHT)
+        return max(58, image.get_height() + 34)
+
+    def _event_palette_rects(
+        self,
+        x0: int,
+        y: int,
+        cell_w: int,
+        gap: int,
+        cols: int,
+    ) -> tuple[list[tuple[int, pygame.Rect]], int]:
+        rects: list[tuple[int, pygame.Rect]] = []
+        col = 0
+        event_h = 58
+        full_w = self.palette_rect.width - 24
+        for i, (_name, template) in enumerate(self._event_templates()):
+            if _event_material_role(template):
+                if col:
+                    y += event_h + gap
+                    col = 0
+                height = self._event_palette_cell_height(template)
+                rects.append((i, pygame.Rect(x0, y, full_w, height)))
+                y += height + gap
+                continue
+            rects.append((i, pygame.Rect(x0 + col * (cell_w + gap), y, cell_w, event_h)))
+            col += 1
+            if col >= cols:
+                y += event_h + gap
+                col = 0
+        if col:
+            y += event_h + gap
+        return rects, y
 
     def _palette_content_rects(self) -> tuple[dict[tuple[Any, ...], pygame.Rect], float]:
         panel = self.palette_rect
@@ -2123,23 +2198,15 @@ class StageDesigner:
         gap = 8
         cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
         title_h = self.font.get_height() + 8
-        event_h = 58
         piece_h = 76
         rects: dict[tuple[Any, ...], pygame.Rect] = {}
-        event_templates = self._event_templates()
 
         y += title_h
-        for i, _template in enumerate(event_templates):
-            col = i % cols
-            row = i // cols
+        event_rects, y = self._event_palette_rects(x0, y, cell_w, gap, cols)
+        for i, rect in event_rects:
             payload = {"kind": "event", "template_index": i}
-            rects[self._palette_payload_key(payload)] = pygame.Rect(
-                x0 + col * (cell_w + gap),
-                y + row * (event_h + gap),
-                cell_w,
-                event_h,
-            )
-        y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
+            rects[self._palette_payload_key(payload)] = rect
+        y += 12
 
         y += title_h
         pieces = self._composer_pieces()
@@ -2191,16 +2258,14 @@ class StageDesigner:
         cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
 
         y += self._draw_palette_title(target, "Event Palette", (x0, y))
-        event_h = 58
+        event_rects, y_after_events = self._event_palette_rects(x0, y, cell_w, gap, cols)
         event_templates = self._event_templates()
-        for i, (name, template) in enumerate(event_templates):
-            col = i % cols
-            row = i // cols
-            rect = pygame.Rect(x0 + col * (cell_w + gap), y + row * (event_h + gap), cell_w, event_h)
+        for i, rect in event_rects:
             if rect.colliderect(panel):
+                name, template = event_templates[i]
                 self._draw_event_cell(target, rect, i, name, template)
                 self._palette_hitboxes.append((rect.copy(), {"kind": "event", "template_index": i}))
-        y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
+        y = y_after_events + 12
 
         y += self._draw_palette_title(target, "Terrain Pieces", (x0, y))
         piece_h = 76
@@ -2294,7 +2359,10 @@ class StageDesigner:
             templates = self._event_templates()
             name = _event_template_name(index, templates)
             template = templates[index % len(templates)][1]
-            preview = self._event_image(template, max_w=58, max_h=46)
+            if _event_material_role(template):
+                preview = self._event_image(template, max_w=PALETTE_W, max_h=SCREEN_HEIGHT)
+            else:
+                preview = self._event_image(template, max_w=58, max_h=46)
             label = self.font.render(name, True, (255, 210, 150))
             bg = pygame.Rect(
                 pos[0] + 12,
