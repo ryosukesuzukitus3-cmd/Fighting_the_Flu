@@ -46,7 +46,7 @@ PROLOGUE: list[Page] = [
     page(Q, "……ぞくっと、きただろう。", fx=("red_noise",)),
     page(Q, "それが合図だ。今夜は、おれの番だ。"),
     page(Q, "眠れ。考えるな。"),
-    page(Q, "弱った頭で、世界なんか相手取るな。", fx=("shake",)),
+    page(Q, "熱の夜の考え事に、ろくなものはない。", fx=("shake",)),
     # ── 澤口、驚く（状況把握）──
     page(S, "……っ、誰だ。",
             "頭の中で、声がする。"),
@@ -172,7 +172,7 @@ TUTORIAL: dict[str, list[Line]] = {
 BOSS_INTRO: dict[int, list[Line]] = {
     1: [
         Line(BOSS1, "眠れ。考えるな。"),
-        Line(BOSS1, "弱った脳に、世界を相手取る資格はない。"),
+        Line(BOSS1, "弱った頭の考え事は、全部おれの餌だ。"),
         Line(K,     "出たにょ。今夜の元凶だにょ。",),
         Line(K,     "見た目どおり、熱苦しいやつだにょ。"),
         Line(S,     "あれを倒したら、目が覚めるのか？"),

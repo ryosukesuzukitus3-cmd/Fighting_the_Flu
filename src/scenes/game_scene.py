@@ -1470,7 +1470,12 @@ class GameScene(
         # Regenerate the final boss when the player is hit during act 1.
         if (self._boss is not None and self._final.phase == 1
                 and getattr(self._boss, "_regen_enabled", False)):
-            self._boss.regen(15)
+            if self._boss.regen(15):
+                # 被弾→ボス回復の因果を見せる（実機FB: 反芻再生が見えない）
+                self.particles.spawn_glow(self._boss.sx, self._boss.sy,
+                                          color=(200, 120, 255), count=14, speed=90.0)
+                self._spawn_popup("反芻再生", int(self._boss.sx), int(self._boss.sy) - 44,
+                                  color=(205, 130, 255), life=1.6)
         if self.player.hp <= 0:
             self._go_gameover()
         else:

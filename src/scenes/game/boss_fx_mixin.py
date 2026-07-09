@@ -108,12 +108,23 @@ class GameSceneBossFxMixin:
 
         if form3:
             pulse = 0.5 + 0.5 * math.sin(getattr(b, "_time", 0.0) * 3.0)
-            aura = pygame.Surface((r * 2 + 36, r * 2 + 36), pygame.SRCALPHA)
+            pad = 44
+            aura = pygame.Surface((r * 2 + pad * 2, r * 2 + pad * 2), pygame.SRCALPHA)
             pygame.draw.circle(aura, (120, 10, 70, int(50 + 55 * pulse)),
-                               (r + 18, r + 18), r + 12)
+                               (r + pad, r + pad), r + 12)
             pygame.draw.circle(aura, (220, 30, 80, int(90 + 45 * pulse)),
-                               (r + 18, r + 18), r + 12, 3)
-            buf.blit(aura, (cx - r - 18, cy - r - 18), special_flags=pygame.BLEND_RGBA_ADD)
+                               (r + pad, r + pad), r + 12, 3)
+            # 反芻再生（Act1）の常時可視化: 紫のリングが外から吸い込まれ続ける。
+            # 抗反芻フィールド展開（Act2）で消える＝「剥がされた」が見た目で分かる
+            if getattr(b, "_regen_enabled", False):
+                t = getattr(b, "_time", 0.0)
+                for k in (0.0, 0.5):
+                    phase = (t * 0.8 + k) % 1.0
+                    rr = int(r + 40 - phase * 34)
+                    alpha = int(110 * phase)
+                    pygame.draw.circle(aura, (200, 120, 255, alpha),
+                                       (r + pad, r + pad), rr, 2)
+            buf.blit(aura, (cx - r - pad, cy - r - pad), special_flags=pygame.BLEND_RGBA_ADD)
             return
 
         if stage_id == 2 and not form2:
