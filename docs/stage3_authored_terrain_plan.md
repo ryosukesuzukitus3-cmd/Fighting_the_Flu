@@ -106,7 +106,7 @@ Stage3は最終的に `AuthoredTerrain.top/bottom` をステージデータのSS
 
 `tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。現在は Stage3の `TerrainPieces.pieces` と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・追加・削除・保存・PNGキャプチャを行えるようにする。TerrainPiecesでは role/asset パレットから素材を選び、必要に応じて `collision` / `side` / `flip_x` / `flip_y` を切り替えて、最終的なブロック配置を直接編集する。作り込み時は、左をステージ表示、中央をevent/terrain共通パレット、右を操作説明・選択情報とする3カラムUIを使い、パレットからステージへのドラッグ&ドロップ配置、Ctrl+ホイールのズーム、パレットスクロールで細かい調整を行う。イベントはパレットとステージ表示の両方で実素材に近いプレビューを表示し、`count` や `formation` を持つ敵イベントは簡易編隊として見えるようにする。ドラッグ中は Shift で水平/垂直移動に固定し、Ctrl を押しながらドラッグを開始すると、オフセットなしで複製してから移動する。矢印キーは無選択時はパレットカーソル移動、選択中はオブジェクト位置の微調整に使う。
 
-Stage2 へ制作フローを展開する入口として、`tools/run.py stage-designer --stage 2` は Stage2 JSON・Stage2背景・`data_block` イベントテンプレートを使う。Stage2専用の terrain rect / alpha mask が未配置の間は Stage3 rect / mask を暫定フォールバックにし、後続PRで Stage2 ブロックセットを追加したら同じコマンドがそちらを優先する。
+Stage2 へ制作フローを展開する入口として、`tools/run.py stage-designer --stage 2` は Stage2 JSON・Stage2背景・`data_block` イベントテンプレートを使う。Stage2 のブロック素材SSOTは `tools/stage2_terrain_rects.json` で、`assets/graphic/stage2_cyber_terrain_sheet.png` から cyber/data-block 系の terrain piece パレットを供給する。
 
 輪郭を描いて初期ブロック配置を作る補助機能として、`TerrainPieces` に `guide_lines` を持てるようにする。これはゲーム実行時のSSOTではなく、設計ツール上で `G` により入るガイド設置モード用の作業データである。ガイドモードでは、空間クリックで新規ガイド列を作り、既存ガイド列の点や辺をクリックするとその列または点を選択する。選択中の列がある状態で空間クリックすると、その列に点を追加する。点はドラッグで編集し、`Del` で削除する。`U` で選択中ガイド列の top/bottom 役割を切り替え、`P` で選択中の1列だけを composer に渡して、自動充填した配置ブロックへ置き換える。下側だけ、上側だけ、離れた複数箇所の充填を個別に扱えるようにする。生成後は個別ブロック配置をSSOTとして扱い、素材差し替えや衝突設定は通常のピース編集で詰める。
 

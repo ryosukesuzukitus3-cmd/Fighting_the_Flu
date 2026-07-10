@@ -27,7 +27,6 @@ from src.entities.stage3_composer_terrain import (  # noqa: E402
     build_stage3_piece_layout,
     draw_stage3_composer_layout,
     load_stage3_composer_pieces,
-    render_stage3_composer_surface,
 )
 from src.entities.enemies.crawler import EnemyCrawler  # noqa: E402
 from src.entities.enemies.debris import _rock_sprite  # noqa: E402
@@ -472,6 +471,19 @@ def _piece_defaults(role: str) -> dict[str, Any]:
     return {"role": role, "collision": "none", "side": "bottom"}
 
 
+def _event_material_role(event: dict[str, Any]) -> str | None:
+    etype = str(event.get("type", ""))
+    if etype == "turret_mount":
+        return "turret_mount"
+    if etype in {"breakable_gate", "weapon_gate"}:
+        return "breakable_block"
+    if etype in RECT_TERRAIN_TYPES:
+        if str(event.get("surface_anchor", "floor")) == "ceiling":
+            return "fixed_ceiling_block"
+        return "fixed_floor_block"
+    return None
+
+
 def _clean_guide_points(points: list[Any]) -> list[list[int]]:
     by_x: dict[int, list[int]] = {}
     for point in points:
@@ -639,11 +651,18 @@ class StageDesigner:
         self.palette_drag: dict[str, Any] | None = None
         self._palette_hitboxes: list[tuple[pygame.Rect, dict[str, Any]]] = []
         self._event_image_cache: dict[str, pygame.Surface] = {}
+        self._piece_preview_cache: dict[tuple[str, int, int, int], pygame.Surface] = {}
+        self._composer_piece_cache_key: tuple[str, str] | None = None
+        self._composer_piece_cache: dict[str, list[Any]] | None = None
         self.message = f"Ready: {self.profile.label}"
         self.dirty = False
         self.undo_stack: list[dict[str, Any]] = []
         self._terrain_cache_key: str | None = None
         self._terrain_cache: tuple[list[Any], dict[str, list[Any]]] | None = None
+        self._composer_layout_cache_key: str | None = None
+        self._composer_layout_cache: Stage3ComposerLayout | None = None
+        self._piece_layout_cache_key: str | None = None
+        self._piece_layout_cache: tuple[Stage3ComposerLayout, dict[str, list[Any]]] | None = None
         self._backdrop_cache: dict[tuple[int, int], pygame.Surface] = {}
 
     @property
@@ -670,6 +689,36 @@ class StageDesigner:
     def _invalidate_terrain_cache(self) -> None:
         self._terrain_cache_key = None
         self._terrain_cache = None
+        self._composer_layout_cache_key = None
+        self._composer_layout_cache = None
+        self._piece_layout_cache_key = None
+        self._piece_layout_cache = None
+
+    def _composer_asset_paths(self, event: dict[str, Any] | None = None) -> tuple[Path, Path]:
+        profile = getattr(self, "profile", None)
+        rects_path = getattr(self, "rects_path", None)
+        mask_dir = getattr(self, "mask_dir", None)
+
+        if rects_path is None:
+            if profile is not None:
+                rects_path = _profile_path(profile.rects, profile.fallback_rects)
+            elif event is not None and event.get("kind") == "data_block":
+                rects_path = STAGE2_RECTS
+            else:
+                rects_path = DEFAULT_RECTS
+        rects_path = Path(rects_path)
+
+        if mask_dir is None:
+            if profile is not None:
+                if rects_path == profile.rects:
+                    mask_dir = profile.mask_dir
+                else:
+                    mask_dir = _profile_path(profile.mask_dir, profile.fallback_mask_dir)
+            elif event is not None and event.get("kind") == "data_block":
+                mask_dir = STAGE2_MASK_DIR
+            else:
+                mask_dir = DEFAULT_MASK_DIR
+        return rects_path, Path(mask_dir)
 
     def _terrain(self) -> tuple[list[Any], dict[str, list[Any]]]:
         key = json.dumps(_layout(self.data), sort_keys=True, ensure_ascii=False)
@@ -677,17 +726,56 @@ class StageDesigner:
             return self._terrain_cache
         start_x = float(_layout(self.data).get("start_offset", 0))
         segments = make_terrain_segments_from_event(_layout(self.data), start_x, default_seed=int(self.data.get("stage_id", 3)))
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        rects_path, mask_dir = self._composer_asset_paths()
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         self._terrain_cache_key = key
         self._terrain_cache = (segments, pieces)
         return self._terrain_cache
 
+    def _composer_layout(self) -> Stage3ComposerLayout:
+        layout = _layout(self.data)
+        length = _stage_length(self.data)
+        key = "composer:" + json.dumps(
+            {
+                "layout": layout,
+                "length": length,
+                "height": SCREEN_HEIGHT,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        if (
+            getattr(self, "_composer_layout_cache_key", None) == key
+            and getattr(self, "_composer_layout_cache", None) is not None
+        ):
+            return self._composer_layout_cache
+        segments, pieces = self._terrain()
+        composer_layout = build_stage3_composer_layout(
+            segments,
+            pieces,
+            start_x=0,
+            end_x=length,
+            height=SCREEN_HEIGHT,
+            sample_step=int(layout.get("composer_sample_step", 48)),
+            tolerance=int(layout.get("composer_tolerance", 26)),
+            collision_step=int(layout.get("composer_collision_step", 8)),
+            collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
+            overlap=int(layout.get("composer_overlap", 0)),
+        )
+        self._composer_layout_cache_key = key
+        self._composer_layout_cache = composer_layout
+        return composer_layout
+
     def _piece_layout(self) -> tuple[Stage3ComposerLayout, dict[str, list[Any]]]:
         layout = _layout(self.data)
         key = "pieces:" + json.dumps(layout, sort_keys=True, ensure_ascii=False)
-        if self._terrain_cache is not None and self._terrain_cache_key == key:
-            return self._terrain_cache
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        if (
+            getattr(self, "_piece_layout_cache_key", None) == key
+            and getattr(self, "_piece_layout_cache", None) is not None
+        ):
+            return self._piece_layout_cache
+        rects_path, mask_dir = self._composer_asset_paths()
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         composer_layout = build_stage3_piece_layout(
             layout,
             pieces,
@@ -695,15 +783,28 @@ class StageDesigner:
             collision_step=int(layout.get("composer_collision_step", 8)),
             collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
         )
-        self._terrain_cache_key = key
-        self._terrain_cache = (composer_layout, pieces)
-        return self._terrain_cache
+        self._piece_layout_cache_key = key
+        self._piece_layout_cache = (composer_layout, pieces)
+        return self._piece_layout_cache
 
-    def _composer_pieces(self) -> dict[str, list[Any]]:
-        return load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+    def _composer_pieces(self, event: dict[str, Any] | None = None) -> dict[str, list[Any]]:
+        rects_path, mask_dir = self._composer_asset_paths(event)
+        key = (str(rects_path), str(mask_dir))
+        if (
+            getattr(self, "_composer_piece_cache_key", None) == key
+            and getattr(self, "_composer_piece_cache", None) is not None
+        ):
+            return self._composer_piece_cache  # type: ignore[return-value]
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
+        self._composer_piece_cache_key = key
+        self._composer_piece_cache = pieces
+        if not hasattr(self, "_piece_preview_cache"):
+            self._piece_preview_cache = {}
+        self._piece_preview_cache.clear()
+        return pieces
 
-    def _piece_roles(self) -> list[str]:
-        pieces = self._composer_pieces()
+    def _piece_roles(self, pieces: dict[str, list[Any]] | None = None) -> list[str]:
+        pieces = pieces or self._composer_pieces()
         roles = [role for role in PIECE_ROLE_ORDER if pieces.get(role)]
         return roles or [role for role, values in pieces.items() if values]
 
@@ -714,9 +815,14 @@ class StageDesigner:
             self.piece_palette_index = 0
         return self.piece_palette_role
 
-    def _piece_palette_options(self, role: str | None = None) -> list[Any]:
+    def _piece_palette_options(
+        self,
+        role: str | None = None,
+        pieces: dict[str, list[Any]] | None = None,
+    ) -> list[Any]:
         role = role or self._current_piece_role()
-        return self._composer_pieces().get(role, [])
+        pieces = pieces or self._composer_pieces()
+        return pieces.get(role, [])
 
     def _current_piece_asset(self) -> Any | None:
         options = self._piece_palette_options()
@@ -729,6 +835,56 @@ class StageDesigner:
         piece = self._current_piece_asset()
         asset = _piece_asset_id(piece) if piece is not None else "-"
         return f"piece palette: {self._current_piece_role()} {asset}"
+
+    def _event_rect_image(self, event: dict[str, Any], w: int, h: int) -> pygame.Surface | None:
+        piece = self._event_rect_piece(event, w, h)
+        return None if piece is None else piece.image
+
+    def _event_rect_piece(self, event: dict[str, Any], w: int, h: int) -> Any | None:
+        role = _event_material_role(event)
+        if role is None:
+            return None
+        pieces_by_group = self._composer_pieces(event)
+        asset = event.get("material_asset")
+        if isinstance(asset, str) and ":" in asset:
+            group, index_text = asset.split(":", 1)
+            try:
+                index = int(index_text) - 1
+            except ValueError:
+                index = -1
+            group_pieces = pieces_by_group.get(group, [])
+            if 0 <= index < len(group_pieces):
+                return group_pieces[index]
+        pieces = list(pieces_by_group.get(role, []))
+        if not pieces:
+            return None
+        if str(event.get("type", "")) in {"breakable_gate", "weapon_gate"}:
+            block_pieces = [piece for piece in pieces if piece.group in {"block_tall", "block_square", "block_wide"}]
+            if block_pieces:
+                pieces = block_pieces
+        aspect = w / max(1, h)
+        ranked = sorted(
+            pieces,
+            key=lambda piece: (
+                abs((piece.image.get_width() / max(1, piece.image.get_height())) - aspect),
+                abs(piece.image.get_width() - w) + abs(piece.image.get_height() - h),
+            ),
+        )
+        return ranked[0]
+
+    def _apply_event_rect_asset(self, event: dict[str, Any]) -> None:
+        if event.get("kind") != "data_block":
+            return
+        role = _event_material_role(event)
+        if role is None:
+            return
+        piece = self._event_rect_piece(event, int(event.get("w", 1)), int(event.get("h", 1)))
+        if piece is None:
+            return
+        event["material_role"] = role
+        event["material_asset"] = _piece_asset_id(piece)
+        event["w"] = int(piece.image.get_width())
+        event["h"] = int(piece.image.get_height())
 
     def _event_templates(self) -> list[tuple[str, dict[str, Any]]]:
         return getattr(self, "event_templates", EVENT_TEMPLATES)
@@ -788,8 +944,10 @@ class StageDesigner:
 
     def _event_image(self, event: dict[str, Any], *, max_w: int = 64, max_h: int = 52) -> pygame.Surface:
         etype = str(event.get("type", ""))
+        material_role = str(event.get("material_role", _event_material_role(event) or ""))
         key = (
             f"{etype}:{event.get('kind', '')}:{event.get('surface', '')}:"
+            f"{event.get('surface_anchor', '')}:{material_role}:{event.get('fixed_drop', '')}:"
             f"{event.get('enhanced', False)}:{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
         )
         if key in self._event_image_cache:
@@ -824,6 +982,10 @@ class StageDesigner:
         if image is None and etype in RECT_TERRAIN_TYPES:
             w = max(24, int(event.get("w", 72)))
             h = max(24, int(event.get("h", 54)))
+            image = self._event_rect_image(event, w, h)
+        if image is None and etype in RECT_TERRAIN_TYPES:
+            w = max(24, int(event.get("w", 72)))
+            h = max(24, int(event.get("h", 54)))
             image = Terrain._make_surface(
                 w,
                 h,
@@ -831,12 +993,13 @@ class StageDesigner:
                 destructible=bool(event.get("destructible") or etype in {"breakable_gate", "weapon_gate"}),
                 fixed_drop="WeaponItem" if etype == "weapon_gate" else None,
                 surface_anchor=str(event.get("surface_anchor", "floor")),
+                material_role=material_role or None,
             )
         if image is None:
             image = pygame.Surface((42, 42), pygame.SRCALPHA)
             pygame.draw.circle(image, _event_color(event), (21, 21), 18)
             pygame.draw.circle(image, (240, 248, 245), (21, 21), 18, 2)
-        fitted = _fit_surface(image, max_w, max_h)
+        fitted = image.copy() if etype in RECT_TERRAIN_TYPES else _fit_surface(image, max_w, max_h)
         if bool(event.get("enhanced", False)):
             fitted = fitted.copy()
             tint = pygame.Surface(fitted.get_size(), pygame.SRCALPHA)
@@ -1272,7 +1435,8 @@ class StageDesigner:
             "top": top,
             "bottom": bottom,
         }
-        pieces = load_stage3_composer_pieces(self.rects_path, mask_dir=self.mask_dir)
+        rects_path, mask_dir = self._composer_asset_paths()
+        pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
         segments = make_terrain_segments_from_event(authored, start, default_seed=int(self.data.get("stage_id", 3)))
         composer = build_stage3_composer_layout(
             segments,
@@ -1328,6 +1492,7 @@ class StageDesigner:
         templates = self._event_templates()
         _name, template = templates[index % len(templates)]
         event = copy.deepcopy(template)
+        self._apply_event_rect_asset(event)
         _position_new_event(event, wx, wy)
         events = self.data.setdefault("world_events", [])
         events.append(event)
@@ -1859,7 +2024,6 @@ class StageDesigner:
                     max(1, int(round(world_rect.height * self.zoom))),
                 )
                 preview = self._event_image(event, max_w=rect.width, max_h=rect.height)
-                preview = pygame.transform.smoothscale(preview, (rect.width, rect.height))
                 target.blit(preview, rect.topleft)
                 if self.show_overlays:
                     fill = (*color, 42 if selected else 20)
@@ -1979,16 +2143,25 @@ class StageDesigner:
 
     def _draw_piece_cell(self, target: pygame.Surface, rect: pygame.Rect, role: str, piece: Any) -> None:
         asset = _piece_asset_id(piece)
-        selected = self.mode == "terrain" and role == self._current_piece_role() and self._current_piece_asset() is piece
+        selected_piece = self._current_piece_asset()
+        selected_asset = _piece_asset_id(selected_piece) if selected_piece is not None else ""
+        selected = self.mode == "terrain" and role == self._current_piece_role() and asset == selected_asset
         color = (91, 232, 188) if selected else (72, 92, 96)
         pygame.draw.rect(target, (8, 12, 15), rect)
         pygame.draw.rect(target, color, rect, 2 if selected else 1)
         image = piece.image
         scale = min(1.0, (rect.width - 12) / max(1, image.get_width()), 44 / max(1, image.get_height()))
-        preview = image if scale >= 1.0 else pygame.transform.smoothscale(
-            image,
-            (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale))),
-        )
+        if scale >= 1.0:
+            preview = image
+        else:
+            preview_size = (max(1, int(image.get_width() * scale)), max(1, int(image.get_height() * scale)))
+            if not hasattr(self, "_piece_preview_cache"):
+                self._piece_preview_cache = {}
+            cache_key = (asset, id(image), preview_size[0], preview_size[1])
+            preview = self._piece_preview_cache.get(cache_key)
+            if preview is None:
+                preview = pygame.transform.smoothscale(image, preview_size)
+                self._piece_preview_cache[cache_key] = preview
         target.blit(preview, (rect.x + 6, rect.y + 6))
         label = self.small_font.render(asset, True, (220, 232, 228))
         target.blit(label, (rect.x + 6, rect.bottom - 18))
@@ -1998,12 +2171,56 @@ class StageDesigner:
         color = (255, 175, 98) if selected else _event_color(template)
         pygame.draw.rect(target, (8, 12, 15), rect)
         pygame.draw.rect(target, color, rect, 2 if selected else 1)
+        if _event_material_role(template):
+            preview = self._event_image(template, max_w=rect.width, max_h=rect.height)
+            target.blit(preview, (rect.x + 7, rect.y + 6))
+            label = self.small_font.render(name, True, (230, 235, 232))
+            target.blit(label, (rect.x + 7, rect.y + 8 + preview.get_height()))
+            type_label = self.small_font.render(str(template.get("type", "")), True, (160, 178, 178))
+            target.blit(type_label, (rect.x + 7, rect.bottom - 18))
+            return
         preview = self._event_image(template, max_w=28, max_h=28)
         target.blit(preview, (rect.x + 7, rect.y + 6))
         label = self.small_font.render(name, True, (230, 235, 232))
         target.blit(label, (rect.x + 36, rect.y + 9))
         type_label = self.small_font.render(str(template.get("type", "")), True, (160, 178, 178))
         target.blit(type_label, (rect.x + 7, rect.bottom - 18))
+
+    def _event_palette_cell_height(self, template: dict[str, Any]) -> int:
+        if not _event_material_role(template):
+            return 58
+        image = self._event_image(template, max_w=PALETTE_W, max_h=SCREEN_HEIGHT)
+        return max(58, image.get_height() + 34)
+
+    def _event_palette_rects(
+        self,
+        x0: int,
+        y: int,
+        cell_w: int,
+        gap: int,
+        cols: int,
+    ) -> tuple[list[tuple[int, pygame.Rect]], int]:
+        rects: list[tuple[int, pygame.Rect]] = []
+        col = 0
+        event_h = 58
+        full_w = self.palette_rect.width - 24
+        for i, (_name, template) in enumerate(self._event_templates()):
+            if _event_material_role(template):
+                if col:
+                    y += event_h + gap
+                    col = 0
+                height = self._event_palette_cell_height(template)
+                rects.append((i, pygame.Rect(x0, y, full_w, height)))
+                y += height + gap
+                continue
+            rects.append((i, pygame.Rect(x0 + col * (cell_w + gap), y, cell_w, event_h)))
+            col += 1
+            if col >= cols:
+                y += event_h + gap
+                col = 0
+        if col:
+            y += event_h + gap
+        return rects, y
 
     def _palette_content_rects(self) -> tuple[dict[tuple[Any, ...], pygame.Rect], float]:
         panel = self.palette_rect
@@ -2013,28 +2230,21 @@ class StageDesigner:
         gap = 8
         cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
         title_h = self.font.get_height() + 8
-        event_h = 58
         piece_h = 76
         rects: dict[tuple[Any, ...], pygame.Rect] = {}
-        event_templates = self._event_templates()
 
         y += title_h
-        for i, _template in enumerate(event_templates):
-            col = i % cols
-            row = i // cols
+        event_rects, y = self._event_palette_rects(x0, y, cell_w, gap, cols)
+        for i, rect in event_rects:
             payload = {"kind": "event", "template_index": i}
-            rects[self._palette_payload_key(payload)] = pygame.Rect(
-                x0 + col * (cell_w + gap),
-                y + row * (event_h + gap),
-                cell_w,
-                event_h,
-            )
-        y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
+            rects[self._palette_payload_key(payload)] = rect
+        y += 12
 
         y += title_h
-        for role in self._piece_roles():
+        pieces = self._composer_pieces()
+        for role in self._piece_roles(pieces):
             y += title_h
-            options = self._piece_palette_options(role)
+            options = self._piece_palette_options(role, pieces)
             for i, piece in enumerate(options):
                 col = i % cols
                 row = i // cols
@@ -2080,22 +2290,21 @@ class StageDesigner:
         cell_w = max(96, (panel.width - 24 - gap * (cols - 1)) // cols)
 
         y += self._draw_palette_title(target, "Event Palette", (x0, y))
-        event_h = 58
+        event_rects, y_after_events = self._event_palette_rects(x0, y, cell_w, gap, cols)
         event_templates = self._event_templates()
-        for i, (name, template) in enumerate(event_templates):
-            col = i % cols
-            row = i // cols
-            rect = pygame.Rect(x0 + col * (cell_w + gap), y + row * (event_h + gap), cell_w, event_h)
+        for i, rect in event_rects:
             if rect.colliderect(panel):
+                name, template = event_templates[i]
                 self._draw_event_cell(target, rect, i, name, template)
                 self._palette_hitboxes.append((rect.copy(), {"kind": "event", "template_index": i}))
-        y += ((len(event_templates) + cols - 1) // cols) * (event_h + gap) + 12
+        y = y_after_events + 12
 
         y += self._draw_palette_title(target, "Terrain Pieces", (x0, y))
         piece_h = 76
-        for role in self._piece_roles():
+        pieces = self._composer_pieces()
+        for role in self._piece_roles(pieces):
             y += self._draw_palette_title(target, role, (x0, y))
-            options = self._piece_palette_options(role)
+            options = self._piece_palette_options(role, pieces)
             for i, piece in enumerate(options):
                 col = i % cols
                 row = i // cols
@@ -2182,7 +2391,10 @@ class StageDesigner:
             templates = self._event_templates()
             name = _event_template_name(index, templates)
             template = templates[index % len(templates)][1]
-            preview = self._event_image(template, max_w=58, max_h=46)
+            if _event_material_role(template):
+                preview = self._event_image(template, max_w=PALETTE_W, max_h=SCREEN_HEIGHT)
+            else:
+                preview = self._event_image(template, max_w=58, max_h=46)
             label = self.font.render(name, True, (255, 210, 150))
             bg = pygame.Rect(
                 pos[0] + 12,
@@ -2220,18 +2432,8 @@ class StageDesigner:
             composer_layout, _pieces = self._piece_layout()
             draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
         else:
-            segments, pieces = self._terrain()
-            render_stage3_composer_surface(
-                world_view,
-                segments,
-                pieces,
-                camera_x=self.camera_x,
-                sample_step=int(layout.get("composer_sample_step", 48)),
-                tolerance=int(layout.get("composer_tolerance", 26)),
-                collision_step=int(layout.get("composer_collision_step", 8)),
-                collision_tolerance=int(layout.get("composer_collision_tolerance", 10)),
-                overlap=int(layout.get("composer_overlap", 0)),
-            )
+            composer_layout = self._composer_layout()
+            draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
         crop = pygame.Rect(0, crop_y, visible_w, visible_h)
         view = pygame.Surface((visible_w, visible_h), pygame.SRCALPHA)
         view.blit(world_view, (0, max(0, int(round(-self.camera_y)))), crop)

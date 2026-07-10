@@ -307,8 +307,17 @@ class EnemySpawner:
                 if enemy_type == "weapon_gate" and fixed_drop is None:
                     fixed_drop = "WeaponItem"
                 material_role = event.get("material_role")
-                if enemy_type == "turret_mount" and material_role is None:
-                    material_role = "turret_mount"
+                if material_role is None:
+                    if enemy_type == "turret_mount":
+                        material_role = "turret_mount"
+                    elif enemy_type in {"breakable_gate", "weapon_gate"}:
+                        material_role = "breakable_block"
+                    elif enemy_type in {"Terrain", "solid", "platform", "gate"}:
+                        material_role = (
+                            "fixed_ceiling_block"
+                            if event.get("surface_anchor") == "ceiling"
+                            else "fixed_floor_block"
+                        )
                 self._terrain.add(Terrain(
                     world_x,
                     float(event.get("y", 0)),
@@ -321,6 +330,7 @@ class EnemySpawner:
                     fixed_drop=fixed_drop,
                     surface_anchor=event.get("surface_anchor"),
                     material_role=material_role,
+                    material_asset=event.get("material_asset"),
                 ))
             return True
 
@@ -332,6 +342,8 @@ class EnemySpawner:
                 start_x = self._terrain_start_x(event, camera)
                 self._terrain.add(*make_stage3_composer_terrain_from_pieces(
                     event,
+                    rects_path=event.get("composer_rects", event.get("rects_path", "tools/stage3_terrain_rects.json")),
+                    mask_dir=event.get("composer_mask_dir", event.get("mask_dir", "tools/stage3_terrain_alpha_masks")),
                     start_x=int(round(start_x)),
                     collision_step=int(event.get("composer_collision_step", 8)),
                     collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
@@ -351,6 +363,8 @@ class EnemySpawner:
                     from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
                     self._terrain.add(*make_stage3_composer_terrain(
                         segments,
+                        rects_path=event.get("composer_rects", event.get("rects_path", "tools/stage3_terrain_rects.json")),
+                        mask_dir=event.get("composer_mask_dir", event.get("mask_dir", "tools/stage3_terrain_alpha_masks")),
                         sample_step=int(event.get("composer_sample_step", 48)),
                         tolerance=int(event.get("composer_tolerance", 26)),
                         collision_step=int(event.get("composer_collision_step", 8)),

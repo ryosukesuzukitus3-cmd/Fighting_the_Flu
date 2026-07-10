@@ -6,9 +6,9 @@ Examples:
   python tools/run.py game
   python tools/run.py capture --stage 4 --boss --form 3
   python tools/run.py preview-boss --stage 4 --pattern all
-  python tools/run.py stage3-rect-preview
-  python tools/run.py stage3-rect-editor
-  python tools/run.py stage3-alpha-mask-editor
+  python tools/run.py stage-rect-preview
+  python tools/run.py stage-rect-editor
+  python tools/run.py stage-alpha-mask-editor
   python tools/run.py stage3-terrain-composer
   python tools/run.py stage3-composer-report
   python tools/run.py stage-designer
@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage3-rect-preview|stage3-rect-editor|stage3-alpha-mask-editor|stage3-terrain-composer|stage3-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
+            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage3-terrain-composer|stage3-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -68,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         "clip":       ([py, "tools/gameplay_clip.py", *argv], True),
         "visual-regress": ([py, "tools/visual_regression.py", *argv], True),
         "preview-boss": ([py, "tools/preview_boss.py", *argv], False),
+        "stage-rect-preview": ([py, "tools/stage3_rect_preview.py", *argv], True),
+        "stage-rect-editor": ([py, "tools/stage3_rect_editor.py", *argv], False),
+        "stage-alpha-mask-editor": ([py, "tools/stage3_alpha_mask_editor.py", *argv], False),
         "stage3-rect-preview": ([py, "tools/stage3_rect_preview.py", *argv], True),
         "stage3-rect-editor": ([py, "tools/stage3_rect_editor.py", *argv], False),
         "stage3-alpha-mask-editor": ([py, "tools/stage3_alpha_mask_editor.py", *argv], False),
