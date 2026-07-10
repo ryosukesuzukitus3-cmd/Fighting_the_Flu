@@ -862,12 +862,12 @@ workflow_dispatch で手動実行する（zip は Artifacts に置かれる）�
 |------------------|------------|------|
 | タイトル画面 | `bgm/The_Final_Battle_short.mp3` | 既にそのBGMが流れている場合は再起動しない |
 | S1 通常 | `bgm/The_world_of_spirit_short.mp3` | ラウンドSE終了後に再生（冒頭18秒カット版） |
-| S2 通常 | `bgm/戦艦ハルバード：甲板.mp3` | 同上 |
-| S3 通常 | `bgm/MEGALOVANIA.mp3` | 同上 |
+| S2 通常 | `bgm/MEGALOVANIA.mp3` | 同上 |
+| S3 通常 | `bgm/戦艦ハルバード：甲板.mp3` | 同上 |
 | S4 通常 | `bgm/ビッグブリッヂの死闘.mp3` | 同上 |
 | S1 ボス戦 | `bgm/決戦.mp3` | ボス名バナーで切替 |
-| S2・S3 ボス戦 | `bgm/決戦_FF10.mp3` | 同上 |
-| S4 ボス戦（ラスボス） | `bgm/決戦！N.mp3` | 同上 |
+| S2・S3 ボス戦 | `bgm/決戦！N_short.mp3` | 同上 |
+| S4 ボス戦（ラスボス） | `bgm/決戦_FF10.mp3` | 同上 |
 | S4 先輩復帰（白閃光） | `bgm/Rebirth_the_edge.mp3` | カロナール先輩復帰の盛り上がりで切替（音量は基準の0.7倍） |
 | S1クリア幕間（先輩会話） | `bgm/Death_by_Glamour.mp3` | CutsceneScene の bgm_alias で再生 |
 | ゲームクリア | `bgm/FFVI_勝利のファンファーレ.mp3` | loops=0（1回再生） |

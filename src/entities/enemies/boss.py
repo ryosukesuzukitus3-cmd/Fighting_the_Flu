@@ -1283,10 +1283,17 @@ class Boss(pygame.sprite.Sprite):
         self._reset_battle_v2_for_form()   # Form3 は体幹対象外（max=0）へ引き直し
         # 演出（バナー・セリフ）は game_scene の form3 検知で行う
 
-    def regen(self, amount: int) -> None:
-        """反芻再生: _regen_enabled のとき HP を回復（max クランプ）。"""
+    def regen(self, amount: int) -> int:
+        """反芻再生: _regen_enabled のとき HP を回復（max クランプ）。
+
+        実際に回復した量を返す（0 なら不発）。呼び出し側が回復演出を
+        出すかどうかの判定に使う。
+        """
         if self._regen_enabled and self.hp < self.max_hp:
-            self.hp = min(self.max_hp, self.hp + amount)
+            healed = min(self.max_hp, self.hp + amount) - self.hp
+            self.hp += healed
+            return healed
+        return 0
 
     def begin_act2(self, hp: int) -> None:
         """カロナール復帰後の最終ゲージ開始。反芻再生を停止する。"""

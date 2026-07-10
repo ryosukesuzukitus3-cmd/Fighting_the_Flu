@@ -17,7 +17,7 @@ import pygame
 
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
-from src.scenes.game.config import BOSS_BGM, BOSS_MID_LINE_DURATION
+from src.scenes.game.config import BOSS_BGM
 from src.story.aliases import bgm_path
 from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS
 
@@ -36,6 +36,11 @@ class FinalBattleDirector:
         self._final_banner_text: tuple = ()
         self._final_banner_timer: float = 0.0
         self._sengen_overlay_timer: float = 0.0
+        # 必至宣言の HP ドレイン演出（瞬時に1にせず、バーが目に見えて減る）
+        self._sengen_drain_dur:   float = 1.4
+        self._sengen_drain_timer: float = 0.0
+        self._sengen_drain_from:  int   = 0
+        self._sengen_fx_accum:    float = 0.0
         self._regen_timer: float = 0.0
         self._f3_act1_mid_shown:    bool = False
         self._f3_act2_mid_shown:    bool = False
@@ -69,6 +74,7 @@ class FinalBattleDirector:
         """演出タイマー（バナー・宣言オーバーレイ）とカロナール到着モーション。"""
         if self._final_banner_timer    > 0: self._final_banner_timer    -= dt
         if self._sengen_overlay_timer  > 0: self._sengen_overlay_timer  -= dt
+        if self._sengen_drain_timer    > 0: self._update_sengen_drain(dt)
         if self._karonaru_arrival_timer > 0:
             self._update_karonaru_arrival_motion(dt)
         elif self._karonaru_arrival_trail:
@@ -125,16 +131,19 @@ class FinalBattleDirector:
                 self._regen_timer -= dt
                 if self._regen_timer <= 0.0:
                     self._regen_timer = 1.0
-                    boss.regen(2)
+                    if boss.regen(2):
+                        # 反芻再生の可視化: 回復するたび紫グローを吹かせる
+                        self.scene.particles.spawn_glow(
+                            boss.sx, boss.sy, color=(190, 120, 255), count=5, speed=55.0)
             if not self._f3_act1_mid_shown and ratio <= 0.6:
-                self.scene._enqueue_boss_dialogue(BOSS_MID.get("4f3mid", []), BOSS_MID_LINE_DURATION)
+                self.scene._start_combat_cutin(BOSS_MID.get("4f3mid", []))
                 self._f3_act1_mid_shown = True
             if not self._fakeout_triggered and ratio <= 0.3:
                 self._fakeout_triggered = True
                 self._start_fakeout()
         elif self._final_phase == 2:
             if not self._f3_act2_mid_shown and ratio <= 0.5:
-                self.scene._enqueue_boss_dialogue(BOSS_MID.get("4f3act2mid", []), BOSS_MID_LINE_DURATION)
+                self.scene._start_combat_cutin(BOSS_MID.get("4f3act2mid", []))
                 self._f3_act2_mid_shown = True
             if not self._final_sengen_triggered and boss.hp <= 1:
                 self._final_sengen_triggered = True
@@ -161,7 +170,7 @@ class FinalBattleDirector:
             # S2 はキーが "2mid" のままなので再アームすると同じ台詞が二重再生される。
             scene._boss_mid_dialogue_shown = False
         self._show_final_banner("awaken" if stage_id == 4 else "awaken2", 2.6)
-        scene._enqueue_boss_dialogue(BOSS_MID.get(f"{stage_id}f2", []), BOSS_MID_LINE_DURATION)
+        scene._start_combat_cutin(BOSS_MID.get(f"{stage_id}f2", []))
 
     def on_form3_transition(self) -> None:
         """Transition from form 2 to the true final form."""
@@ -200,16 +209,46 @@ class FinalBattleDirector:
         self._play_final_dialogue(FINAL_SEQ["fakeout"], on_done=self._start_sengen)
 
     def _start_sengen(self) -> None:
-        if self.scene._boss is not None:
-            self.scene._boss.hp = self.scene._boss.max_hp // 2
+        scene = self.scene
+        if scene._boss is not None:
+            scene._boss.hp = scene._boss.max_hp // 2
         self._final_seq = "sengen"
         self._sengen_overlay_timer = 2.5
         self._show_final_banner("sengen", 2.6)
-        self.scene.player.hp = 1   # 回避不可 → 致死
-        self.scene.player._invincible_timer = max(self.scene.player._invincible_timer, 3.0)
+        # HP はここで即値にせず、ドレイン演出でバーが目に見えて 1 まで減る
+        # （実機FB「ヌルっとHP1になって気づきづらい」対応）。
+        scene.game.sound.play_se_alias("SE_ALERT", volume=0.5)
+        scene.camera.shake(14.0)
+        self._sengen_drain_timer = self._sengen_drain_dur
+        self._sengen_drain_from  = max(1, int(scene.player.hp))
+        self._sengen_fx_accum    = 0.0
+        scene.player._invincible_timer = max(scene.player._invincible_timer, 4.0)
         self._play_final_dialogue(FINAL_SEQ["sengen"], on_done=self._start_karonaru_return)
 
+    def _update_sengen_drain(self, dt: float) -> None:
+        """必至宣言の HP ドレイン。台詞凍結中も update_timers 経由で進み、
+        HUD の HP バーが赤スパークとともに 1 まで減っていく。"""
+        scene = self.scene
+        self._sengen_drain_timer = max(0.0, self._sengen_drain_timer - dt)
+        t = 1.0 - self._sengen_drain_timer / max(0.001, self._sengen_drain_dur)
+        scene.player.hp = max(1, int(round(self._sengen_drain_from * (1.0 - t) + 1 * t)))
+        px, py = scene.player.rect.center
+        self._sengen_fx_accum += dt
+        if self._sengen_fx_accum >= 0.12:
+            self._sengen_fx_accum = 0.0
+            scene.particles.spawn_spark(px, py, color=(255, 90, 70), count=6, speed=220.0)
+            scene.camera.shake(5.0)
+        if self._sengen_drain_timer <= 0.0:
+            scene.player.hp = 1
+            scene.particles.spawn_player_hit(px, py)
+            scene._spawn_popup("HP 1", px, py - 30, color=(255, 70, 60), life=2.2)
+            scene.camera.shake(10.0)
+
     def _start_karonaru_return(self) -> None:
+        # ドレインが読了より遅れて残っていたら、ここで確定させる（HP回復後の再ドレイン防止）
+        if self._sengen_drain_timer > 0:
+            self._sengen_drain_timer = 0.0
+            self.scene.player.hp = 1
         self._final_seq = "return"
         self._show_final_banner("kouhatsu", 3.0)
         self.scene._boss_kill_flash_timer = 1.2   # 白閃光
@@ -320,6 +359,13 @@ class FinalBattleDirector:
         from src.entities.enemies.boss import _FORM3_ACT2_HP
         if scene._boss is not None:
             scene._boss.begin_act2(_FORM3_ACT2_HP)
+            # 反芻再生の「剥がし」を見せる: ボス側で緑の破裂＋停止ポップ
+            # （紫の反芻オーラも同時に消える＝状態変化が二重に読める）
+            bx, by = scene._boss.sx, scene._boss.sy
+            scene.particles.spawn_spark(bx, by, color=(180, 255, 200), count=28, speed=320.0)
+            scene.particles.spawn_glow(bx, by, color=(160, 255, 190), count=14, speed=110.0)
+            scene._spawn_popup("反芻再生 停止", int(bx), int(by) - 44,
+                               color=(160, 255, 190), life=2.6)
         self._final_phase = 2
         scene._boss_mid_dialogue_shown = False
         self._play_final_dialogue(FINAL_SEQ["act2_start"], on_done=self._resume_final_combat)

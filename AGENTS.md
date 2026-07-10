@@ -59,7 +59,7 @@ Codex のメインエージェント（例: GPT-5.5）は、必要に応じて�
 | BGM/SE エイリアス | `src/story/aliases.py` |
 | ストーリー進行フラグ | `src/story/state.py`（`game.story`） |
 | 相棒エンティティ（カロナール先輩） | `src/entities/companion.py` > `Karonaru` |
-| 内輪ネタ正典・弄りの線引き（脚本方針） | `docs/story_canon.md` |
+| 脚本（正典・全台本・演出注記。ユーザー編集の入力点） | `docs/story.md`（セリフ実装の SSOT は `src/story/script.py`。相互同期） |
 
 ## 設計判断の心得（distilled heuristics）
 
@@ -162,11 +162,12 @@ Anthropic の Claude Fable 5 プロンプティングガイド（https://platfor
 
 ### セリフ・ストーリーを変更するとき
 
-0. 先に `docs/story_canon.md`（内輪ネタ正典・弄りの線引き）を確認。正典ネタの削除・改変はユーザー確認なしに行わない
-1. セリフ／ナレーション／カットシーンの内容は `src/story/script.py` だけを編集（唯一のソース）
+0. 先に `docs/story.md` 冒頭の正典（内輪ネタ・弄りの線引き）を確認。正典ネタの削除・改変はユーザー確認なしに行わない
+1. セリフ／ナレーション／カットシーンの内容は `src/story/script.py` だけを編集（実装の唯一のソース）
 2. 新しい話者を出す場合は `src/story/speakers.py` > `SPEAKERS` に追加（表示名・色）
 3. 新しい BGM/SE エイリアスは `src/story/aliases.py` に追加（未用意なら `None`＝ダミー扱い）
 4. `python tools/check_consistency.py --section story` で話者登録・ステージ網羅・実ファイル存在を確認
+5. `docs/story.md` の該当台本を同じPRで逐語同期する（story.md はユーザーが直接編集する入力点。ユーザー編集起点の場合は逆向きに script.py へ反映する）
 
 ## docs の更新方針
 
