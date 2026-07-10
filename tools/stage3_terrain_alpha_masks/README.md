@@ -1,6 +1,7 @@
 # Stage3 Terrain Alpha Masks
 
-`tools/run.py stage3-alpha-mask-editor` creates per-rect mask PNGs here.
+`tools/run.py stage-alpha-mask-editor` creates per-rect mask PNGs here.
+The old `stage3-alpha-mask-editor` command name is kept as a compatibility alias.
 
 White pixels are treated as transparent by `stage3-terrain-composer`; black
 pixels are kept opaque. Mask filenames include the rect group, index, and source

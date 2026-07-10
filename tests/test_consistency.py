@@ -454,6 +454,9 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "meme_static"
+    assert layout["renderer"] == "stage3_composer"
+    assert layout["composer_rects"] == "tools/stage2_terrain_rects.json"
+    assert layout["composer_mask_dir"] == "tools/stage2_terrain_alpha_masks"
     assert layout["length"] >= boss_x + 800
     assert layout["breakable_drop_chance"] <= 0.05
     assert len(world_events) >= 40
@@ -1219,6 +1222,33 @@ def test_stage3_composer_rect_roles_are_available() -> None:
         ) <= 0.02
 
 
+def test_stage2_composer_rect_roles_are_available() -> None:
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+
+    pieces = load_stage3_composer_pieces(
+        ROOT / "tools" / "stage2_terrain_rects.json",
+        mask_dir=ROOT / "tools" / "stage2_terrain_alpha_masks",
+    )
+    expected_roles = {
+        "floor_surface",
+        "ceiling_surface",
+        "body_fill",
+        "fixed_floor_block",
+        "fixed_ceiling_block",
+        "exposed_column",
+        "floor_prop",
+        "decor_prop",
+        "turret_mount",
+        "breakable_block",
+    }
+
+    assert expected_roles <= set(pieces)
+    assert all(pieces[role] for role in expected_roles)
+    assert len(pieces["floor_surface"]) >= 6
+    assert len(pieces["block_square"]) >= 12
+    assert all(piece.image.get_width() > 0 and piece.image.get_height() > 0 for piece in pieces["floor_surface"])
+
+
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
     from src.entities.terrain import Terrain
 
@@ -1776,6 +1806,12 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     assert ".venv" in src
     assert "stage3-composer-report" in src
     assert "stage-designer" in src
+    assert "stage-rect-preview" in src
+    assert "stage-rect-editor" in src
+    assert "stage-alpha-mask-editor" in src
+    assert "stage3-rect-preview" in src
+    assert "stage3-rect-editor" in src
+    assert "stage3-alpha-mask-editor" in src
 
 
 def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
@@ -1794,7 +1830,7 @@ def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
 
 
 def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
-    from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args
+    from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args, _profile_path
 
     default_profile = _profile_from_args(_parse_args([]))
     stage2_profile = _profile_from_args(_parse_args(["--stage", "2"]))
@@ -1807,6 +1843,7 @@ def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
     assert inferred_stage2_profile.stage_id == 2
     assert stage2_profile.stage_json == ROOT / "data" / "stages" / "stage2.json"
     assert stage2_profile.rects == ROOT / "tools" / "stage2_terrain_rects.json"
+    assert _profile_path(stage2_profile.rects, stage2_profile.fallback_rects) == stage2_profile.rects
     assert stage2_profile.fallback_rects == DEFAULT_RECTS
     assert stage2_profile.fallback_mask_dir == DEFAULT_MASK_DIR
     assert stage2_profile.background == ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"
@@ -1829,6 +1866,146 @@ def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:
 
     assert designer.data["world_events"][0]["kind"] == "data_block"
     assert designer.selection == Selection("event", 0)
+
+
+def test_stage_designer_stage2_block_previews_use_rect_roles() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_material_role, _event_templates_for_kind, _piece_asset_id
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainStrip", "length": 1000}], "world_events": []}
+    designer.rects_path = ROOT / "tools" / "stage2_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage2_terrain_alpha_masks"
+    designer.event_templates = _event_templates_for_kind("data_block")
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+
+    expected = {
+        "solid block": "fixed_floor_block",
+        "ceiling block": "fixed_ceiling_block",
+        "turret mount": "turret_mount",
+        "breakable gate": "breakable_block",
+        "weapon gate": "breakable_block",
+    }
+    templates = dict(_event_templates_for_kind("data_block"))
+
+    for name, role in expected.items():
+        event = templates[name]
+        image = designer._event_rect_image(event, int(event["w"]), int(event["h"]))
+        piece = designer._event_rect_piece(event, int(event["w"]), int(event["h"]))
+        role_images = [piece.image for piece in designer._composer_pieces()[role]]
+
+        assert _event_material_role(event) == role
+        assert any(image is role_image for role_image in role_images)
+        assert image.get_size() == piece.image.get_size()
+
+    index = next(i for i, (name, _event) in enumerate(designer.event_templates) if name == "weapon gate")
+    designer._add_event_template_at(index, 420, 180)
+    added = designer.data["world_events"][0]
+    added_piece = designer._event_rect_piece(added, int(added["w"]), int(added["h"]))
+
+    assert added["material_role"] == "breakable_block"
+    assert added["material_asset"] == _piece_asset_id(added_piece)
+    assert (added["w"], added["h"]) == added_piece.image.get_size()
+    assert designer.selection == Selection("event", 0)
+
+
+def test_stage2_data_block_runtime_uses_rect_material_asset() -> None:
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+    from src.entities.terrain import Terrain
+
+    pieces = load_stage3_composer_pieces(
+        ROOT / "tools" / "stage2_terrain_rects.json",
+        mask_dir=ROOT / "tools" / "stage2_terrain_alpha_masks",
+    )
+    piece = pieces["turret_mount"][0]
+    terrain = Terrain(
+        0,
+        0,
+        piece.image.get_width(),
+        piece.image.get_height(),
+        "data_block",
+        material_role="turret_mount",
+        material_asset=f"{piece.group}:{piece.index + 1}",
+    )
+
+    assert terrain.image.get_size() == piece.image.get_size()
+    assert terrain.image.get_at((10, 10)) == piece.image.get_at((10, 10))
+
+
+def test_stage_designer_piece_palette_uses_stable_asset_identity() -> None:
+    from types import SimpleNamespace
+
+    import pygame
+
+    from tools.stage_designer import StageDesigner
+
+    pygame.font.init()
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.mode = "terrain"
+    designer.piece_palette_role = "floor_surface"
+    designer.font = pygame.font.Font(None, 16)
+    designer.small_font = pygame.font.Font(None, 13)
+    designer._piece_preview_cache = {}
+
+    image = pygame.Surface((220, 80), pygame.SRCALPHA)
+    selected_piece = SimpleNamespace(group="strip_top", index=0, image=image)
+    visible_piece = SimpleNamespace(group="strip_top", index=0, image=image)
+    designer._current_piece_role = lambda: "floor_surface"  # type: ignore[method-assign]
+    designer._current_piece_asset = lambda: selected_piece  # type: ignore[method-assign]
+
+    target = pygame.Surface((180, 96), pygame.SRCALPHA)
+    rect = pygame.Rect(8, 8, 120, 76)
+    designer._draw_piece_cell(target, rect, "floor_surface", visible_piece)
+    cached_preview = next(iter(designer._piece_preview_cache.values()))
+    designer._draw_piece_cell(target, rect, "floor_surface", visible_piece)
+
+    assert target.get_at(rect.topleft)[:3] == (91, 232, 188)
+    assert next(iter(designer._piece_preview_cache.values())) is cached_preview
+
+
+def test_stage_designer_caches_strip_composer_layout_across_scroll() -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {
+        "stage_id": 2,
+        "terrain_layout": [
+            {
+                "type": "TerrainStrip",
+                "length": 1200,
+                "segment_w": 48,
+                "seed": 202,
+                "gap_min": 358,
+                "gap_max": 468,
+                "center_y": 300,
+                "center_wave": 88,
+                "top_min": 24,
+                "bottom_min": 28,
+                "irregularity": 78,
+                "start_offset": -90,
+            }
+        ],
+        "world_events": [],
+    }
+    designer.rects_path = ROOT / "tools" / "stage2_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage2_terrain_alpha_masks"
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    first = designer._composer_layout()
+    designer.camera_x = 420.0
+    second = designer._composer_layout()
+
+    assert second is first
+    assert [placement.asset for placement in second.placements] == [placement.asset for placement in first.placements]
 
 
 def test_stage_designer_moves_boss_gate_as_one_unit() -> None:

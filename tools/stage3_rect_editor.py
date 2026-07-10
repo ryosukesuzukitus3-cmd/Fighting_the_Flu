@@ -1,4 +1,4 @@
-"""Interactive editor for Stage3 terrain source rects.
+"""Interactive editor for stage terrain source rects.
 
 Controls:
   Left drag        add a rect to the active group
@@ -145,7 +145,7 @@ class Stage3RectEditor:
             _ensure_group(self.data, group)
 
         self.screen = pygame.display.set_mode((args.window_w, args.window_h), pygame.RESIZABLE)
-        pygame.display.set_caption("Stage3 rect editor")
+        pygame.display.set_caption("Stage rect editor")
         self.font = pygame.font.SysFont("consolas", 16) or pygame.font.Font(None, 16)
         self.small_font = pygame.font.SysFont("consolas", 13) or pygame.font.Font(None, 13)
 
@@ -602,7 +602,11 @@ class Stage3RectEditor:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog="stage-rect-editor",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="rect JSON to edit")
     parser.add_argument("--sheet", default=None, help="override sheet image path")
     parser.add_argument("--group", default=None, help="initial active group")
@@ -619,7 +623,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         editor = Stage3RectEditor(args)
     except (OSError, json.JSONDecodeError, KeyError, ValueError, pygame.error) as exc:
-        print(f"[stage3-rect-editor] error: {exc}")
+        print(f"[stage-rect-editor] error: {exc}")
         return 2
     return editor.run()
 

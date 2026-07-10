@@ -24,6 +24,10 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "clot":   ((126, 24, 34), (230, 82, 76)),
 }
 _STAGE3_TERRAIN_SHEET_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_fortress_terrain_sheet.png"
+_STAGE3_TERRAIN_RECTS_PATH = Path(__file__).parent.parent.parent / "tools" / "stage3_terrain_rects.json"
+_STAGE3_TERRAIN_MASK_DIR = Path(__file__).parent.parent.parent / "tools" / "stage3_terrain_alpha_masks"
+_STAGE2_TERRAIN_RECTS_PATH = Path(__file__).parent.parent.parent / "tools" / "stage2_terrain_rects.json"
+_STAGE2_TERRAIN_MASK_DIR = Path(__file__).parent.parent.parent / "tools" / "stage2_terrain_alpha_masks"
 _STAGE3_TERRAIN_SHEET: pygame.Surface | None = None
 
 
@@ -130,17 +134,32 @@ def _stage3_rect_material_surface(
     *,
     seed: int,
     require_top: bool,
+    kind: str = "fortress_block",
     preferred_role: str | None = None,
     surface_anchor: str = "floor",
+    material_asset: str | None = None,
 ) -> pygame.Surface | None:
     try:
         from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
     except Exception:
         return None
     try:
-        pieces_by_group = load_stage3_composer_pieces()
+        if kind == "data_block":
+            pieces_by_group = load_stage3_composer_pieces(_STAGE2_TERRAIN_RECTS_PATH, mask_dir=_STAGE2_TERRAIN_MASK_DIR)
+        else:
+            pieces_by_group = load_stage3_composer_pieces(_STAGE3_TERRAIN_RECTS_PATH, mask_dir=_STAGE3_TERRAIN_MASK_DIR)
     except Exception:
         return None
+
+    if material_asset:
+        try:
+            group, index_text = str(material_asset).split(":", 1)
+            piece = pieces_by_group[group][int(index_text) - 1]
+        except (KeyError, IndexError, TypeError, ValueError):
+            return None
+        if piece.image.get_size() != (w, h):
+            return None
+        return piece.image.copy()
 
     aspect = w / max(1, h)
     if preferred_role and pieces_by_group.get(preferred_role):
@@ -271,6 +290,7 @@ class Terrain(pygame.sprite.Sprite):
         fixed_drop: str | None = None,
         surface_anchor: str | None = None,
         material_role: str | None = None,
+        material_asset: str | None = None,
     ) -> None:
         super().__init__()
         self.world_x = float(world_x)
@@ -287,12 +307,14 @@ class Terrain(pygame.sprite.Sprite):
             "ceiling" if self.y <= 1.0 else "floor"
         )
         self._material_role = material_role
+        self._material_asset = material_asset
         self.image   = self._make_surface(
             w, h, kind,
             destructible=destructible,
             fixed_drop=fixed_drop,
             surface_anchor=self._surface_anchor,
             material_role=material_role,
+            material_asset=material_asset,
         )
         self.rect    = self.image.get_rect(topleft=(int(world_x), int(y)))
 
@@ -307,6 +329,7 @@ class Terrain(pygame.sprite.Sprite):
         fixed_drop: str | None = None,
         surface_anchor: str = "floor",
         material_role: str | None = None,
+        material_asset: str | None = None,
     ) -> pygame.Surface:
         if kind == "clot":
             return Terrain._make_clot_surface(
@@ -321,6 +344,9 @@ class Terrain(pygame.sprite.Sprite):
                 destructible=destructible,
                 damage_ratio=damage_ratio,
                 fixed_drop=fixed_drop,
+                surface_anchor=surface_anchor,
+                material_role=material_role,
+                material_asset=material_asset,
             )
         if kind == "fortress_block":
             return Terrain._make_fortress_block_surface(
@@ -330,6 +356,7 @@ class Terrain(pygame.sprite.Sprite):
                 fixed_drop=fixed_drop,
                 surface_anchor=surface_anchor,
                 material_role=material_role,
+                material_asset=material_asset,
             )
 
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
@@ -373,6 +400,7 @@ class Terrain(pygame.sprite.Sprite):
         fixed_drop: str | None = None,
         surface_anchor: str = "floor",
         material_role: str | None = None,
+        material_asset: str | None = None,
     ) -> pygame.Surface:
         seed = (w * 33013) ^ (h * 77041) ^ (0xB10C if destructible else 0xF077)
         rng = random.Random(seed)
@@ -386,8 +414,10 @@ class Terrain(pygame.sprite.Sprite):
             h,
             seed=seed,
             require_top=surface_anchor != "ceiling",
+            kind="fortress_block",
             preferred_role=preferred_role,
             surface_anchor=surface_anchor,
+            material_asset=material_asset,
         ) or _stage3_material_surface(
             w, h, seed=seed, role="block",
         )
@@ -421,8 +451,40 @@ class Terrain(pygame.sprite.Sprite):
         destructible: bool = False,
         damage_ratio: float = 0.0,
         fixed_drop: str | None = None,
+        surface_anchor: str = "floor",
+        material_role: str | None = None,
+        material_asset: str | None = None,
     ) -> pygame.Surface:
         rng = random.Random((w * 61001) ^ (h * 97003) ^ 0xDADA)
+        preferred_role = material_role or (
+            "breakable_block" if destructible else (
+                "fixed_ceiling_block" if surface_anchor == "ceiling" else "fixed_floor_block"
+            )
+        )
+        rect_surf = None
+        if material_asset:
+            rect_surf = _stage3_rect_material_surface(
+                w,
+                h,
+                seed=(w * 61001) ^ (h * 97003) ^ 0xDADA,
+                require_top=surface_anchor != "ceiling",
+                kind="data_block",
+                preferred_role=preferred_role,
+                surface_anchor=surface_anchor,
+                material_asset=material_asset,
+            )
+        if rect_surf is not None:
+            if destructible:
+                _stage3_draw_breakable_cracks(
+                    rect_surf,
+                    w,
+                    h,
+                    rng=rng,
+                    damage_ratio=damage_ratio,
+                )
+            Terrain._draw_reward_core(rect_surf, w, h, fixed_drop, damage_ratio=damage_ratio)
+            return rect_surf
+
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
         surf.fill((2, 5, 7, 252))
         pygame.draw.rect(surf, (0, 1, 2, 230), (0, 0, w, h), 2)
@@ -651,6 +713,7 @@ class Terrain(pygame.sprite.Sprite):
             fixed_drop=self.fixed_drop,
             surface_anchor=self._surface_anchor,
             material_role=self._material_role,
+            material_asset=self._material_asset,
         )
         self.rect = self.image.get_rect(center=center)
         return False
