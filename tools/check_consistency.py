@@ -187,15 +187,52 @@ def check_stages() -> None:
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
     authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
     piece_terrain_types = {"TerrainPieces"}
+    from src.core.terrain_composer import (
+        TERRAIN_COMPOSER_RENDERERS,
+        is_terrain_composer_renderer,
+        load_composer_catalog,
+        resolve_composer_paths,
+        terrain_material_catalog_for_kind,
+    )
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
-    stage3_rects = json.loads((ROOT / "tools" / "stage3_terrain_rects.json").read_text(encoding="utf-8"))
-    valid_stage3_assets = {
-        f"{group}:{index}"
-        for group, group_data in stage3_rects.get("groups", {}).items()
-        for index, _rect in enumerate(group_data.get("rects", []), start=1)
-    }
     valid_piece_collisions = {"auto", "none", "surface", "rect"}
+
+    def composer_catalog(label: str, ev: dict, *, required: bool = False):
+        renderer = ev.get("renderer")
+        if renderer is None:
+            if required:
+                _fail(f"{label}: missing terrain composer renderer")
+            return None
+        if not is_terrain_composer_renderer(renderer):
+            _fail(
+                f"{label}: unknown terrain composer renderer '{renderer}'; "
+                f"expected one of {sorted(TERRAIN_COMPOSER_RENDERERS)}"
+            )
+            return None
+        try:
+            rects_path, _mask_dir = resolve_composer_paths(ev)
+            return load_composer_catalog(rects_path)
+        except (OSError, TypeError, ValueError) as exc:
+            _fail(f"{label}: invalid terrain composer catalog: {exc}")
+            return None
+
+    def validate_material_catalog(label: str, ev: dict) -> None:
+        if "material_role" not in ev and "material_asset" not in ev:
+            return
+        material = terrain_material_catalog_for_kind(ev.get("kind", "wall"))
+        if material is None:
+            _fail(f"{label}(Terrain): kind '{ev.get('kind', 'wall')}' has no material catalog")
+            return
+        try:
+            catalog = load_composer_catalog(material.rects_path)
+        except (OSError, TypeError, ValueError) as exc:
+            _fail(f"{label}(Terrain): invalid material catalog: {exc}")
+            return
+        if "material_role" in ev and ev["material_role"] not in catalog.roles:
+            _fail(f"{label}(Terrain): invalid material_role '{ev['material_role']}'")
+        if "material_asset" in ev and ev["material_asset"] not in catalog.assets:
+            _fail(f"{label}(Terrain): invalid material_asset '{ev['material_asset']}'")
 
     def validate_terrain_event(label: str, ev: dict) -> None:
         if ev.get("type") in rect_terrain_types:
@@ -204,6 +241,7 @@ def check_stages() -> None:
                     _fail(f"{label}(Terrain): 必須フィールド '{field}' が欠如")
             if ev.get("kind", "wall") not in valid_terrain_kinds:
                 _fail(f"{label}(Terrain): 未知の kind '{ev.get('kind')}'")
+            validate_material_catalog(label, ev)
         elif ev.get("type") in authored_terrain_types:
             for field in ("top", "bottom"):
                 if field not in ev:
@@ -213,15 +251,18 @@ def check_stages() -> None:
                     _fail(f"{label}({ev.get('type')}): '{field}' requires at least two points")
             if ev.get("theme", "fever_cave") not in valid_strip_themes:
                 _fail(f"{label}({ev.get('type')}): unknown theme '{ev.get('theme')}'")
+            if "renderer" in ev:
+                composer_catalog(label, ev)
         elif ev.get("type") in strip_terrain_types:
             for field in ("length",):
                 if field not in ev:
                     _fail(f"{label}(TerrainStrip): 必須フィールド '{field}' が欠如")
             if ev.get("theme", "fever_cave") not in valid_strip_themes:
                 _fail(f"{label}(TerrainStrip): 未知の theme '{ev.get('theme')}'")
+            if "renderer" in ev:
+                composer_catalog(label, ev)
         elif ev.get("type") in piece_terrain_types:
-            if ev.get("renderer") != "stage3_composer":
-                _fail(f"{label}(TerrainPieces): renderer must be 'stage3_composer'")
+            catalog = composer_catalog(label, ev, required=True)
             if not isinstance(ev.get("pieces"), list):
                 _fail(f"{label}(TerrainPieces): missing 'pieces'")
                 return
@@ -229,8 +270,10 @@ def check_stages() -> None:
                 if not isinstance(piece, dict):
                     _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: must be an object")
                     continue
-                if piece.get("asset") not in valid_stage3_assets:
+                if catalog is not None and piece.get("asset") not in catalog.assets:
                     _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: unknown asset '{piece.get('asset')}'")
+                if catalog is not None and "role" in piece and piece["role"] not in catalog.roles:
+                    _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: unknown role '{piece['role']}'")
                 if "x" not in piece or "y" not in piece:
                     _fail(f"{label}(TerrainPieces).pieces[{piece_index}]: missing x/y")
                 if piece.get("collision", "auto") not in valid_piece_collisions:
@@ -265,25 +308,10 @@ def check_stages() -> None:
                     _fail(f"{p.name} events[{i}]: 必須フィールド '{field}' が欠如")
             if "surface" in ev and ev.get("surface") not in {"top", "bottom"}:
                 _fail(f"{p.name} events[{i}]: invalid surface '{ev.get('surface')}'")
-            if ev.get("type") == "Terrain":
-                # 地形イベント: y/w/h/kind を要求（count/formation は不要）
-                for field in ("y", "w", "h", "kind"):
-                    if field not in ev:
-                        _fail(f"{p.name} events[{i}](Terrain): 必須フィールド '{field}' が欠如")
-                if ev.get("kind") not in valid_terrain_kinds:
-                    _fail(f"{p.name} events[{i}](Terrain): 未知の kind '{ev.get('kind')}'")
-            elif ev.get("type") in authored_terrain_types:
-                for field in ("theme", "top", "bottom"):
-                    if field not in ev:
-                        _fail(f"{p.name} events[{i}]({ev.get('type')}): missing '{field}'")
-                if ev.get("theme") not in valid_strip_themes:
-                    _fail(f"{p.name} events[{i}]({ev.get('type')}): unknown theme '{ev.get('theme')}'")
-            elif ev.get("type") == "TerrainStrip":
-                for field in ("theme", "length"):
-                    if field not in ev:
-                        _fail(f"{p.name} events[{i}](TerrainStrip): 必須フィールド '{field}' が欠如")
-                if ev.get("theme") not in valid_strip_themes:
-                    _fail(f"{p.name} events[{i}](TerrainStrip): 未知の theme '{ev.get('theme')}'")
+            if ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types | piece_terrain_types:
+                validate_terrain_event(f"{p.name} events[{i}]", ev)
+                if ev.get("type") in rect_terrain_types and "kind" not in ev:
+                    _fail(f"{p.name} events[{i}](Terrain): 必須フィールド 'kind' が欠如")
             else:
                 if "count" not in ev:
                     _fail(f"{p.name} events[{i}]: 必須フィールド 'count' が欠如")
@@ -300,6 +328,8 @@ def check_stages() -> None:
                 _fail(f"{p.name} world_events[{i}]: missing 'x' / 'world_x' / 'trigger_x'")
             if "surface" in ev and ev.get("surface") not in {"top", "bottom"}:
                 _fail(f"{p.name} world_events[{i}]: invalid surface '{ev.get('surface')}'")
+            if ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types | piece_terrain_types:
+                validate_terrain_event(f"{p.name} world_events[{i}]", ev)
         for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for i, ev in enumerate(data.get(section, [])):
                 validate_terrain_event(f"{p.name} {section}[{i}]", ev)

@@ -1,9 +1,8 @@
-"""Compose Stage3 terrain preview from the runtime composer model.
+"""Compose a stage terrain preview from the runtime composer model.
 
 Examples:
-  python tools/stage3_terrain_composer_preview.py
-  python tools/stage3_terrain_composer_preview.py --x 0 --x 3600 --debug-lines
-  python tools/stage3_terrain_composer_preview.py --out captures/stage3_composer
+  python tools/run.py stage-terrain-composer --stage 3
+  python tools/run.py stage-terrain-composer --stage 2 --x 0 --debug-lines
 """
 from __future__ import annotations
 
@@ -18,19 +17,29 @@ from typing import Any
 
 import pygame
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 from src.entities.stage3_composer_terrain import (
     load_stage3_composer_pieces,
     render_stage3_composer_surface,
     render_stage3_piece_surface,
 )
-from stage3_alpha_mask_common import DEFAULT_MASK_DIR
+from tools.stage_terrain_profiles import (
+    DEFAULT_STAGE_ID,
+    STAGE_TERRAIN_PROFILES,
+    StageTerrainProfile,
+    resolve_stage_terrain_profile,
+    stage_id_from_json,
+)
 
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_STAGE = ROOT / "data" / "stages" / "stage3.json"
-DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
+DEFAULT_PROFILE = STAGE_TERRAIN_PROFILES[DEFAULT_STAGE_ID]
+DEFAULT_STAGE = DEFAULT_PROFILE.stage_json
+DEFAULT_RECTS = DEFAULT_PROFILE.rects
+DEFAULT_MASK_DIR = DEFAULT_PROFILE.mask_dir
 DEFAULT_OUT = ROOT / "captures" / "stage3_terrain_composer"
-DEFAULT_VIEW_X = (0, 2200, 4400, 6600, 8800, 10800)
-BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
+DEFAULT_VIEW_X = DEFAULT_PROFILE.preview_camera_xs
+BACKGROUND_PATH = DEFAULT_PROFILE.background
 
 
 def _resolve(path: str | Path, *, base: Path = ROOT) -> Path:
@@ -38,32 +47,82 @@ def _resolve(path: str | Path, *, base: Path = ROOT) -> Path:
     return p if p.is_absolute() else base / p
 
 
-def _stage3_layout(stage_path: Path) -> dict[str, Any]:
+def _stage_layout(stage_path: Path) -> dict[str, Any]:
     data = json.loads(stage_path.read_text(encoding="utf-8"))
     layouts = data.get("terrain_layout", [])
     if not layouts:
         raise ValueError(f"{stage_path} does not contain terrain_layout")
     layout = layouts[0]
     if layout.get("type") not in {"AuthoredTerrain", "TerrainPath", "TerrainStrip", "TerrainPieces"}:
-        raise ValueError("stage3 terrain composer expects supported terrain layout")
+        raise ValueError("stage terrain composer expects a supported terrain layout")
     return layout
 
 
-def _stage3_segments(stage_path: Path) -> list[Any]:
+_stage3_layout = _stage_layout
+
+
+def _stage_segments(stage_path: Path) -> list[Any]:
     from src.entities.terrain import make_terrain_segments_from_event
 
-    layout = _stage3_layout(stage_path)
+    layout = _stage_layout(stage_path)
     if layout.get("type") == "TerrainPieces":
         raise ValueError("TerrainPieces does not have continuous terrain segments")
     start_x = float(layout.get("start_offset", 0))
-    return make_terrain_segments_from_event(layout, start_x, default_seed=303)
+    return make_terrain_segments_from_event(
+        layout,
+        start_x,
+        default_seed=stage_id_from_json(stage_path),
+    )
 
 
-def _load_backdrop(width: int, height: int) -> pygame.Surface:
+_stage3_segments = _stage_segments
+
+
+def _profile_from_args(args: argparse.Namespace) -> StageTerrainProfile:
+    return resolve_stage_terrain_profile(
+        stage_id=args.stage,
+        stage_json=_resolve(args.stage_json) if args.stage_json else None,
+    )
+
+
+def _profile_path(primary: Path, fallback: Path | None) -> Path:
+    return primary if primary.exists() or fallback is None else fallback
+
+
+def _composer_paths(
+    args: argparse.Namespace,
+    profile: StageTerrainProfile,
+    layout: dict[str, Any],
+) -> tuple[Path, Path, Path]:
+    rects_path = (
+        _resolve(args.rects)
+        if args.rects
+        else _resolve(layout["composer_rects"])
+        if layout.get("composer_rects")
+        else _profile_path(profile.rects, profile.fallback_rects)
+    )
+    mask_dir = (
+        _resolve(args.mask_dir)
+        if args.mask_dir
+        else _resolve(layout["composer_mask_dir"])
+        if layout.get("composer_mask_dir")
+        else _profile_path(profile.mask_dir, profile.fallback_mask_dir)
+    )
+    background_path = (
+        _resolve(args.background)
+        if args.background
+        else _resolve(layout["composer_background"])
+        if layout.get("composer_background")
+        else profile.background
+    )
+    return rects_path, mask_dir, background_path
+
+
+def _load_backdrop(width: int, height: int, background_path: Path = BACKGROUND_PATH) -> pygame.Surface:
     surface = pygame.Surface((width, height))
     surface.fill((6, 14, 17))
     try:
-        raw = pygame.image.load(str(BACKGROUND_PATH))
+        raw = pygame.image.load(str(background_path))
     except (FileNotFoundError, pygame.error):
         return surface
 
@@ -103,8 +162,10 @@ def _render_view(
     collision_tolerance: int,
     overlap: int,
     debug_lines: bool,
+    background_path: Path = BACKGROUND_PATH,
+    label: str = "Stage3",
 ) -> pygame.Surface:
-    surface = _load_backdrop(width, height)
+    surface = _load_backdrop(width, height, background_path)
     if layout.get("type") == "TerrainPieces":
         render_stage3_piece_surface(
             surface,
@@ -129,11 +190,11 @@ def _render_view(
             overlap=overlap,
             debug_lines=debug_lines,
         )
-    _draw_frame_label(surface, f"stage3 composer preview  x={int(camera_x)}")
+    _draw_frame_label(surface, f"{label} composer preview  x={int(camera_x)}")
     return surface
 
 
-def _write_index(paths: list[Path], out: Path) -> Path:
+def _write_index(paths: list[Path], out: Path, *, label: str = "Stage3") -> Path:
     path = out.with_name(f"{out.name}_index.html")
     cards = []
     for image_path in paths:
@@ -145,7 +206,7 @@ def _write_index(paths: list[Path], out: Path) -> Path:
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>Stage3 Terrain Composer Preview</title>
+  <title>{html.escape(label)} Terrain Composer Preview</title>
   <style>
     body {{
       margin: 24px;
@@ -170,7 +231,7 @@ def _write_index(paths: list[Path], out: Path) -> Path:
   </style>
 </head>
 <body>
-  <h1>Stage3 Terrain Composer Preview</h1>
+  <h1>{html.escape(label)} Terrain Composer Preview</h1>
   {''.join(cards)}
 </body>
 </html>
@@ -197,15 +258,20 @@ def _open_file(path: Path) -> None:
         else:
             subprocess.Popen(["xdg-open", str(path)])
     except OSError as exc:
-        print(f"[stage3-terrain-composer] open failed: {exc}")
+        print(f"[stage-terrain-composer] open failed: {exc}")
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Compose Stage3 terrain preview from atlas pieces")
-    parser.add_argument("--stage-json", default=str(DEFAULT_STAGE), help="Stage JSON path")
-    parser.add_argument("--rects", default=str(DEFAULT_RECTS), help="Rect JSON path")
-    parser.add_argument("--mask-dir", default=str(DEFAULT_MASK_DIR), help="Manual alpha mask directory")
-    parser.add_argument("--out", default=str(DEFAULT_OUT), help="Output path prefix")
+    parser = argparse.ArgumentParser(
+        prog="stage-terrain-composer",
+        description="Compose a stage terrain preview from atlas pieces",
+    )
+    parser.add_argument("--stage", type=int, choices=sorted(STAGE_TERRAIN_PROFILES), default=None, help="stage profile (default: 3; inferred from --stage-json)")
+    parser.add_argument("--stage-json", default=None, help="Stage JSON path (defaults to selected stage)")
+    parser.add_argument("--rects", default=None, help="Rect JSON path (explicit > stage layout > profile)")
+    parser.add_argument("--mask-dir", default=None, help="Manual alpha mask directory (explicit > stage layout > profile)")
+    parser.add_argument("--background", default=None, help="Background image path (explicit > stage layout > profile)")
+    parser.add_argument("--out", default=None, help="Output path prefix (defaults to selected stage)")
     parser.add_argument("--x", type=float, action="append", default=[], help="Camera X to render; can be repeated")
     parser.add_argument("--width", type=int, default=800, help="Preview width")
     parser.add_argument("--height", type=int, default=600, help="Preview height")
@@ -225,19 +291,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         pygame.init()
         pygame.font.init()
-        stage_path = _resolve(args.stage_json)
-        rects_path = _resolve(args.rects)
-        mask_dir = _resolve(args.mask_dir)
-        out = _resolve(args.out)
+        profile = _profile_from_args(args)
+        stage_path = _resolve(args.stage_json) if args.stage_json else profile.stage_json
+        layout = _stage_layout(stage_path)
+        rects_path, mask_dir, background_path = _composer_paths(args, profile, layout)
+        out = _resolve(args.out) if args.out else ROOT / "captures" / f"stage{profile.stage_id}_terrain_composer"
         out.parent.mkdir(parents=True, exist_ok=True)
 
-        layout = _stage3_layout(stage_path)
-        segments = None if layout.get("type") == "TerrainPieces" else _stage3_segments(stage_path)
+        segments = None if layout.get("type") == "TerrainPieces" else _stage_segments(stage_path)
         pieces = load_stage3_composer_pieces(
             rects_path,
             mask_dir=mask_dir,
         )
-        camera_xs = args.x or list(DEFAULT_VIEW_X)
+        camera_xs = args.x or list(profile.preview_camera_xs)
 
         paths: list[Path] = []
         for i, camera_x in enumerate(camera_xs):
@@ -254,19 +320,21 @@ def main(argv: list[str] | None = None) -> int:
                 collision_tolerance=max(0, args.collision_tolerance),
                 overlap=max(0, args.overlap),
                 debug_lines=args.debug_lines,
+                background_path=background_path,
+                label=profile.label,
             )
             path = out.with_name(f"{out.name}_{i:02d}_x{int(camera_x)}.png")
             pygame.image.save(image, str(path))
             paths.append(path)
 
-        index = _write_index(paths, out)
+        index = _write_index(paths, out, label=profile.label)
         for path in [*paths, index]:
             print(path)
         if not args.no_open and _should_open_preview(args.open):
             _open_file(index)
         return 0
     except Exception as exc:
-        print(f"[stage3-terrain-composer] error: {exc}", file=sys.stderr)
+        print(f"[stage-terrain-composer] error: {exc}", file=sys.stderr)
         return 1
     finally:
         pygame.quit()

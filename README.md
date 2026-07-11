@@ -120,7 +120,8 @@ py -3 -m venv .venv
 | `stage-rect-preview` | ステージ地形素材 rect の全体/グループ別プレビュー画像とHTML一覧を生成（旧名 `stage3-rect-preview` も使用可） |
 | `stage-rect-editor` | ステージ地形素材 rect を画像上でドラッグ編集してJSON保存（旧名 `stage3-rect-editor` も使用可） |
 | `stage-alpha-mask-editor` | ステージ地形素材 rect ごとの手動透明マスクをペイント編集してPNG保存（旧名 `stage3-alpha-mask-editor` も使用可） |
-| `stage3-terrain-composer` | Stage3 地形素材を実寸のまま組み合わせた地形構成プレビュー画像とHTML一覧を生成 |
+| `stage-terrain-composer` | `--stage 2` / `--stage 3` の地形素材を実寸のまま組み合わせたプレビュー画像とHTML一覧を生成（旧名 `stage3-terrain-composer` も使用可） |
+| `stage-composer-report` | 選択ステージのruntime表示・衝突面・composer表示を同じ座標で比較するHTMLレポートを生成（旧名 `stage3-composer-report` も使用可） |
 | `balance` | バランスシート出力 |
 | `pr-media` / `pr-html` / `pr-report` | PR 用に画像/HTML/レポートを `media` ブランチへ上げて貼り付けリンクを出力 |
 

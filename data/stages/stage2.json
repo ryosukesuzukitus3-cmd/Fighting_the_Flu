@@ -7,7 +7,7 @@
     {
       "type": "TerrainStrip",
       "theme": "meme_static",
-      "renderer": "stage3_composer",
+      "renderer": "terrain_composer",
       "composer_rects": "tools/stage2_terrain_rects.json",
       "composer_mask_dir": "tools/stage2_terrain_alpha_masks",
       "length": 9400,
@@ -30,7 +30,7 @@
     {
       "type": "TerrainStrip",
       "theme": "meme_static",
-      "renderer": "stage3_composer",
+      "renderer": "terrain_composer",
       "composer_rects": "tools/stage2_terrain_rects.json",
       "composer_mask_dir": "tools/stage2_terrain_alpha_masks",
       "length": 1600,

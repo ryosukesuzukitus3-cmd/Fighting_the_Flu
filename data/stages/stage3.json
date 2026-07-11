@@ -7,7 +7,9 @@
     {
       "type": "TerrainPieces",
       "theme": "fortress",
-      "renderer": "stage3_composer",
+      "renderer": "terrain_composer",
+      "composer_rects": "tools/stage3_terrain_rects.json",
+      "composer_mask_dir": "tools/stage3_terrain_alpha_masks",
       "length": 12000,
       "x": 0,
       "composer_collision_step": 8,
@@ -152,7 +154,9 @@
     {
       "type": "TerrainStrip",
       "theme": "fortress",
-      "renderer": "stage3_composer",
+      "renderer": "terrain_composer",
+      "composer_rects": "tools/stage3_terrain_rects.json",
+      "composer_mask_dir": "tools/stage3_terrain_alpha_masks",
       "profile": "normal",
       "length": 1700,
       "segment_w": 48,

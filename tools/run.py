@@ -9,8 +9,8 @@ Examples:
   python tools/run.py stage-rect-preview
   python tools/run.py stage-rect-editor
   python tools/run.py stage-alpha-mask-editor
-  python tools/run.py stage3-terrain-composer
-  python tools/run.py stage3-composer-report
+  python tools/run.py stage-terrain-composer --stage 3
+  python tools/run.py stage-composer-report --stage 3
   python tools/run.py stage-designer
 """
 from __future__ import annotations
@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage3-terrain-composer|stage3-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
+            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage-terrain-composer|stage-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
         "stage3-rect-preview": ([py, "tools/stage3_rect_preview.py", *argv], True),
         "stage3-rect-editor": ([py, "tools/stage3_rect_editor.py", *argv], False),
         "stage3-alpha-mask-editor": ([py, "tools/stage3_alpha_mask_editor.py", *argv], False),
+        "stage-terrain-composer": ([py, "tools/stage3_terrain_composer_preview.py", *argv], True),
+        "stage-composer-report": ([py, "tools/stage3_composer_report.py", *argv], True),
         "stage3-terrain-composer": ([py, "tools/stage3_terrain_composer_preview.py", *argv], True),
         "stage3-composer-report": ([py, "tools/stage3_composer_report.py", *argv], True),
         "stage-designer": ([py, "tools/stage_designer.py", *argv], _has_option(argv, "--capture")),

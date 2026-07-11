@@ -662,6 +662,8 @@ Stage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces`
 `AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する中間形式。輪郭から自動充填して初期ブロック配置を作る補助用途としては残すが、Stage3の最終地形SSOTにはしない。
 `TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
+Stage2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
+
 #### 地形イベント（`type: "Terrain"`）
 
 上下の壁・障害物・デブリをステージごとに配置する（宇宙系はデブリまばら、岩石系は壁・岩が多い等、
@@ -690,7 +692,9 @@ Stage3の道中地形で使う、素材ブロック配置を直接保持する�
 | `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
 | `type` | ○ | `"TerrainPieces"` |
 | `theme` | ○ | 見た目テーマ。Stage3では `"fortress"` |
-| `renderer` | ○ | Stage3では `"stage3_composer"` |
+| `renderer` | ○ | Stage2/3では `"terrain_composer"`（旧 `"stage3_composer"` も互換対応） |
+| `composer_rects` | ○ | この地形が使うrect catalog。repo root相対パス |
+| `composer_mask_dir` | ○ | rectごとのalpha maskディレクトリ。repo root相対パス |
 | `length` | ○ | ステージ地形の横幅（px） |
 | `x` / `world_x` | — | `pieces[].x` へ加算する基準X。Stage3道中では通常0 |
 | `pieces` | ○ | 明示配置ブロック配列 |
@@ -699,7 +703,7 @@ Stage3の道中地形で使う、素材ブロック配置を直接保持する�
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
-| `asset` | ○ | `tools/stage3_terrain_rects.json` の `group:index`。例: `"strip_top:2"` |
+| `asset` | ○ | 当該イベントの `composer_rects` にある `group:index`。例: `"strip_top:2"` |
 | `x` / `y` | ○ | 素材左上のワールド座標 |
 | `role` | ○ | `floor_surface` / `ceiling_surface` / `body_fill` / `floor_prop` などの用途 |
 | `collision` | ○ | `"surface"` / `"rect"` / `"none"` / `"auto"`。床・天井は `surface`、小物障害物は `rect`、内部充填は `none` |
@@ -721,7 +725,7 @@ Stage3の道中地形で使う、素材ブロック配置を直接保持する�
 | `segment_w` | — | 1セグメントの横幅（既定64px） |
 | `min_gap` | — | 上下境界の最低通路幅（既定160px） |
 | `curve` | — | `"smooth"` / `"linear"`。省略時は `"smooth"` |
-| `renderer` | — | Stage3 では `"stage3_composer"` を指定して素材composer描画を使う |
+| `renderer` | — | 素材composer描画には `"terrain_composer"` を指定する（旧 `"stage3_composer"` も互換対応） |
 
 #### 旧連続地形イベント（`type: "TerrainStrip"`）
 

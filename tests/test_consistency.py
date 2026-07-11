@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -162,10 +164,50 @@ def test_stage_json_required_fields() -> None:
     authored_terrain_types = {"AuthoredTerrain", "TerrainPath"}
     piece_terrain_types = {"TerrainPieces"}
     from src.core.registries import ITEM_NAMES
+    from src.core.terrain_composer import (
+        TERRAIN_COMPOSER_RENDERERS,
+        is_terrain_composer_renderer,
+        load_composer_catalog,
+        resolve_composer_paths,
+        terrain_material_catalog_for_kind,
+    )
     from src.entities.terrain import TERRAIN_STRIP_THEMES
     valid_strip_themes = set(TERRAIN_STRIP_THEMES)
-    stage3_rects = json.loads((ROOT / "tools" / "stage3_terrain_rects.json").read_text(encoding="utf-8"))
-    valid_stage3_material_roles = set(stage3_rects.get("roles", {}))
+
+    def assert_composer_catalog(section: str, i: int, ev: dict, *, required: bool = False):
+        renderer = ev.get("renderer")
+        if renderer is None:
+            assert not required, f"{section}[{i}]: missing terrain composer renderer"
+            return None
+        assert is_terrain_composer_renderer(renderer), (
+            f"{section}[{i}]: unknown terrain composer renderer '{renderer}'; "
+            f"expected one of {sorted(TERRAIN_COMPOSER_RENDERERS)}"
+        )
+        try:
+            rects_path, _mask_dir = resolve_composer_paths(ev)
+            return load_composer_catalog(rects_path)
+        except (OSError, TypeError, ValueError) as exc:
+            raise AssertionError(f"{section}[{i}]: invalid terrain composer catalog: {exc}") from exc
+
+    def assert_material_catalog(section: str, i: int, ev: dict) -> None:
+        if "material_role" not in ev and "material_asset" not in ev:
+            return
+        material = terrain_material_catalog_for_kind(ev.get("kind", "wall"))
+        assert material is not None, (
+            f"{section}[{i}](Terrain): kind '{ev.get('kind', 'wall')}' has no material catalog"
+        )
+        try:
+            catalog = load_composer_catalog(material.rects_path)
+        except (OSError, TypeError, ValueError) as exc:
+            raise AssertionError(f"{section}[{i}](Terrain): invalid material catalog: {exc}") from exc
+        if "material_role" in ev:
+            assert ev["material_role"] in catalog.roles, (
+                f"{section}[{i}](Terrain): invalid material_role '{ev['material_role']}'"
+            )
+        if "material_asset" in ev:
+            assert ev["material_asset"] in catalog.assets, (
+                f"{section}[{i}](Terrain): invalid material_asset '{ev['material_asset']}'"
+            )
 
     def assert_terrain_event(section: str, i: int, ev: dict) -> None:
         assert ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types | piece_terrain_types, (
@@ -185,28 +227,22 @@ def test_stage_json_required_fields() -> None:
                 assert ev["surface_anchor"] in valid_surface_anchors, (
                     f"{section}[{i}](Terrain): invalid surface_anchor '{ev['surface_anchor']}'"
                 )
-            if "material_role" in ev:
-                assert ev["material_role"] in valid_stage3_material_roles, (
-                    f"{section}[{i}](Terrain): invalid material_role '{ev['material_role']}'"
-                )
+            assert_material_catalog(section, i, ev)
         elif ev.get("type") in piece_terrain_types:
             assert isinstance(ev.get("pieces"), list), f"{section}[{i}](TerrainPieces): missing 'pieces'"
-            assert ev.get("renderer") == "stage3_composer", (
-                f"{section}[{i}](TerrainPieces): renderer must be 'stage3_composer'"
-            )
-            valid_assets = {
-                f"{group}:{index}"
-                for group, group_data in stage3_rects.get("groups", {}).items()
-                for index, _rect in enumerate(group_data.get("rects", []), start=1)
-            }
+            catalog = assert_composer_catalog(section, i, ev, required=True)
             valid_collisions = {"auto", "none", "surface", "rect"}
             for piece_index, piece in enumerate(ev.get("pieces", [])):
                 assert isinstance(piece, dict), (
                     f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: must be an object"
                 )
-                assert piece.get("asset") in valid_assets, (
+                assert catalog is not None and piece.get("asset") in catalog.assets, (
                     f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: unknown asset '{piece.get('asset')}'"
                 )
+                if "role" in piece:
+                    assert piece["role"] in catalog.roles, (
+                        f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: unknown role '{piece['role']}'"
+                    )
                 assert "x" in piece and "y" in piece, (
                     f"{section}[{i}](TerrainPieces).pieces[{piece_index}]: missing x/y"
                 )
@@ -220,6 +256,8 @@ def test_stage_json_required_fields() -> None:
             assert ev.get("theme", "fever_cave") in valid_strip_themes, (
                 f"{section}[{i}]({ev.get('type')}): unknown theme '{ev.get('theme', 'fever_cave')}'"
             )
+            if "renderer" in ev:
+                assert_composer_catalog(section, i, ev)
             if ev.get("type") in authored_terrain_types:
                 for boundary in ("top", "bottom"):
                     points = ev.get(boundary)
@@ -252,27 +290,10 @@ def test_stage_json_required_fields() -> None:
                 assert ev["surface"] in {"top", "bottom"}, (
                     f"{p.name} events[{i}]: invalid surface '{ev['surface']}'"
                 )
-            if ev.get("type") == "Terrain":
-                for field in ("y", "w", "h", "kind"):
-                    assert field in ev, f"{p.name} events[{i}](Terrain): 必須フィールド '{field}' が欠如"
-                assert ev["kind"] in valid_terrain_kinds, (
-                    f"{p.name} events[{i}](Terrain): 未知の kind '{ev['kind']}'"
-                )
-                if "surface_anchor" in ev:
-                    assert ev["surface_anchor"] in valid_surface_anchors, (
-                        f"{p.name} events[{i}](Terrain): invalid surface_anchor '{ev['surface_anchor']}'"
-                    )
-                if "material_role" in ev:
-                    assert ev["material_role"] in valid_stage3_material_roles, (
-                        f"{p.name} events[{i}](Terrain): invalid material_role '{ev['material_role']}'"
-                    )
-            elif ev.get("type") in strip_terrain_types | authored_terrain_types:
-                required = ("theme", "top", "bottom") if ev.get("type") in authored_terrain_types else ("theme", "length")
-                for field in required:
-                    assert field in ev, f"{p.name} events[{i}]({ev.get('type')}): 必須フィールド '{field}' が欠如"
-                assert ev["theme"] in valid_strip_themes, (
-                    f"{p.name} events[{i}]({ev.get('type')}): 未知の theme '{ev['theme']}'"
-                )
+            if ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types | piece_terrain_types:
+                assert_terrain_event(f"{p.name} events", i, ev)
+                if ev.get("type") in rect_terrain_types:
+                    assert "kind" in ev, f"{p.name} events[{i}](Terrain): missing 'kind'"
             else:
                 assert "count" in ev, f"{p.name} events[{i}]: 必須フィールド 'count' が欠如"
                 # 'y' 指定（砲台等の固定配置）がある場合は formation 省略可
@@ -294,7 +315,7 @@ def test_stage_json_required_fields() -> None:
                 assert ev["surface"] in {"top", "bottom"}, (
                     f"{p.name} world_events[{i}]: invalid surface '{ev['surface']}'"
                 )
-            if ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types:
+            if ev.get("type") in rect_terrain_types | strip_terrain_types | authored_terrain_types | piece_terrain_types:
                 assert_terrain_event(f"{p.name} world_events", i, ev)
         for section in ("initial_terrain", "terrain_layout", "boss_terrain"):
             for i, ev in enumerate(data.get(section, [])):
@@ -302,6 +323,80 @@ def test_stage_json_required_fields() -> None:
 
 
 # ── ボス ─────────────────────────────────────────────────────────────
+
+def test_terrain_composer_renderer_aliases_are_supported() -> None:
+    from src.core.terrain_composer import (
+        TERRAIN_COMPOSER_RENDERERS,
+        is_terrain_composer_renderer,
+        resolve_composer_paths,
+    )
+
+    assert TERRAIN_COMPOSER_RENDERERS == frozenset({"terrain_composer", "stage3_composer"})
+    assert is_terrain_composer_renderer("terrain_composer")
+    assert is_terrain_composer_renderer("stage3_composer")
+    assert not is_terrain_composer_renderer("unknown_composer")
+    assert not is_terrain_composer_renderer(None)
+    with pytest.raises(ValueError, match="requires composer_rects"):
+        resolve_composer_paths({"renderer": "terrain_composer"})
+    legacy_rects, legacy_masks = resolve_composer_paths({"renderer": "stage3_composer"})
+    assert legacy_rects == (ROOT / "tools" / "stage3_terrain_rects.json").resolve()
+    assert legacy_masks == (ROOT / "tools" / "stage3_terrain_alpha_masks").resolve()
+
+
+def test_terrain_composer_catalog_follows_event_rects() -> None:
+    from src.core.terrain_composer import load_composer_catalog, resolve_composer_paths
+
+    stage2 = json.loads((ROOT / "data" / "stages" / "stage2.json").read_text(encoding="utf-8"))
+    stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    stage2_rects, _stage2_masks = resolve_composer_paths(stage2["terrain_layout"][0])
+    stage3_rects, _stage3_masks = resolve_composer_paths(stage3["terrain_layout"][0])
+    stage2_catalog = load_composer_catalog(stage2_rects)
+    stage3_catalog = load_composer_catalog(stage3_rects)
+
+    assert stage2_rects == (ROOT / "tools" / "stage2_terrain_rects.json").resolve()
+    assert stage3_rects == (ROOT / "tools" / "stage3_terrain_rects.json").resolve()
+    assert "block_square:11" in stage2_catalog.assets
+    assert "block_square:11" not in stage3_catalog.assets
+
+
+def test_terrain_composer_catalog_rejects_unknown_path_and_asset(tmp_path) -> None:
+    from src.core.terrain_composer import load_composer_catalog
+
+    with pytest.raises((OSError, ValueError)):
+        load_composer_catalog(tmp_path / "missing_terrain_rects.json")
+
+    stage2_catalog = load_composer_catalog(ROOT / "tools" / "stage2_terrain_rects.json")
+    assert "unknown_group:1" not in stage2_catalog.assets
+
+
+def test_stage_terrain_profile_resolution_rejects_unknown_and_conflicting_stage(tmp_path) -> None:
+    from tools.stage_terrain_profiles import resolve_stage_terrain_profile
+
+    stage1_path = tmp_path / "stage1.json"
+    stage1_path.write_text('{"stage_id": 1}', encoding="utf-8")
+    with pytest.raises(ValueError, match="no terrain tooling profile"):
+        resolve_stage_terrain_profile(stage_json=stage1_path)
+
+    stage3_path = ROOT / "data" / "stages" / "stage3.json"
+    with pytest.raises(ValueError, match="conflicts"):
+        resolve_stage_terrain_profile(stage_id=2, stage_json=stage3_path)
+
+
+def test_stage_composer_report_rejects_custom_stage_json(tmp_path) -> None:
+    from tools import stage3_composer_report
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES
+
+    custom_stage = tmp_path / "stage2.json"
+    custom_stage.write_text(
+        (ROOT / "data" / "stages" / "stage2.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="runtime canonical data"):
+        stage3_composer_report._require_runtime_stage_path(
+            custom_stage,
+            STAGE_TERRAIN_PROFILES[2],
+        )
+
 
 def test_stage_json_bgm_files_exist() -> None:
     bgm_dir = ROOT / "assets" / "music" / "bgm"
@@ -454,7 +549,7 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert layout["type"] == "TerrainStrip"
     assert layout["theme"] == "meme_static"
-    assert layout["renderer"] == "stage3_composer"
+    assert layout["renderer"] == "terrain_composer"
     assert layout["composer_rects"] == "tools/stage2_terrain_rects.json"
     assert layout["composer_mask_dir"] == "tools/stage2_terrain_alpha_masks"
     assert layout["length"] >= boss_x + 800
@@ -518,7 +613,7 @@ def test_stage3_uses_explicit_labor_fortress_pieces() -> None:
 
     assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "fortress"
-    assert layout["renderer"] == "stage3_composer"
+    assert layout["renderer"] == "terrain_composer"
     assert "top" not in layout
     assert "bottom" not in layout
     assert len(pieces) >= 100
@@ -1805,6 +1900,8 @@ def test_project_runner_prefers_utf8_and_venv() -> None:
     assert "PYTHONIOENCODING" in src
     assert ".venv" in src
     assert "stage3-composer-report" in src
+    assert "stage-terrain-composer" in src
+    assert "stage-composer-report" in src
     assert "stage-designer" in src
     assert "stage-rect-preview" in src
     assert "stage-rect-editor" in src
