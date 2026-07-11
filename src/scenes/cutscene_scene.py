@@ -19,6 +19,7 @@ from src.story.lines import Page
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
 _TYPE_SE_INTERVAL = 0.045
 _TYPE_SE_VOLUME = 0.16
+_EPILOGUE_MORNING_BG = "graphic/epilogue_morning_bg.png"
 
 
 class CutsceneScene(Scene):
@@ -60,6 +61,12 @@ class CutsceneScene(Scene):
         self._finished   = False    # on_complete 多重呼び防止
         self._story_active  = None   # 直近に話した登場人物（立ち絵ハイライト用）
         self._story_partner = None   # その前に話した登場人物（会話相手）
+        self._window_bg: pygame.Surface | None = None
+        if self._theme == "window":
+            raw = self.game.resources.image(_EPILOGUE_MORNING_BG)
+            self._window_bg = pygame.transform.smoothscale(
+                raw, (SCREEN_WIDTH, SCREEN_HEIGHT),
+            )
         if self._stop_bgm:
             self.game.sound.stop_bgm()
         elif self._bgm_alias:
@@ -211,26 +218,9 @@ class CutsceneScene(Scene):
         pygame.draw.circle(screen, (40, 18, 60), (cx, cy), 30, 2)
 
     def _draw_window_bg(self, screen: pygame.Surface) -> None:
-        """エピローグ用: 日差しの差し込む窓とカーテン。"""
-        screen.fill((252, 245, 220))
-        ray = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i in range(5):
-            ox = 160 + i * 90
-            pygame.draw.polygon(ray, (255, 255, 190, 22), [
-                (ox, 0), (ox + 50, 0), (ox + 220, SCREEN_HEIGHT), (ox + 170, SCREEN_HEIGHT)])
-        screen.blit(ray, (0, 0))
-        wfx = SCREEN_WIDTH // 2 - 150
-        wfy, wfw, wfh = 25, 300, 260
-        pygame.draw.rect(screen, (205, 225, 255), (wfx + 6, wfy + 6, wfw - 12, wfh - 12))
-        pygame.draw.rect(screen, (85, 55, 25), (wfx, wfy, wfw, wfh), 7)
-        pygame.draw.line(screen, (85, 55, 25), (wfx, wfy + wfh // 2), (wfx + wfw, wfy + wfh // 2), 5)
-        pygame.draw.line(screen, (85, 55, 25), (wfx + wfw // 2, wfy), (wfx + wfw // 2, wfy + wfh), 5)
-        for side in range(2):
-            cx0 = 0 if side == 0 else SCREEN_WIDTH - 135
-            pygame.draw.rect(screen, (215, 195, 155), (cx0, 0, 135, SCREEN_HEIGHT))
-            sign = 1 if side == 0 else -1
-            for fx in range(cx0 + 15, cx0 + 135, 22):
-                pygame.draw.line(screen, (182, 162, 122), (fx, 0), (fx + sign * 10, SCREEN_HEIGHT), 2)
+        """エピローグ用: 夜明けの窓辺を描いた背景画像。"""
+        if self._window_bg is not None:
+            screen.blit(self._window_bg, (0, 0))
 
     def _draw_chessboard_bg(self, screen: pygame.Surface) -> None:
         """歪む将棋盤: 市松模様に縦方向の軽い遠近ワープを加える。"""
