@@ -75,7 +75,7 @@ Stage3は最終的に `AuthoredTerrain.top/bottom` をステージデータのSS
 {
   "type": "AuthoredTerrain",
   "theme": "fortress",
-  "renderer": "stage3_composer",
+  "renderer": "terrain_composer",
   "segment_w": 48,
   "top": [[0, 48], [1200, 78], [2400, 36]],
   "bottom": [[0, 500], [1200, 468], [2400, 520]]
@@ -94,7 +94,7 @@ Stage3は最終的に `AuthoredTerrain.top/bottom` をステージデータのSS
 - `top` / `bottom` 制御点から実行時地形セグメントへ変換する
 - 制御点間は補間し、通路の最低幅を `min_gap` で守る
 - Stage3の道中地形を `AuthoredTerrain` へ移す
-- spawner、Stage3 composer preview/report、docs、consistency testを更新する
+- spawner、stage terrain composer preview/report、docs、consistency testを更新する
 - `TerrainStripSegment` は内部表現として残す
 
 ### 2. Stage3のプレイ空間と戦闘配置
@@ -150,3 +150,7 @@ Stage2 へ制作フローを展開する入口として、`tools/run.py stage-de
 - 作りたいステージの意図をデータ構造で表現できるかを重視する
 - 乱数は雰囲気作りに使い、ステージ設計の主導権は手書きデータに戻す
 - 変更はPR単位では分けるが、PRの小ささを理由に根本課題を避けない
+
+## Composer確認コマンド
+
+composer preview/report は Stage2/3 共通のprofileを参照する。Stage3の確認は `tools/run.py stage-terrain-composer --stage 3` と `tools/run.py stage-composer-report --stage 3` を使う。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。

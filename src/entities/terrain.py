@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 import pygame
 from src.core.constants import SCREEN_HEIGHT
+from src.core.terrain_composer import terrain_material_catalog_for_kind
 
 if TYPE_CHECKING:
     from src.core.camera import Camera
@@ -24,10 +25,6 @@ _KIND_COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
     "clot":   ((126, 24, 34), (230, 82, 76)),
 }
 _STAGE3_TERRAIN_SHEET_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_fortress_terrain_sheet.png"
-_STAGE3_TERRAIN_RECTS_PATH = Path(__file__).parent.parent.parent / "tools" / "stage3_terrain_rects.json"
-_STAGE3_TERRAIN_MASK_DIR = Path(__file__).parent.parent.parent / "tools" / "stage3_terrain_alpha_masks"
-_STAGE2_TERRAIN_RECTS_PATH = Path(__file__).parent.parent.parent / "tools" / "stage2_terrain_rects.json"
-_STAGE2_TERRAIN_MASK_DIR = Path(__file__).parent.parent.parent / "tools" / "stage2_terrain_alpha_masks"
 _STAGE3_TERRAIN_SHEET: pygame.Surface | None = None
 
 
@@ -139,15 +136,18 @@ def _stage3_rect_material_surface(
     surface_anchor: str = "floor",
     material_asset: str | None = None,
 ) -> pygame.Surface | None:
+    catalog = terrain_material_catalog_for_kind(kind)
+    if catalog is None:
+        return None
     try:
         from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
     except Exception:
         return None
     try:
-        if kind == "data_block":
-            pieces_by_group = load_stage3_composer_pieces(_STAGE2_TERRAIN_RECTS_PATH, mask_dir=_STAGE2_TERRAIN_MASK_DIR)
-        else:
-            pieces_by_group = load_stage3_composer_pieces(_STAGE3_TERRAIN_RECTS_PATH, mask_dir=_STAGE3_TERRAIN_MASK_DIR)
+        pieces_by_group = load_stage3_composer_pieces(
+            catalog.rects_path,
+            mask_dir=catalog.mask_dir,
+        )
     except Exception:
         return None
 

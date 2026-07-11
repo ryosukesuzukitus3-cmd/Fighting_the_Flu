@@ -32,20 +32,26 @@ from src.entities.enemies.crawler import EnemyCrawler  # noqa: E402
 from src.entities.enemies.debris import _rock_sprite  # noqa: E402
 from src.entities.enemies.turret import EnemyTurret  # noqa: E402
 from src.entities.terrain import Terrain, make_terrain_segments_from_event  # noqa: E402
+from tools.stage_terrain_profiles import (  # noqa: E402
+    DEFAULT_STAGE_ID,
+    STAGE_TERRAIN_PROFILES,
+    StageTerrainProfile,
+    resolve_stage_terrain_profile,
+    stage_id_from_json,
+)
 
-try:  # noqa: E402
-    from stage3_alpha_mask_common import DEFAULT_MASK_DIR
-except ModuleNotFoundError:  # noqa: E402
-    from tools.stage3_alpha_mask_common import DEFAULT_MASK_DIR
-
-DEFAULT_STAGE = ROOT / "data" / "stages" / "stage3.json"
-DEFAULT_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
-BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
-DEFAULT_STAGE_ID = 3
-STAGE2_STAGE = ROOT / "data" / "stages" / "stage2.json"
-STAGE2_RECTS = ROOT / "tools" / "stage2_terrain_rects.json"
-STAGE2_MASK_DIR = ROOT / "tools" / "stage2_terrain_alpha_masks"
-STAGE2_BACKGROUND_PATH = ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"
+# Compatibility aliases for callers that imported designer-specific profile
+# names and path constants before the shared terrain profile registry existed.
+StageDesignerProfile = StageTerrainProfile
+STAGE_PROFILES = STAGE_TERRAIN_PROFILES
+DEFAULT_STAGE = STAGE_PROFILES[DEFAULT_STAGE_ID].stage_json
+DEFAULT_RECTS = STAGE_PROFILES[DEFAULT_STAGE_ID].rects
+DEFAULT_MASK_DIR = STAGE_PROFILES[DEFAULT_STAGE_ID].mask_dir
+BACKGROUND_PATH = STAGE_PROFILES[DEFAULT_STAGE_ID].background
+STAGE2_STAGE = STAGE_PROFILES[2].stage_json
+STAGE2_RECTS = STAGE_PROFILES[2].rects
+STAGE2_MASK_DIR = STAGE_PROFILES[2].mask_dir
+STAGE2_BACKGROUND_PATH = STAGE_PROFILES[2].background
 
 VIEW_W = SCREEN_WIDTH
 VIEW_H = SCREEN_HEIGHT
@@ -83,43 +89,6 @@ PIECE_COLLISION_ORDER = ["auto", "none", "surface", "rect"]
 PIECE_SIDE_ORDER = ["bottom", "top"]
 AUTO_FILL_REPLACE_ROLES = {"floor_surface", "ceiling_surface", "body_fill"}
 FORMATION_ORDER = ["single", "line", "v_shape", "random"]
-
-
-@dataclass(frozen=True)
-class StageDesignerProfile:
-    stage_id: int
-    stage_json: Path
-    rects: Path
-    mask_dir: Path
-    background: Path
-    terrain_kind: str
-    label: str
-    fallback_rects: Path | None = None
-    fallback_mask_dir: Path | None = None
-
-
-STAGE_PROFILES: dict[int, StageDesignerProfile] = {
-    2: StageDesignerProfile(
-        stage_id=2,
-        stage_json=STAGE2_STAGE,
-        rects=STAGE2_RECTS,
-        mask_dir=STAGE2_MASK_DIR,
-        background=STAGE2_BACKGROUND_PATH,
-        terrain_kind="data_block",
-        label="Stage2",
-        fallback_rects=DEFAULT_RECTS,
-        fallback_mask_dir=DEFAULT_MASK_DIR,
-    ),
-    3: StageDesignerProfile(
-        stage_id=3,
-        stage_json=DEFAULT_STAGE,
-        rects=DEFAULT_RECTS,
-        mask_dir=DEFAULT_MASK_DIR,
-        background=BACKGROUND_PATH,
-        terrain_kind="fortress_block",
-        label="Stage3",
-    ),
-}
 
 
 def _event_templates_for_kind(terrain_kind: str) -> list[tuple[str, dict[str, Any]]]:
@@ -184,20 +153,16 @@ def _load_stage(path: Path) -> dict[str, Any]:
 
 def _stage_id_from_json(path: Path) -> int | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    try:
-        return int(data.get("stage_id"))
-    except (TypeError, ValueError):
+        return stage_id_from_json(path)
+    except ValueError:
         return None
 
 
 def _profile_from_args(args: argparse.Namespace) -> StageDesignerProfile:
-    stage_id = args.stage
-    if stage_id is None and args.stage_json:
-        stage_id = _stage_id_from_json(_resolve(args.stage_json))
-    return STAGE_PROFILES.get(int(stage_id or DEFAULT_STAGE_ID), STAGE_PROFILES[DEFAULT_STAGE_ID])
+    return resolve_stage_terrain_profile(
+        stage_id=args.stage,
+        stage_json=_resolve(args.stage_json) if args.stage_json else None,
+    )
 
 
 def _profile_path(primary: Path, fallback: Path | None) -> Path:

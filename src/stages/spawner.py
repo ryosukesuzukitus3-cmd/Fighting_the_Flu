@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.core.factories import make_enemy
+from src.core.terrain_composer import is_terrain_composer_renderer, resolve_composer_paths
 from src.entities.terrain_query import iter_collidable_terrain
 
 if TYPE_CHECKING:
@@ -336,14 +337,15 @@ class EnemySpawner:
 
         if enemy_type == "TerrainPieces":
             if self._terrain is not None:
-                if event.get("renderer") != "stage3_composer":
+                if not is_terrain_composer_renderer(event.get("renderer")):
                     return True
                 from src.entities.stage3_composer_terrain import make_stage3_composer_terrain_from_pieces
+                rects_path, mask_dir = resolve_composer_paths(event)
                 start_x = self._terrain_start_x(event, camera)
                 self._terrain.add(*make_stage3_composer_terrain_from_pieces(
                     event,
-                    rects_path=event.get("composer_rects", event.get("rects_path", "tools/stage3_terrain_rects.json")),
-                    mask_dir=event.get("composer_mask_dir", event.get("mask_dir", "tools/stage3_terrain_alpha_masks")),
+                    rects_path=rects_path,
+                    mask_dir=mask_dir,
                     start_x=int(round(start_x)),
                     collision_step=int(event.get("composer_collision_step", 8)),
                     collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
@@ -359,12 +361,13 @@ class EnemySpawner:
                     start_x,
                     default_seed=self._stage_id,
                 )
-                if event.get("renderer") == "stage3_composer":
+                if is_terrain_composer_renderer(event.get("renderer")):
                     from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
+                    rects_path, mask_dir = resolve_composer_paths(event)
                     self._terrain.add(*make_stage3_composer_terrain(
                         segments,
-                        rects_path=event.get("composer_rects", event.get("rects_path", "tools/stage3_terrain_rects.json")),
-                        mask_dir=event.get("composer_mask_dir", event.get("mask_dir", "tools/stage3_terrain_alpha_masks")),
+                        rects_path=rects_path,
+                        mask_dir=mask_dir,
                         sample_step=int(event.get("composer_sample_step", 48)),
                         tolerance=int(event.get("composer_tolerance", 26)),
                         collision_step=int(event.get("composer_collision_step", 8)),
