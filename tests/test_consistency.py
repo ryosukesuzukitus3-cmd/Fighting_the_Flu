@@ -2591,7 +2591,8 @@ def test_stage_designer_multi_selection_operations_and_layers() -> None:
 
     designer = StageDesigner.__new__(StageDesigner)
     designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
-        {"asset": "a:1", "x": 0, "y": 0},
+        {"asset": "a:1", "x": 0, "y": 0, "draw_order": 1},
+        {"asset": "a:2", "x": 90, "y": 0, "draw_order": 9},
         {"asset": "a:2", "x": 10, "y": 10},
         {"asset": "a:3", "x": 20, "y": 20},
         {"asset": "a:4", "x": 30, "y": 30},
@@ -2695,10 +2696,48 @@ def test_stage_designer_ctrl_drag_copies_selected_group_after_drag_threshold() -
         pygame.key.set_mods(0)
 
     pieces = designer.data["terrain_layout"][0]["pieces"]
-    assert len(pieces) == 2
+    assert len(pieces) == 3
     assert (pieces[0]["x"], pieces[0]["y"]) == (0, 0)
-    assert (pieces[1]["x"], pieces[1]["y"]) == (30, 30)
+    assert (pieces[2]["x"], pieces[2]["y"]) == (30, 30)
+    assert pieces[2]["draw_order"] == max(piece["draw_order"] for piece in pieces)
     assert len(designer.undo_stack) == 1
+
+
+def test_stage_designer_ctrl_drag_copies_multi_selection_to_front_in_z_order() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0, "draw_order": 5},
+        {"asset": "a:2", "x": 30, "y": 0, "draw_order": 2},
+    ]}], "world_events": [
+        {"type": "breakable_gate", "x": 10, "y": 0, "w": 20, "h": 20, "kind": "clot", "draw_order": 4},
+        {"type": "breakable_gate", "x": 80, "y": 0, "w": 20, "h": 20, "kind": "clot", "draw_order": 9},
+    ]}
+    designer.selection = Selection("event", 0)
+    designer.selections = [Selection("piece", 0), Selection("event", 0)]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    designer._duplicate_selection(offset=False)
+    designer._bring_selected_terrain_to_front()
+
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    events = designer.data["world_events"]
+    copied_piece, copied_event = pieces[-1], events[-1]
+    assert copied_event["draw_order"] == max(event["draw_order"] for event in events if event is not copied_event) + 1
+    assert copied_piece["draw_order"] == copied_event["draw_order"] + 1
+    assert copied_piece["draw_order"] == max([
+        *(piece["draw_order"] for piece in pieces),
+        *(event["draw_order"] for event in events),
+    ])
 
 
 def test_stage1_event_palette_can_restore_boss_gate_and_boss() -> None:

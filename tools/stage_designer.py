@@ -2083,6 +2083,27 @@ class StageDesigner:
         label = "frontmost" if direction > 0 and to_edge else "backmost" if to_edge else "forward" if direction > 0 else "backward"
         self.message = f"Moved {len(chosen)} terrain visual(s) {label}"
 
+    def _bring_selected_terrain_to_front(self) -> None:
+        """Put selected terrain visuals at the front without adding an undo step.
+
+        Ctrl-drag has already pushed its single undo snapshot while cloning.
+        Sorting selected copies by their inherited draw_order preserves the
+        source collection's internal z-order as it becomes the front group.
+        """
+        selected = [item for item in self._selection_list() if item.kind in {"piece", "event"}]
+        if not selected:
+            return
+        order = self._layerable_selections()
+        chosen = [item for item in order if item in selected]
+        if not chosen:
+            return
+        for index, item in enumerate([*(item for item in order if item not in selected), *chosen]):
+            objects = _layout(self.data).get("pieces", []) if item.kind == "piece" else self.data.get("world_events", [])
+            if 0 <= item.index < len(objects):
+                objects[item.index]["draw_order"] = index
+        self._invalidate_terrain_cache()
+        self.dirty = True
+
     def _move_selection(self, dx: float, dy: float) -> None:
         if self.selection is None:
             return
@@ -3068,6 +3089,7 @@ class StageDesigner:
                 # _duplicate_selection makes one undo entry and keeps the
                 # relative positions/order of the selected group.
                 self._duplicate_selection(offset=False)
+                self._bring_selected_terrain_to_front()
                 self.ctrl_copy_pending = False
                 self.ctrl_copy_candidate = None
                 self.drag_origins = {}
