@@ -36,6 +36,16 @@ _STAGE3_MASK_DIR = ROOT / "tools" / "stage3_terrain_alpha_masks"
 
 STAGE_TERRAIN_PROFILES: Mapping[int, StageTerrainProfile] = MappingProxyType(
     {
+        1: StageTerrainProfile(
+            stage_id=1,
+            stage_json=ROOT / "data" / "stages" / "stage1.json",
+            rects=ROOT / "tools" / "stage1_terrain_rects.json",
+            mask_dir=ROOT / "tools" / "stage1_terrain_alpha_masks",
+            background=ROOT / "assets" / "graphic" / "stage1_fever_corridor_bg.png",
+            terrain_kind="clot",
+            label="Stage1",
+            preview_camera_xs=(0, 1600, 3200, 4800, 6400, 8000),
+        ),
         2: StageTerrainProfile(
             stage_id=2,
             stage_json=ROOT / "data" / "stages" / "stage2.json",

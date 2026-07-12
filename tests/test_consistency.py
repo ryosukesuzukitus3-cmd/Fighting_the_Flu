@@ -372,14 +372,47 @@ def test_terrain_composer_catalog_rejects_unknown_path_and_asset(tmp_path) -> No
 def test_stage_terrain_profile_resolution_rejects_unknown_and_conflicting_stage(tmp_path) -> None:
     from tools.stage_terrain_profiles import resolve_stage_terrain_profile
 
-    stage1_path = tmp_path / "stage1.json"
-    stage1_path.write_text('{"stage_id": 1}', encoding="utf-8")
+    stage4_path = tmp_path / "stage4.json"
+    stage4_path.write_text('{"stage_id": 4}', encoding="utf-8")
     with pytest.raises(ValueError, match="no terrain tooling profile"):
-        resolve_stage_terrain_profile(stage_json=stage1_path)
+        resolve_stage_terrain_profile(stage_json=stage4_path)
 
     stage3_path = ROOT / "data" / "stages" / "stage3.json"
     with pytest.raises(ValueError, match="conflicts"):
         resolve_stage_terrain_profile(stage_id=2, stage_json=stage3_path)
+
+
+def test_stage1_terrain_profile_and_catalog_use_dedicated_assets() -> None:
+    from src.core.constants import SCREEN_WIDTH
+    from src.core.terrain_composer import load_composer_catalog
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES, resolve_stage_terrain_profile
+
+    profile = STAGE_TERRAIN_PROFILES[1]
+    layout = json.loads(profile.stage_json.read_text(encoding="utf-8"))["terrain_layout"][0]
+    catalog = load_composer_catalog(profile.rects)
+    required_roles = {
+        "floor_surface",
+        "ceiling_surface",
+        "body_fill",
+        "fixed_floor_block",
+        "fixed_ceiling_block",
+        "turret_mount",
+        "breakable_block",
+    }
+
+    assert resolve_stage_terrain_profile(stage_id=1) is profile
+    assert profile.stage_json == ROOT / "data" / "stages" / "stage1.json"
+    assert profile.rects == ROOT / "tools" / "stage1_terrain_rects.json"
+    assert profile.mask_dir == ROOT / "tools" / "stage1_terrain_alpha_masks"
+    assert profile.background == ROOT / "assets" / "graphic" / "stage1_fever_corridor_bg.png"
+    assert profile.terrain_kind == "clot"
+    assert profile.fallback_rects is None
+    assert profile.fallback_mask_dir is None
+    assert profile.preview_camera_xs[0] == 0
+    assert tuple(sorted(set(profile.preview_camera_xs))) == profile.preview_camera_xs
+    assert profile.preview_camera_xs[-1] <= layout["length"] - SCREEN_WIDTH
+    assert required_roles <= catalog.roles
+    assert catalog.assets
 
 
 def test_stage_composer_report_rejects_custom_stage_json(tmp_path) -> None:
@@ -489,6 +522,44 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert data["events"] == []
+
+
+def test_stage1_uses_dedicated_composer_assets_without_changing_route_model() -> None:
+    from src.core.terrain_composer import load_composer_catalog
+    from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
+
+    data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
+    strips = [
+        event
+        for event in [*data["terrain_layout"], *data["boss_terrain"]]
+        if event.get("type") == "TerrainStrip"
+    ]
+    catalog = load_composer_catalog(ROOT / "tools" / "stage1_terrain_rects.json")
+    pieces = load_stage3_composer_pieces(
+        ROOT / "tools" / "stage1_terrain_rects.json",
+        mask_dir=ROOT / "tools" / "stage1_terrain_alpha_masks",
+    )
+    fixed_clots = [
+        event
+        for event in [*data["boss_terrain"], *data["world_events"]]
+        if event.get("kind") == "clot"
+    ]
+
+    assert len(strips) == 2
+    for strip in strips:
+        assert strip["renderer"] == "terrain_composer"
+        assert strip["composer_rects"] == "tools/stage1_terrain_rects.json"
+        assert strip["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
+        assert strip["composer_collision_mode"] == "source"
+        assert "pieces" not in strip
+
+    assert fixed_clots
+    for event in fixed_clots:
+        role = event.get("material_role")
+        asset = event.get("material_asset")
+        assert role in catalog.roles
+        assert asset in catalog.assets
+        assert asset in {f"{piece.group}:{piece.index + 1}" for piece in pieces[role]}
 
 
 def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
@@ -1092,6 +1163,30 @@ def test_stage_backgrounds_draw_all_stages() -> None:
             bg.draw(surf, camera_x=f * 30.0)
 
 
+def test_stage1_background_uses_dedicated_image_and_keeps_procedural_layers() -> None:
+    from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
+    from src.entities.background import ScrollingBackground, _STAGE1_BG_PATH
+
+    assert _STAGE1_BG_PATH == ROOT / "assets" / "graphic" / "stage1_fever_corridor_bg.png"
+    assert _STAGE1_BG_PATH.exists()
+
+    bg = ScrollingBackground(1)
+    surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    assert bg._stage1_bg is None
+    bg.draw(surface, camera_x=0.0)
+    first_frame = pygame.image.tobytes(surface, "RGB")
+    cached_background = bg._stage1_bg
+    bg.draw(surface, camera_x=60.0)
+
+    assert bg._stage1_bg is not None
+    assert bg._stage1_bg.get_height() == SCREEN_HEIGHT
+    assert bg._stage1_bg is cached_background
+    assert pygame.image.tobytes(surface, "RGB") != first_frame
+    assert bg._stage1_far_cells
+    assert bg._stage1_near_cells
+    assert bg._stage1_membranes
+
+
 # ── docs ─────────────────────────────────────────────────────────────
 
 def test_stage3_background_loop_uses_fade_in_tile_edge() -> None:
@@ -1183,6 +1278,70 @@ def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
         for sprite in collisions
         if getattr(sprite, "side", "") in {"top", "bottom"}
     )
+
+
+def test_stage1_composer_keeps_source_strip_collision_and_breakable_state() -> None:
+    from src.core.camera import Camera
+    from src.entities.terrain import TerrainStripSegment, make_terrain_segments_from_event
+    from src.stages.spawner import EnemySpawner
+
+    layout = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))["terrain_layout"][0]
+    camera = Camera()
+    expected = make_terrain_segments_from_event(layout, -90, default_seed=1)
+    terrain = pygame.sprite.Group()
+    spawner = EnemySpawner(
+        game=object(),
+        enemies=pygame.sprite.Group(),
+        enemy_bullets=pygame.sprite.Group(),
+        events=[],
+        player=object(),
+        stage_id=1,
+        terrain=terrain,
+    )
+
+    spawner.spawn_terrain_events([layout], camera)
+
+    source_segments = [sprite for sprite in terrain if isinstance(sprite, TerrainStripSegment)]
+    visuals = [sprite for sprite in terrain if getattr(sprite, "terrain_visual_only", False)]
+    composer_collisions = [
+        sprite
+        for sprite in terrain
+        if not isinstance(sprite, TerrainStripSegment)
+        and not getattr(sprite, "terrain_visual_only", False)
+    ]
+    geometry = lambda segment: (
+        segment.world_x,
+        segment.y,
+        segment.rect.size,
+        segment.side,
+        segment.destructible,
+        segment.max_hp,
+        segment.drop_chance,
+    )
+
+    assert [geometry(segment) for segment in source_segments] == [geometry(segment) for segment in expected]
+    assert len(visuals) == 1
+    assert composer_collisions == []
+    assert all(segment.image.get_alpha() == 0 for segment in source_segments if not segment.destructible)
+
+    breakable = next(segment for segment in source_segments if segment.destructible)
+    visual_layout = visuals[0].layout
+    breakable_midpoint = breakable.world_x + breakable.rect.width / 2
+    assert breakable.image.get_alpha() != 0
+    base_run = next(
+        run
+        for run in visual_layout.surface_runs
+        if run.side == breakable.side and run.x0 <= breakable_midpoint < run.x1
+    )
+    expected_base_y = breakable.y if breakable.side == "top" else breakable.y + breakable.rect.height
+    assert abs(base_run.y - expected_base_y) <= layout["composer_sample_step"]
+    assert breakable.max_hp == layout["breakable_hp"]
+    assert breakable.drop_chance == layout["breakable_drop_chance"]
+    assert breakable.take_damage(1) is False
+    assert breakable.image.get_alpha() != 0
+    assert breakable.take_damage(breakable.hp) is True
+    breakable.kill()
+    assert breakable not in terrain
 
 
 def test_stage3_composer_floor_props_are_collidable() -> None:
@@ -1342,6 +1501,96 @@ def test_stage2_composer_rect_roles_are_available() -> None:
     assert len(pieces["floor_surface"]) >= 6
     assert len(pieces["block_square"]) >= 12
     assert all(piece.image.get_width() > 0 and piece.image.get_height() > 0 for piece in pieces["floor_surface"])
+
+
+def test_stage1_clot_runtime_fits_representative_dedicated_materials(monkeypatch) -> None:
+    from src.entities import terrain as terrain_module
+
+    data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
+    fixed_clots = [
+        event
+        for event in [*data["boss_terrain"], *data["world_events"]]
+        if event.get("kind") == "clot"
+    ]
+    samples = {
+        role: next(event for event in fixed_clots if event.get("material_role") == role)
+        for role in {"fixed_floor_block", "fixed_ceiling_block", "turret_mount", "breakable_block"}
+    }
+    real_material_surface = terrain_module._stage3_rect_material_surface
+
+    for role, event in samples.items():
+        w = int(event["w"])
+        h = int(event["h"])
+        surface_anchor = str(event.get("surface_anchor", "floor"))
+        image = real_material_surface(
+            w,
+            h,
+            seed=101,
+            require_top=surface_anchor != "ceiling",
+            kind="clot",
+            preferred_role=role,
+            surface_anchor=surface_anchor,
+            material_asset=str(event["material_asset"]),
+            allow_asset_resize=True,
+        )
+
+        assert image is not None
+        assert image.get_size() == (w, h)
+        bounds = image.get_bounding_rect()
+        assert bounds.width >= int(w * 0.6)
+        assert bounds.height >= int(h * 0.6)
+
+    calls: list[dict] = []
+
+    def record_material_surface(w: int, h: int, **kwargs):
+        calls.append({"w": w, "h": h, **kwargs})
+        return pygame.Surface((w, h), pygame.SRCALPHA)
+
+    monkeypatch.setattr(terrain_module, "_stage3_rect_material_surface", record_material_surface)
+    sample = samples["turret_mount"]
+    terrain_module.Terrain(
+        0,
+        float(sample["y"]),
+        int(sample["w"]),
+        int(sample["h"]),
+        "clot",
+        material_role=str(sample["material_role"]),
+        material_asset=str(sample["material_asset"]),
+    )
+
+    assert calls
+    assert calls[0]["kind"] == "clot"
+    assert calls[0]["preferred_role"] == "turret_mount"
+    assert calls[0]["material_asset"] == sample["material_asset"]
+    assert calls[0]["allow_asset_resize"] is True
+
+    calls.clear()
+    terrain_module.Terrain(0, 0, 112, 64, "clot")
+    assert calls == []
+
+    monkeypatch.setattr(terrain_module, "_stage3_rect_material_surface", real_material_surface)
+    gate = terrain_module.Terrain(
+        0,
+        0,
+        118,
+        208,
+        "clot",
+        destructible=True,
+        hp=10,
+        fixed_drop="WeaponItem",
+        material_role="breakable_block",
+        material_asset="clot_gate:2",
+    )
+    before_damage = pygame.image.tobytes(gate.image, "RGBA")
+
+    assert gate.take_damage(1) is False
+    assert gate.image.get_size() == (118, 208)
+    assert pygame.image.tobytes(gate.image, "RGBA") != before_damage
+    assert any(
+        gate.image.get_at((x, y)).g > 180 and gate.image.get_at((x, y)).b > 180
+        for x in range(40, 78)
+        for y in range(80, 128)
+    )
 
 
 def test_stage3_fortress_block_keeps_surface_anchor_after_damage() -> None:
@@ -1926,16 +2175,27 @@ def test_stage_designer_formats_stage_json_for_hand_editing() -> None:
         assert f'\n          "x": {first_event["x"]}' not in text
 
 
-def test_stage_designer_stage_profiles_select_stage2_defaults() -> None:
+def test_stage_designer_stage_profiles_select_stage_defaults() -> None:
     from tools.stage_designer import DEFAULT_MASK_DIR, DEFAULT_RECTS, _parse_args, _profile_from_args, _profile_path
 
     default_profile = _profile_from_args(_parse_args([]))
+    stage1_profile = _profile_from_args(_parse_args(["--stage", "1"]))
     stage2_profile = _profile_from_args(_parse_args(["--stage", "2"]))
+    inferred_stage1_profile = _profile_from_args(
+        _parse_args(["--stage-json", str(ROOT / "data" / "stages" / "stage1.json")])
+    )
     inferred_stage2_profile = _profile_from_args(
         _parse_args(["--stage-json", str(ROOT / "data" / "stages" / "stage2.json")])
     )
 
     assert default_profile.stage_id == 3
+    assert stage1_profile.stage_id == 1
+    assert inferred_stage1_profile is stage1_profile
+    assert stage1_profile.stage_json == ROOT / "data" / "stages" / "stage1.json"
+    assert stage1_profile.rects == ROOT / "tools" / "stage1_terrain_rects.json"
+    assert stage1_profile.mask_dir == ROOT / "tools" / "stage1_terrain_alpha_masks"
+    assert stage1_profile.background == ROOT / "assets" / "graphic" / "stage1_fever_corridor_bg.png"
+    assert stage1_profile.terrain_kind == "clot"
     assert stage2_profile.stage_id == 2
     assert inferred_stage2_profile.stage_id == 2
     assert stage2_profile.stage_json == ROOT / "data" / "stages" / "stage2.json"
@@ -2008,6 +2268,46 @@ def test_stage_designer_stage2_block_previews_use_rect_roles() -> None:
     assert added["material_asset"] == _piece_asset_id(added_piece)
     assert (added["w"], added["h"]) == added_piece.image.get_size()
     assert designer.selection == Selection("event", 0)
+
+
+def test_stage_designer_stage1_clot_assets_keep_authored_dimensions() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_templates_for_kind
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainStrip", "length": 1000}], "world_events": []}
+    designer.rects_path = ROOT / "tools" / "stage1_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage1_terrain_alpha_masks"
+    designer.event_templates = _event_templates_for_kind("clot")
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+
+    templates = dict(designer.event_templates)
+    for name in ("solid block", "ceiling block", "turret mount", "breakable gate", "weapon gate"):
+        event = templates[name]
+        size = (int(event["w"]), int(event["h"]))
+        image = designer._event_rect_image(event, *size)
+
+        assert image is not None
+        assert image.get_size() == size
+
+    template = templates["weapon gate"]
+    original_size = (int(template["w"]), int(template["h"]))
+    index = next(i for i, (name, _event) in enumerate(designer.event_templates) if name == "weapon gate")
+    designer._add_event_template_at(index, 420, 180)
+    added = designer.data["world_events"][0]
+
+    assert added["material_role"] == "breakable_block"
+    assert added["material_asset"].startswith("clot_gate:")
+    assert (added["w"], added["h"]) == original_size
+    assert designer.selection == Selection("event", 0)
+
+    for invalid_asset in ("", "invalid", "unknown:1", 123):
+        invalid = {**template, "material_asset": invalid_asset}
+        assert designer._event_rect_piece(invalid, *original_size) is None
 
 
 def test_stage2_data_block_runtime_uses_rect_material_asset() -> None:

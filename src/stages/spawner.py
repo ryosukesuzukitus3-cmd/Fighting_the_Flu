@@ -364,8 +364,14 @@ class EnemySpawner:
                 if is_terrain_composer_renderer(event.get("renderer")):
                     from src.entities.stage3_composer_terrain import make_stage3_composer_terrain
                     rects_path, mask_dir = resolve_composer_paths(event)
-                    self._terrain.add(*make_stage3_composer_terrain(
-                        segments,
+                    use_source_collision = event.get("composer_collision_mode") == "source"
+                    visual_segments = (
+                        [segment for segment in segments if not segment.destructible]
+                        if use_source_collision
+                        else segments
+                    )
+                    composer_sprites = make_stage3_composer_terrain(
+                        visual_segments,
                         rects_path=rects_path,
                         mask_dir=mask_dir,
                         sample_step=int(event.get("composer_sample_step", 48)),
@@ -373,7 +379,14 @@ class EnemySpawner:
                         collision_step=int(event.get("composer_collision_step", 8)),
                         collision_tolerance=int(event.get("composer_collision_tolerance", 10)),
                         overlap=int(event.get("composer_overlap", 0)),
-                    ))
+                        include_collision=not use_source_collision,
+                    )
+                    if use_source_collision:
+                        for segment in segments:
+                            if not segment.destructible:
+                                segment.set_visual_hidden()
+                        self._terrain.add(*segments)
+                    self._terrain.add(*composer_sprites)
                 else:
                     self._terrain.add(*segments)
             return True

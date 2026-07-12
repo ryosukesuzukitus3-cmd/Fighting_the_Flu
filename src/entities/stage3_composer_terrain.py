@@ -1126,6 +1126,7 @@ def make_stage3_composer_terrain(
     collision_step: int = DEFAULT_COLLISION_STEP,
     collision_tolerance: int = DEFAULT_COLLISION_TOLERANCE,
     overlap: int = DEFAULT_OVERLAP,
+    include_collision: bool = True,
 ) -> list[pygame.sprite.Sprite]:
     pieces = load_stage3_composer_pieces(rects_path, mask_dir=mask_dir)
     layout = build_stage3_composer_layout(
@@ -1138,8 +1139,9 @@ def make_stage3_composer_terrain(
         overlap=overlap,
     )
     sprites: list[pygame.sprite.Sprite] = [Stage3ComposerVisualLayer(layout)]
-    sprites.extend(Stage3ComposerCollisionBlock(run) for run in layout.collision_runs)
-    sprites.extend(Stage3ComposerCollisionRectBlock(rect) for rect in layout.collision_rects)
+    if include_collision:
+        sprites.extend(Stage3ComposerCollisionBlock(run) for run in layout.collision_runs)
+        sprites.extend(Stage3ComposerCollisionRectBlock(rect) for rect in layout.collision_rects)
     return sprites
 
 
