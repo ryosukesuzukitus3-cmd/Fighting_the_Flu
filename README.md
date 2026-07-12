@@ -126,7 +126,7 @@ py -3 -m venv .venv
 | `balance` | バランスシート出力 |
 | `pr-media` / `pr-html` / `pr-report` | PR 用に画像/HTML/レポートを `media` ブランチへ上げて貼り付けリンクを出力 |
 
-Stage1 は現在、専用背景・atlas・rect/mask catalogを既存の `TerrainStrip` と固定clotへ適用する中間段階。道中地形をStage3型の `TerrainPieces` 個別配置SSOTへ移す作業は後続PRで行う。
+Stage1 の主経路は約395個の `TerrainPieces.pieces` を個別配置SSOTとして使う。`stage-designer --stage 1` で素材種類・`x` / `y`・`role`・`collision`・反転を個別調整できる。Boss用fallbackの `TerrainStrip` と、破壊可能な `world_events` は従来どおり残す。
 
 ### 設計原則（SSOT）
 マスターデータは1箇所だけに定義し、他はそこから導出します（反映漏れ防止）。詳細と機能追加チェックリストは **[CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)**（共有ソースは `docs/agent_guide_shared.md`）を参照。ターン終了時の Stop フックで `gen_docs.py` → `check_consistency.py` が自動実行され、`tests/test_consistency.py` でも同じ整合性を検証します。

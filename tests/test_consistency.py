@@ -385,6 +385,7 @@ def test_stage_terrain_profile_resolution_rejects_unknown_and_conflicting_stage(
 def test_stage1_terrain_profile_and_catalog_use_dedicated_assets() -> None:
     from src.core.constants import SCREEN_WIDTH
     from src.core.terrain_composer import load_composer_catalog
+    from tools.stage_designer import StageDesigner
     from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES, resolve_stage_terrain_profile
 
     profile = STAGE_TERRAIN_PROFILES[1]
@@ -411,8 +412,28 @@ def test_stage1_terrain_profile_and_catalog_use_dedicated_assets() -> None:
     assert profile.preview_camera_xs[0] == 0
     assert tuple(sorted(set(profile.preview_camera_xs))) == profile.preview_camera_xs
     assert profile.preview_camera_xs[-1] <= layout["length"] - SCREEN_WIDTH
+    assert ROOT / layout["composer_rects"] == profile.rects
+    assert ROOT / layout["composer_mask_dir"] == profile.mask_dir
     assert required_roles <= catalog.roles
     assert catalog.assets
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.profile = profile
+    designer.rects_path = profile.rects
+    designer.mask_dir = profile.mask_dir
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+    palette = designer._composer_pieces()
+    palette_assets = {
+        role: {f"{piece.group}:{piece.index + 1}" for piece in pieces}
+        for role, pieces in palette.items()
+    }
+    assert designer._piece_roles(palette)[:3] == ["floor_surface", "ceiling_surface", "body_fill"]
+    assert all(designer._piece_palette_options(role, palette) for role in required_roles)
+    for piece in layout["pieces"]:
+        assert piece["role"] in catalog.roles
+        assert piece["asset"] in catalog.assets
+        assert piece["asset"] in palette_assets[piece["role"]]
 
 
 def test_stage_composer_report_rejects_custom_stage_json(tmp_path) -> None:
@@ -452,7 +473,7 @@ def test_stage_supports_world_layout_fields() -> None:
 
     assert stage.initial_terrain == []
     assert stage.terrain_layout
-    assert stage.terrain_layout[0]["type"] == "TerrainStrip"
+    assert stage.terrain_layout[0]["type"] == "TerrainPieces"
     assert stage.random_drop_scale == stage1_data["random_drop_scale"]
     assert stage2.initial_terrain == []
     assert stage2.terrain_layout
@@ -495,13 +516,30 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
         ev for ev in world_events
         if ev.get("type") in {"EnemyCoughSprayer", "EnemySporeSplitter"}
     ]
+    destructible_clots = [
+        (ev["x"], ev["y"], ev["w"], ev["h"], ev["hp"], ev["drop_chance"])
+        for ev in world_events
+        if ev.get("type") == "Terrain" and ev.get("destructible")
+    ]
+    gate_state = [
+        (
+            ev["type"],
+            ev["x"],
+            ev["y"],
+            ev["w"],
+            ev["h"],
+            ev["hp"],
+            ev.get("drop_chance"),
+        )
+        for ev in world_events
+        if ev.get("type") in {"breakable_gate", "weapon_gate"}
+    ]
 
-    assert layout["type"] == "TerrainStrip"
+    assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "fever_cave"
+    assert layout["renderer"] == "terrain_composer"
     assert layout["length"] >= 11000
-    assert layout["center_wave"] >= 80
-    assert 0.0 < layout["breakable_chance"] <= 0.03
-    assert layout["breakable_drop_chance"] <= 0.05
+    assert 380 <= len(layout["pieces"]) <= 420
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert "weapon_drop_limit" not in data
     assert first_enemy_x >= 900
@@ -521,19 +559,41 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
     assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
+    assert destructible_clots == [
+        (1190, 104, 112, 64, 4, 0.08),
+        (1460, 426, 142, 58, 4, 0.08),
+        (3440, 102, 132, 58, 5, 0.08),
+        (4320, 420, 160, 68, 6, 0.06),
+        (5580, 102, 156, 62, 6, 0.04),
+        (6840, 426, 190, 66, 6, 0.04),
+    ]
+    assert gate_state == [
+        ("breakable_gate", 3720, 360, 112, 132, 16, 0.04),
+        ("weapon_gate", 4700, 72, 118, 208, 18, None),
+        ("breakable_gate", 5860, 332, 126, 164, 20, 0.03),
+        ("breakable_gate", 7050, 96, 120, 188, 18, 0.03),
+    ]
+    assert [
+        (ev["type"], ev["x"], ev.get("fixed_drop"))
+        for ev in world_events
+        if ev.get("fixed_drop") == "WeaponItem"
+    ] == [("EnemyCoughSprayer", 6060, "WeaponItem")]
+    assert next(ev for ev in world_events if ev["type"] == "BossGate") == {
+        "type": "BossGate",
+        "trigger_x": 7650,
+        "lock_camera_x": 6850,
+        "player_limit_x": 7650,
+    }
     assert data["events"] == []
 
 
-def test_stage1_uses_dedicated_composer_assets_without_changing_route_model() -> None:
+def test_stage1_uses_explicit_composer_pieces_and_keeps_boss_strip_fallback() -> None:
     from src.core.terrain_composer import load_composer_catalog
     from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
 
     data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
-    strips = [
-        event
-        for event in [*data["terrain_layout"], *data["boss_terrain"]]
-        if event.get("type") == "TerrainStrip"
-    ]
+    layout = data["terrain_layout"][0]
+    boss_strip = data["boss_terrain"][0]
     catalog = load_composer_catalog(ROOT / "tools" / "stage1_terrain_rects.json")
     pieces = load_stage3_composer_pieces(
         ROOT / "tools" / "stage1_terrain_rects.json",
@@ -545,13 +605,30 @@ def test_stage1_uses_dedicated_composer_assets_without_changing_route_model() ->
         if event.get("kind") == "clot"
     ]
 
-    assert len(strips) == 2
-    for strip in strips:
-        assert strip["renderer"] == "terrain_composer"
-        assert strip["composer_rects"] == "tools/stage1_terrain_rects.json"
-        assert strip["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
-        assert strip["composer_collision_mode"] == "source"
-        assert "pieces" not in strip
+    assert layout["type"] == "TerrainPieces"
+    assert layout["renderer"] == "terrain_composer"
+    assert layout["composer_rects"] == "tools/stage1_terrain_rects.json"
+    assert layout["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
+    assert 380 <= len(layout["pieces"]) <= 420
+    assert "top" not in layout
+    assert "bottom" not in layout
+
+    surface_pieces = [piece for piece in layout["pieces"] if piece["collision"] == "surface"]
+    rect_pieces = [piece for piece in layout["pieces"] if piece["collision"] == "rect"]
+    body_pieces = [piece for piece in layout["pieces"] if piece["role"] == "body_fill"]
+    assert surface_pieces
+    assert rect_pieces
+    assert body_pieces
+    assert {piece["side"] for piece in surface_pieces} == {"top", "bottom"}
+    assert all(piece["collision"] == "none" for piece in body_pieces)
+    assert all(piece["side"] == "bottom" for piece in rect_pieces)
+
+    assert boss_strip["type"] == "TerrainStrip"
+    assert boss_strip["renderer"] == "terrain_composer"
+    assert boss_strip["composer_rects"] == "tools/stage1_terrain_rects.json"
+    assert boss_strip["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
+    assert boss_strip["composer_collision_mode"] == "source"
+    assert "pieces" not in boss_strip
 
     assert fixed_clots
     for event in fixed_clots:
@@ -1280,14 +1357,30 @@ def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
     )
 
 
-def test_stage1_composer_keeps_source_strip_collision_and_breakable_state() -> None:
+def test_stage1_explicit_pieces_build_surface_and_rect_collision() -> None:
     from src.core.camera import Camera
-    from src.entities.terrain import TerrainStripSegment, make_terrain_segments_from_event
+    from src.entities.stage3_composer_terrain import (
+        Stage3ComposerCollisionBlock,
+        Stage3ComposerCollisionRectBlock,
+        Stage3ComposerVisualLayer,
+        build_stage3_piece_layout,
+        load_stage3_composer_pieces,
+    )
     from src.stages.spawner import EnemySpawner
 
     layout = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))["terrain_layout"][0]
     camera = Camera()
-    expected = make_terrain_segments_from_event(layout, -90, default_seed=1)
+    pieces = load_stage3_composer_pieces(
+        ROOT / layout["composer_rects"],
+        mask_dir=ROOT / layout["composer_mask_dir"],
+    )
+    expected = build_stage3_piece_layout(
+        layout,
+        pieces,
+        start_x=int(layout.get("x", 0)),
+        collision_step=int(layout["composer_collision_step"]),
+        collision_tolerance=int(layout["composer_collision_tolerance"]),
+    )
     terrain = pygame.sprite.Group()
     spawner = EnemySpawner(
         game=object(),
@@ -1301,47 +1394,28 @@ def test_stage1_composer_keeps_source_strip_collision_and_breakable_state() -> N
 
     spawner.spawn_terrain_events([layout], camera)
 
-    source_segments = [sprite for sprite in terrain if isinstance(sprite, TerrainStripSegment)]
-    visuals = [sprite for sprite in terrain if getattr(sprite, "terrain_visual_only", False)]
-    composer_collisions = [
-        sprite
-        for sprite in terrain
-        if not isinstance(sprite, TerrainStripSegment)
-        and not getattr(sprite, "terrain_visual_only", False)
-    ]
-    geometry = lambda segment: (
-        segment.world_x,
-        segment.y,
-        segment.rect.size,
-        segment.side,
-        segment.destructible,
-        segment.max_hp,
-        segment.drop_chance,
-    )
+    visuals = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerVisualLayer)]
+    surface_collisions = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerCollisionBlock)]
+    rect_collisions = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerCollisionRectBlock)]
 
-    assert [geometry(segment) for segment in source_segments] == [geometry(segment) for segment in expected]
     assert len(visuals) == 1
-    assert composer_collisions == []
-    assert all(segment.image.get_alpha() == 0 for segment in source_segments if not segment.destructible)
-
-    breakable = next(segment for segment in source_segments if segment.destructible)
-    visual_layout = visuals[0].layout
-    breakable_midpoint = breakable.world_x + breakable.rect.width / 2
-    assert breakable.image.get_alpha() != 0
-    base_run = next(
-        run
-        for run in visual_layout.surface_runs
-        if run.side == breakable.side and run.x0 <= breakable_midpoint < run.x1
+    assert len(surface_collisions) == len(expected.collision_runs)
+    assert len(rect_collisions) == len(expected.collision_rects)
+    assert {sprite.side for sprite in surface_collisions} == {"top", "bottom"}
+    assert all(sprite.surface_y is not None for sprite in surface_collisions)
+    assert rect_collisions
+    placement_state = lambda placement: (
+        placement.asset,
+        placement.role,
+        placement.collision,
+        placement.side,
+        placement.x,
+        placement.y,
+        placement.clip,
     )
-    expected_base_y = breakable.y if breakable.side == "top" else breakable.y + breakable.rect.height
-    assert abs(base_run.y - expected_base_y) <= layout["composer_sample_step"]
-    assert breakable.max_hp == layout["breakable_hp"]
-    assert breakable.drop_chance == layout["breakable_drop_chance"]
-    assert breakable.take_damage(1) is False
-    assert breakable.image.get_alpha() != 0
-    assert breakable.take_damage(breakable.hp) is True
-    breakable.kill()
-    assert breakable not in terrain
+    assert [placement_state(value) for value in visuals[0].layout.placements] == [
+        placement_state(value) for value in expected.placements
+    ]
 
 
 def test_stage3_composer_floor_props_are_collidable() -> None:

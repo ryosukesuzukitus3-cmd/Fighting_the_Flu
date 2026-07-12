@@ -658,11 +658,11 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 `terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
 固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `weapon_gate` / `turret_mount` を使える。`gate` / `breakable_gate` / `weapon_gate` は既定で破壊可能になる。
 `weapon_gate` は報酬用の血栓ゲートで、未指定でも `fixed_drop: "WeaponItem"` として扱われ、内部に青白い報酬コアを描く。
-Stage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
+Stage1とStage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
 `AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する中間形式。輪郭から自動充填して初期ブロック配置を作る補助用途としては残すが、Stage3の最終地形SSOTにはしない。
 `TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
-Stage1 は専用の背景・atlas・rect/mask catalogを導入済みだが、現段階では `TerrainStrip + terrain_composer` が道中形状と衝突のSSOTである。`composer_collision_mode: "source"` により通常segmentを透明な衝突判定として残し、composerはvisual-onlyで重ねる。破壊可能segmentはcomposer layoutから除外して従来画像・HP・dropを維持し、破壊時に見た目と衝突が同時に消える。固定clotは同じStage1 catalogの `material_role` / `material_asset` を寸法へfitして描く。これは制作フロー展開の中間段階であり、後続PRでStage3と同じ `TerrainPieces.pieces` の個別配置SSOTへ移行する。
+Stage1 の主経路は約395個の `TerrainPieces.pieces` へ移行済みで、これが道中の見た目と衝突のSSOTである。`stage-designer --stage 1` で各pieceの素材種類・`x` / `y`・`role`・`collision`・`flip_x` / `flip_y` を個別編集し、配置の最終調整もdesigner上で行う。Boss用fallbackの `TerrainStrip` と、HP・dropを持つ破壊可能な `world_events` は残し、固定clotはStage1 catalogの `material_role` / `material_asset` で描く。
 
 Stage1/2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
 
@@ -689,13 +689,13 @@ Stage1/2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --
 
 #### 明示ブロック地形イベント（`type: "TerrainPieces"`）
 
-Stage3の道中地形で使う、素材ブロック配置を直接保持する形式。`pieces` の各要素が1つの地形素材を表し、runtimeは保存済みブロックから描画と簡略化した衝突面を生成する。
+Stage1とStage3の道中地形で使う、素材ブロック配置を直接保持する形式。`pieces` の各要素が1つの地形素材を表し、runtimeは保存済みブロックから描画と簡略化した衝突面を生成する。
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
 | `type` | ○ | `"TerrainPieces"` |
-| `theme` | ○ | 見た目テーマ。Stage3では `"fortress"` |
+| `theme` | ○ | 見た目テーマ。Stage1では `"fever_cave"`、Stage3では `"fortress"` |
 | `renderer` | ○ | Stage1/2/3では `"terrain_composer"`（旧 `"stage3_composer"` も互換対応） |
 | `composer_rects` | ○ | この地形が使うrect catalog。repo root相対パス |
 | `composer_mask_dir` | ○ | rectごとのalpha maskディレクトリ。repo root相対パス |
@@ -734,7 +734,7 @@ Stage3の道中地形で使う、素材ブロック配置を直接保持する�
 #### 旧連続地形イベント（`type: "TerrainStrip"`）
 
 グラディウス風の上下壁・洞窟・要塞回廊をセグメント列として生成する。接触判定は矩形セグメントごとに行い、
-見た目はテーマ別の手続き描画またはcomposerで表現する。Stage1 では `fever_cave` の形状を維持しつつ、専用atlasを `terrain_composer` で描画する。Stage1の最終目標は後続PRでの `TerrainPieces` 化であり、この形式を完成形とはしない。
+見た目はテーマ別の手続き描画またはcomposerで表現する。Stage1ではBoss用fallbackとして `fever_cave + terrain_composer` を残すが、主経路のSSOTには使わない。
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
