@@ -761,7 +761,17 @@ class GameScene(
         if self._matrix_rain is not None:
             self._matrix_rain.draw(buf)
         self._draw_bg_text(buf)
-        self.terrain.draw(buf)
+        # TerrainPieces and destructible terrain events share draw_order when
+        # authored in the stage designer.  Missing values retain the Group's
+        # historical insertion order.
+        for insertion_index, terrain in sorted(
+            enumerate(self.terrain.sprites()),
+            key=lambda pair: (
+                pair[1].draw_order if getattr(pair[1], "draw_order", None) is not None else pair[0],
+                pair[0],
+            ),
+        ):
+            buf.blit(terrain.image, terrain.rect)
         self.items.draw(buf)
         self.player_bullets.draw(buf)
         self.enemy_bullets.draw(buf)

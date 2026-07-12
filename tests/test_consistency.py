@@ -1360,6 +1360,7 @@ def test_stage1_explicit_pieces_build_surface_and_rect_collision() -> None:
     from src.entities.stage3_composer_terrain import (
         Stage3ComposerCollisionBlock,
         Stage3ComposerCollisionRectBlock,
+        Stage3ComposerPieceVisualLayer,
         Stage3ComposerVisualLayer,
         build_stage3_piece_layout,
         load_stage3_composer_pieces,
@@ -1393,6 +1394,7 @@ def test_stage1_explicit_pieces_build_surface_and_rect_collision() -> None:
     spawner.spawn_terrain_events([layout], camera)
 
     visuals = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerVisualLayer)]
+    piece_visuals = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerPieceVisualLayer)]
     surface_collisions = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerCollisionBlock)]
     rect_collisions = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerCollisionRectBlock)]
 
@@ -1411,7 +1413,12 @@ def test_stage1_explicit_pieces_build_surface_and_rect_collision() -> None:
         placement.y,
         placement.clip,
     )
-    assert [placement_state(value) for value in visuals[0].layout.placements] == [
+    # The base layer remains a single cheap backdrop.  Pieces are independent
+    # visual sprites so authored draw_order can interleave with breakable
+    # world-event Terrain without changing collision blocks.
+    assert visuals[0].layout.placements == ()
+    assert len(piece_visuals) == len(expected.placements)
+    assert [placement_state(sprite.placement) for sprite in piece_visuals] == [
         placement_state(value) for value in expected.placements
     ]
 
@@ -2607,6 +2614,158 @@ def test_stage_designer_multi_selection_operations_and_layers() -> None:
     assert [piece["asset"] for piece in pieces[-2:]] == ["a:2", "a:3"]
     designer._delete_selection()
     assert len(pieces) == 4
+
+
+def test_stage_designer_interleaves_piece_and_destructible_terrain_layers() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0},
+        {"asset": "a:2", "x": 40, "y": 0},
+    ]}], "world_events": [
+        {"type": "breakable_gate", "x": 20, "y": 0, "w": 30, "h": 30, "kind": "clot", "hp": 4},
+        {"type": "EnemyVirus", "x": 100, "count": 1},
+    ]}
+    designer.selection = Selection("event", 0)
+    designer.selections = [Selection("piece", 0), Selection("event", 0)]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    designer._move_terrain_layers(1, to_edge=True)
+
+    piece = designer.data["terrain_layout"][0]["pieces"][0]
+    gate = designer.data["world_events"][0]
+    assert piece["draw_order"] > designer.data["terrain_layout"][0]["pieces"][1]["draw_order"]
+    assert gate["draw_order"] > designer.data["terrain_layout"][0]["pieces"][1]["draw_order"]
+    assert "draw_order" not in designer.data["world_events"][1]
+
+
+def test_stage_designer_ctrl_drag_copies_selected_group_after_drag_threshold() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0},
+    ]}], "world_events": []}
+    designer.selection = None
+    designer.selections = []
+    designer.guide_mode = False
+    designer.panning = False
+    designer.palette_drag = None
+    designer.marquee_start = None
+    designer.marquee_current = None
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.drag_start_world = pygame.Vector2(0, 0)
+    designer.drag_origins = {}
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+    designer._update_cursor_world = lambda _pos: None
+    designer._screen_to_world = lambda pos: (float(pos[0]), float(pos[1] - 48))
+
+    def select_piece(_pos, *, toggle: bool = False):
+        selected = Selection("piece", 0)
+        if toggle:
+            designer._set_selections([selected])
+        else:
+            designer._set_selections([selected])
+        return selected
+
+    designer._select_at = select_piece
+    pygame.key.set_mods(pygame.KMOD_CTRL)
+    try:
+        designer._handle_mouse_down(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(20, 68)))
+        designer._handle_mouse_motion(pygame.event.Event(pygame.MOUSEMOTION, pos=(50, 98)))
+        designer._handle_mouse_up(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(50, 98)))
+    finally:
+        pygame.key.set_mods(0)
+
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    assert len(pieces) == 2
+    assert (pieces[0]["x"], pieces[0]["y"]) == (0, 0)
+    assert (pieces[1]["x"], pieces[1]["y"]) == (30, 30)
+    assert len(designer.undo_stack) == 1
+
+
+def test_stage1_event_palette_can_restore_boss_gate_and_boss() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_templates_for_kind
+
+    templates = dict(_event_templates_for_kind("clot"))
+    assert templates["boss gate"] == {
+        "type": "BossGate", "trigger_x": 7650, "lock_camera_x": 6850, "player_limit_x": 7650,
+    }
+    assert templates["boss appearance"] == {
+        "type": "Boss", "x": 8100, "count": 1, "formation": "single", "preload": 0,
+    }
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": []}], "world_events": []}
+    designer.event_templates = list(templates.items())
+    designer.selection = None
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    gate_index = next(i for i, (name, _event) in enumerate(designer.event_templates) if name == "boss gate")
+    designer._add_event_template_at(gate_index, 9000, 200)
+
+    assert designer.selection == Selection("event", 0)
+    assert designer.data["world_events"] == [{
+        "type": "BossGate", "trigger_x": 9000, "lock_camera_x": 8200, "player_limit_x": 9000,
+    }]
+
+
+def test_stage_designer_draws_stage_bounds_even_when_overlays_are_off() -> None:
+    from tools.stage_designer import SCREEN_HEIGHT, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.camera_y = 0.0
+    designer.zoom = 1.0
+    designer.small_font = pygame.font.Font(None, 13)
+    target = pygame.Surface((320, SCREEN_HEIGHT), pygame.SRCALPHA)
+    designer._draw_stage_bounds(target)
+
+    assert target.get_at((40, 0))[:3] == (255, 174, 104)
+    assert target.get_at((40, SCREEN_HEIGHT - 1))[:3] == (104, 218, 255)
+
+
+def test_stage_designer_layer_reorder_reuses_loaded_piece_atlas(monkeypatch: pytest.MonkeyPatch) -> None:
+    import tools.stage_designer as designer_module
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "vessel_surface:1", "x": 0, "y": 400, "role": "floor_surface", "side": "bottom"},
+    ]}], "world_events": []}
+    designer.rects_path = ROOT / "tools" / "stage1_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage1_terrain_alpha_masks"
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+    designer._piece_preview_cache = {}
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    _layout_before, atlas = designer._piece_layout()
+    designer.data["terrain_layout"][0]["pieces"][0]["draw_order"] = 1
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+    monkeypatch.setattr(designer_module, "load_stage3_composer_pieces", lambda *_args, **_kwargs: pytest.fail("atlas reload"))
+
+    _layout_after, reused_atlas = designer._piece_layout()
+    assert reused_atlas is atlas
 
 
 def test_stage1_organic_autofill_uses_overlapping_ordered_bands() -> None:
