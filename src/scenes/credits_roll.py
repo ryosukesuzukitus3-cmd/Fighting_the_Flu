@@ -13,6 +13,7 @@ _FAST_MULT = 3.6
 _SIDE_PAD = 72
 _FADEOUT_MS = 2400
 _FADEOUT_SEC = _FADEOUT_MS / 1000.0
+_FINAL_HOLD_SEC = 6.0         # 最終行（Thank you for playing）を中央で保持する秒数
 
 # エンドロール記法（script.py CREDITS / POSTCREDIT のテキスト先頭マーカー）
 _TITLE_MARK = "■"             # セクション見出し（大・金・下線）
@@ -40,6 +41,8 @@ class CreditsRollScene(Scene):
         self._build_entries()
         self._content_h = sum(self._entry_height(kind, text) for text, kind, _ in self._entries)
         self._scroll_y = float(SCREEN_HEIGHT + 70)
+        self._stop_y = self._final_stop_scroll_y()
+        self._hold_timer = 0.0
         self._timer = 0.0
         self._finished = False
         self._completed = False
@@ -59,15 +62,25 @@ class CreditsRollScene(Scene):
                 self._on_complete()
             return
 
-        speed = _SCROLL_SPEED
         inp = self.game.input
-        if inp.is_pressed(pygame.K_RETURN) or inp.is_pressed(pygame.K_SPACE):
-            speed *= _FAST_MULT
-        self._scroll_y -= speed * dt
         if inp.is_just_pressed(pygame.K_x):
             self._finish(fadeout=False)
-        if self._scroll_y + self._content_h < -80:
-            self._finish(fadeout=True)
+            return
+
+        # 最終行（Thank you for playing）が画面中央に達したらスクロールを止めて保持
+        if self._scroll_y <= self._stop_y:
+            self._scroll_y = self._stop_y
+            self._hold_timer += dt
+            if (self._hold_timer >= _FINAL_HOLD_SEC
+                    or inp.is_just_pressed(pygame.K_RETURN)
+                    or inp.is_just_pressed(pygame.K_SPACE)):
+                self._finish(fadeout=True)
+            return
+
+        speed = _SCROLL_SPEED
+        if inp.is_pressed(pygame.K_RETURN) or inp.is_pressed(pygame.K_SPACE):
+            speed *= _FAST_MULT
+        self._scroll_y = max(self._stop_y, self._scroll_y - speed * dt)
 
     def draw(self, screen: pygame.Surface) -> None:
         screen.blit(self._bg, (0, 0))
@@ -88,6 +101,20 @@ class CreditsRollScene(Scene):
         self._draw_vignette(screen)
         hint = self._hint_font.render("ENTER: FAST   X: TITLE", True, (130, 125, 110))
         screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 18, SCREEN_HEIGHT - 28))
+
+    def _final_stop_scroll_y(self) -> float:
+        """最終の実エントリが画面中央に来る scroll_y を返す。"""
+        last_idx = None
+        for i, (text, _, _) in enumerate(self._entries):
+            if text:
+                last_idx = i
+        if last_idx is None:
+            return float(-self._content_h - 200)   # 実質、停止なし
+        prefix = sum(self._entry_height(kind, text)
+                     for text, kind, _ in self._entries[:last_idx])
+        text, kind, _ = self._entries[last_idx]
+        font = self._font_for(kind, text)
+        return float(SCREEN_HEIGHT // 2 - font.get_linesize() // 2 - prefix)
 
     def _finish(self, *, fadeout: bool) -> None:
         if self._finished:

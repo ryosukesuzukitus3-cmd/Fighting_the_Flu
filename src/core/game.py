@@ -48,13 +48,14 @@ class Game:
         self._next_reinit = reinit
 
     def run(self) -> None:
-        from src.scenes.title import TitleScene
+        from src.scenes.disclaimer_scene import DisclaimerScene
         handle_debug_input = None
         if __debug__:
             from src.core.debug import handle_global_debug_input
             handle_debug_input = handle_global_debug_input
 
-        self.change_scene(TitleScene(self))
+        # 起動時はフィクション注意書き → タイトルの順（遷移は DisclaimerScene 側）
+        self.change_scene(DisclaimerScene(self))
 
         running = True
         while running:
