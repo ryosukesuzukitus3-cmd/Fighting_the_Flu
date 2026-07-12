@@ -135,6 +135,7 @@ def _stage3_rect_material_surface(
     preferred_role: str | None = None,
     surface_anchor: str = "floor",
     material_asset: str | None = None,
+    allow_asset_resize: bool = False,
 ) -> pygame.Surface | None:
     catalog = terrain_material_catalog_for_kind(kind)
     if catalog is None:
@@ -157,8 +158,22 @@ def _stage3_rect_material_surface(
             piece = pieces_by_group[group][int(index_text) - 1]
         except (KeyError, IndexError, TypeError, ValueError):
             return None
-        if piece.image.get_size() != (w, h):
+        if piece.image.get_size() != (w, h) and not allow_asset_resize:
             return None
+        if piece.image.get_size() != (w, h):
+            fit = (
+                "stretch"
+                if group == "clot_gate"
+                or preferred_role in {"fixed_floor_block", "fixed_ceiling_block", "turret_mount"}
+                else "cover"
+            )
+            return _stage3_piece_fill(
+                piece.image,
+                w,
+                h,
+                fit=fit,
+                anchor=surface_anchor,
+            )
         return piece.image.copy()
 
     aspect = w / max(1, h)
@@ -337,6 +352,9 @@ class Terrain(pygame.sprite.Sprite):
                 destructible=destructible,
                 damage_ratio=damage_ratio,
                 fixed_drop=fixed_drop,
+                surface_anchor=surface_anchor,
+                material_role=material_role,
+                material_asset=material_asset,
             )
         if kind == "data_block":
             return Terrain._make_data_block_surface(
@@ -543,8 +561,12 @@ class Terrain(pygame.sprite.Sprite):
         destructible: bool = False,
         damage_ratio: float = 0.0,
         fixed_drop: str | None = None,
+        surface_anchor: str = "floor",
+        material_role: str | None = None,
+        material_asset: str | None = None,
     ) -> pygame.Surface:
-        rng = random.Random((w * 92837111) ^ (h * 689287499) ^ 0xC107)
+        seed = (w * 92837111) ^ (h * 689287499) ^ 0xC107
+        rng = random.Random(seed)
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
 
         if w >= h * 1.35:
@@ -573,6 +595,27 @@ class Terrain(pygame.sprite.Sprite):
         Terrain._draw_clot_strands(surf, rng, w, h)
         pygame.draw.ellipse(surf, (250, 105, 92, 110), surf.get_rect().inflate(-5, -5), 2)
         pygame.draw.ellipse(surf, (255, 180, 132, 45), surf.get_rect().inflate(-16, -18), 1)
+
+        preferred_role = material_role or (
+            "breakable_block" if destructible else (
+                "fixed_ceiling_block" if surface_anchor == "ceiling" else "fixed_floor_block"
+            )
+        )
+        material_surf = None
+        if material_asset:
+            material_surf = _stage3_rect_material_surface(
+                w,
+                h,
+                seed=seed,
+                require_top=surface_anchor != "ceiling",
+                kind="clot",
+                preferred_role=preferred_role,
+                surface_anchor=surface_anchor,
+                material_asset=material_asset,
+                allow_asset_resize=True,
+            )
+        if material_surf is not None:
+            surf = material_surf
 
         if destructible:
             crack_col = (255, 190, 115)
@@ -804,11 +847,17 @@ class TerrainStripSegment(pygame.sprite.Sprite):
         self._h = h
         self._seed = seed
         self._index = index
+        self._visual_hidden = False
         self.image   = self._make_surface(
             w, h, side=side, theme=theme, seed=seed, index=index,
             destructible=destructible, damage_ratio=0.0,
         )
         self.rect    = self.image.get_rect(topleft=(int(world_x), int(y)))
+
+    def set_visual_hidden(self, hidden: bool = True) -> None:
+        """Hide procedural pixels while preserving collision and damage state."""
+        self._visual_hidden = hidden
+        self.image.set_alpha(0 if hidden else None)
 
     @staticmethod
     def _make_surface(
@@ -1088,6 +1137,8 @@ class TerrainStripSegment(pygame.sprite.Sprite):
             destructible=True,
             damage_ratio=damage_ratio,
         )
+        if self._visual_hidden:
+            self.image.set_alpha(0)
         self.rect = self.image.get_rect(center=center)
         return False
 

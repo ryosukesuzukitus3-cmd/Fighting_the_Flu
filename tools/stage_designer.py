@@ -171,6 +171,15 @@ def _profile_path(primary: Path, fallback: Path | None) -> Path:
     return fallback
 
 
+def _profile_for_terrain_kind(kind: object) -> StageTerrainProfile | None:
+    if not isinstance(kind, str):
+        return None
+    return next(
+        (profile for profile in STAGE_PROFILES.values() if profile.terrain_kind == kind),
+        None,
+    )
+
+
 def _compact_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(", ", ": "))
 
@@ -661,12 +670,15 @@ class StageDesigner:
 
     def _composer_asset_paths(self, event: dict[str, Any] | None = None) -> tuple[Path, Path]:
         profile = getattr(self, "profile", None)
+        event_profile = _profile_for_terrain_kind(event.get("kind")) if event is not None else None
         rects_path = getattr(self, "rects_path", None)
         mask_dir = getattr(self, "mask_dir", None)
 
         if rects_path is None:
             if profile is not None:
                 rects_path = _profile_path(profile.rects, profile.fallback_rects)
+            elif event_profile is not None:
+                rects_path = _profile_path(event_profile.rects, event_profile.fallback_rects)
             elif event is not None and event.get("kind") == "data_block":
                 rects_path = STAGE2_RECTS
             else:
@@ -679,6 +691,11 @@ class StageDesigner:
                     mask_dir = profile.mask_dir
                 else:
                     mask_dir = _profile_path(profile.mask_dir, profile.fallback_mask_dir)
+            elif event_profile is not None:
+                if rects_path == event_profile.rects:
+                    mask_dir = event_profile.mask_dir
+                else:
+                    mask_dir = _profile_path(event_profile.mask_dir, event_profile.fallback_mask_dir)
             elif event is not None and event.get("kind") == "data_block":
                 mask_dir = STAGE2_MASK_DIR
             else:
@@ -803,7 +820,20 @@ class StageDesigner:
 
     def _event_rect_image(self, event: dict[str, Any], w: int, h: int) -> pygame.Surface | None:
         piece = self._event_rect_piece(event, w, h)
-        return None if piece is None else piece.image
+        if piece is None:
+            return None
+        if event.get("kind") == "clot":
+            return Terrain._make_surface(
+                w,
+                h,
+                "clot",
+                destructible=bool(event.get("destructible") or event.get("type") in {"breakable_gate", "weapon_gate"}),
+                fixed_drop="WeaponItem" if event.get("type") == "weapon_gate" else None,
+                surface_anchor=str(event.get("surface_anchor", "floor")),
+                material_role=_event_material_role(event),
+                material_asset=_piece_asset_id(piece),
+            )
+        return piece.image
 
     def _event_rect_piece(self, event: dict[str, Any], w: int, h: int) -> Any | None:
         role = _event_material_role(event)
@@ -811,7 +841,9 @@ class StageDesigner:
             return None
         pieces_by_group = self._composer_pieces(event)
         asset = event.get("material_asset")
-        if isinstance(asset, str) and ":" in asset:
+        if "material_asset" in event:
+            if not isinstance(asset, str) or ":" not in asset:
+                return None
             group, index_text = asset.split(":", 1)
             try:
                 index = int(index_text) - 1
@@ -820,11 +852,17 @@ class StageDesigner:
             group_pieces = pieces_by_group.get(group, [])
             if 0 <= index < len(group_pieces):
                 return group_pieces[index]
+            return None
         pieces = list(pieces_by_group.get(role, []))
         if not pieces:
             return None
         if str(event.get("type", "")) in {"breakable_gate", "weapon_gate"}:
-            block_pieces = [piece for piece in pieces if piece.group in {"block_tall", "block_square", "block_wide"}]
+            prop_piece_ids = {
+                id(piece)
+                for prop_role in ("floor_prop", "decor_prop")
+                for piece in pieces_by_group.get(prop_role, [])
+            }
+            block_pieces = [piece for piece in pieces if id(piece) not in prop_piece_ids]
             if block_pieces:
                 pieces = block_pieces
         aspect = w / max(1, h)
@@ -838,7 +876,8 @@ class StageDesigner:
         return ranked[0]
 
     def _apply_event_rect_asset(self, event: dict[str, Any]) -> None:
-        if event.get("kind") != "data_block":
+        kind = event.get("kind")
+        if kind not in {"clot", "data_block"}:
             return
         role = _event_material_role(event)
         if role is None:
@@ -848,8 +887,9 @@ class StageDesigner:
             return
         event["material_role"] = role
         event["material_asset"] = _piece_asset_id(piece)
-        event["w"] = int(piece.image.get_width())
-        event["h"] = int(piece.image.get_height())
+        if kind == "data_block":
+            event["w"] = int(piece.image.get_width())
+            event["h"] = int(piece.image.get_height())
 
     def _event_templates(self) -> list[tuple[str, dict[str, Any]]]:
         return getattr(self, "event_templates", EVENT_TEMPLATES)
@@ -912,8 +952,10 @@ class StageDesigner:
         material_role = str(event.get("material_role", _event_material_role(event) or ""))
         key = (
             f"{etype}:{event.get('kind', '')}:{event.get('surface', '')}:"
-            f"{event.get('surface_anchor', '')}:{material_role}:{event.get('fixed_drop', '')}:"
-            f"{event.get('enhanced', False)}:{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
+            f"{event.get('surface_anchor', '')}:{material_role}:{event.get('material_asset', '')}:"
+            f"{event.get('fixed_drop', '')}:"
+            f"{event.get('enhanced', False)}:{event.get('destructible', False)}:"
+            f"{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
         )
         if key in self._event_image_cache:
             return self._event_image_cache[key]
@@ -959,6 +1001,7 @@ class StageDesigner:
                 fixed_drop="WeaponItem" if etype == "weapon_gate" else None,
                 surface_anchor=str(event.get("surface_anchor", "floor")),
                 material_role=material_role or None,
+                material_asset=str(event.get("material_asset")) if event.get("material_asset") else None,
             )
         if image is None:
             image = pygame.Surface((42, 42), pygame.SRCALPHA)

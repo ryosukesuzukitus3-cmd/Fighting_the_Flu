@@ -5,6 +5,7 @@ from pathlib import Path
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 
+_STAGE1_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage1_fever_corridor_bg.png"
 _STAGE2_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage2_cyber_static_bg.png"
 _STAGE3_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
 _STAGE3_BG_TILE_OVERLAP = 220
@@ -57,6 +58,7 @@ class ScrollingBackground:
         self._stage1_near_cells: list = []
         self._stage1_membranes: list = []
         self._stage2_fragments: list = []
+        self._stage1_bg: pygame.Surface | None = None
         self._stage2_bg: pygame.Surface | None = None
         self._stage3_bg: pygame.Surface | None = None
         self._stage3_bg_blend_strip: pygame.Surface | None = None
@@ -145,7 +147,11 @@ class ScrollingBackground:
     # ── Stage1 発熱回廊（血管・血球）─────────────────────────────
     def _draw_vessel(self, screen: pygame.Surface, camera_x: float) -> None:
         t = self._time
-        self._draw_vessel_depth(screen, camera_x, t)
+        self._draw_stage1_concept_backdrop(screen, camera_x)
+        depth = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        self._draw_vessel_depth(depth, camera_x, t)
+        depth.set_alpha(72)
+        screen.blit(depth, (0, 0))
         for cell in self._stage1_far_cells:
             self._draw_blood_cell_layer(screen, camera_x, t, cell, 1.0)
 
@@ -163,10 +169,11 @@ class ScrollingBackground:
             pygame.draw.polygon(rib, (70, 18, 24, 42), pts_l + list(reversed(pts_r)))
             pygame.draw.lines(rib, (132, 38, 42, 24), False, pts_l, 1)
             pygame.draw.lines(rib, (108, 28, 34, 20), False, pts_r, 1)
+        rib.set_alpha(56)
         screen.blit(rib, (0, 0))
 
         # 熱の霞。
-        haze_alpha = int(18 + 10 * (0.5 + 0.5 * math.sin(t * 1.5)))
+        haze_alpha = int(8 + 6 * (0.5 + 0.5 * math.sin(t * 1.5)))
         haze = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         haze.fill((120, 22, 18, haze_alpha))
         screen.blit(haze, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
@@ -184,6 +191,7 @@ class ScrollingBackground:
             if len(pts) >= 2:
                 pygame.draw.lines(vessel_lines, col, False, pts, 3)
                 pygame.draw.lines(vessel_lines, hi_col, False, pts, 1)
+        vessel_lines.set_alpha(48)
         screen.blit(vessel_lines, (0, 0))
         # 脈打つ血球
         pulse = 0.5 + 0.5 * math.sin(t * 2.0)
@@ -191,6 +199,34 @@ class ScrollingBackground:
             self._draw_blood_cell_layer(screen, camera_x, t, cell, 0.92 + 0.10 * pulse)
         for cell in self._stage1_near_cells:
             self._draw_blood_cell_layer(screen, camera_x, t, cell, 1.02 + 0.08 * pulse)
+
+    def _draw_stage1_concept_backdrop(self, screen: pygame.Surface, camera_x: float) -> None:
+        bg = self._load_stage1_backdrop()
+        if bg is None:
+            return
+        width = bg.get_width()
+        offset = int(camera_x * 0.08) % width
+        for x in range(-offset, SCREEN_WIDTH, width):
+            screen.blit(bg, (x, 0))
+        veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        veil.fill((8, 0, 3, 42))
+        screen.blit(veil, (0, 0))
+
+    def _load_stage1_backdrop(self) -> pygame.Surface | None:
+        if self._stage1_bg is not None:
+            return self._stage1_bg
+        try:
+            raw = pygame.image.load(_STAGE1_BG_PATH)
+        except (FileNotFoundError, pygame.error):
+            return None
+        if raw.get_height() != SCREEN_HEIGHT:
+            scale = SCREEN_HEIGHT / raw.get_height()
+            raw = pygame.transform.smoothscale(
+                raw,
+                (max(SCREEN_WIDTH, int(raw.get_width() * scale)), SCREEN_HEIGHT),
+            )
+        self._stage1_bg = raw
+        return self._stage1_bg
 
     def _draw_vessel_depth(self, screen: pygame.Surface, camera_x: float, t: float) -> None:
         depth = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -234,7 +270,7 @@ class ScrollingBackground:
         pad = 10
         cell = pygame.Surface((rw * 2 + pad * 2, rh * 2 + pad * 2), pygame.SRCALPHA)
         rect = pygame.Rect(pad, pad, rw * 2, rh * 2)
-        base_alpha = int(alpha)
+        base_alpha = int(alpha * 0.6)
         edge_alpha = min(150, base_alpha + 28)
         hollow_alpha = max(20, base_alpha - 22)
         pygame.draw.ellipse(cell, (72, 10, 18, max(12, base_alpha // 2)), rect.move(3, 4))

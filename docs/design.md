@@ -662,7 +662,9 @@ Stage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces`
 `AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する中間形式。輪郭から自動充填して初期ブロック配置を作る補助用途としては残すが、Stage3の最終地形SSOTにはしない。
 `TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
-Stage2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
+Stage1 は専用の背景・atlas・rect/mask catalogを導入済みだが、現段階では `TerrainStrip + terrain_composer` が道中形状と衝突のSSOTである。`composer_collision_mode: "source"` により通常segmentを透明な衝突判定として残し、composerはvisual-onlyで重ねる。破壊可能segmentはcomposer layoutから除外して従来画像・HP・dropを維持し、破壊時に見た目と衝突が同時に消える。固定clotは同じStage1 catalogの `material_role` / `material_asset` を寸法へfitして描く。これは制作フロー展開の中間段階であり、後続PRでStage3と同じ `TerrainPieces.pieces` の個別配置SSOTへ移行する。
+
+Stage1/2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
 
 #### 地形イベント（`type: "Terrain"`）
 
@@ -677,11 +679,13 @@ Stage2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --st
 | `screen_x` / `start_offset` | — | カメラ位置からの相対配置 |
 | `y` | ○ | 配置Y座標（左上基準） |
 | `w` / `h` | ○ | 幅・高さ（px） |
-| `kind` | ○ | 見た目種別（`wall` / `rock` / `debris`） |
+| `kind` | ○ | 見た目種別（`wall` / `rock` / `debris` / `clot` / `data_block` / `fortress_block`） |
 | `destructible` | — | `true` で破壊可能地形にする（城門・封鎖壁など）。`gate` / `breakable_gate` / `weapon_gate` は既定で `true` |
 | `hp` | — | 破壊可能地形のHP |
 | `drop_chance` | — | 破壊時のランダムアイテムドロップ率 |
 | `fixed_drop` | — | 破壊時に必ず出すアイテム名。血栓ゲートなど、ご褒美配置の確定報酬に使う |
+| `material_role` | — | stage別catalog内の用途。Stage1固定clotでは `fixed_floor_block` / `fixed_ceiling_block` / `turret_mount` / `breakable_block` を使う |
+| `material_asset` | — | stage別catalog内の `group:index`。Stage1 clotは保存寸法へfitし、Stage2 data_blockは素材native寸法へ `w` / `h` を同期して、designerとruntimeで同じ素材を使う |
 
 #### 明示ブロック地形イベント（`type: "TerrainPieces"`）
 
@@ -692,7 +696,7 @@ Stage3の道中地形で使う、素材ブロック配置を直接保持する�
 | `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
 | `type` | ○ | `"TerrainPieces"` |
 | `theme` | ○ | 見た目テーマ。Stage3では `"fortress"` |
-| `renderer` | ○ | Stage2/3では `"terrain_composer"`（旧 `"stage3_composer"` も互換対応） |
+| `renderer` | ○ | Stage1/2/3では `"terrain_composer"`（旧 `"stage3_composer"` も互換対応） |
 | `composer_rects` | ○ | この地形が使うrect catalog。repo root相対パス |
 | `composer_mask_dir` | ○ | rectごとのalpha maskディレクトリ。repo root相対パス |
 | `length` | ○ | ステージ地形の横幅（px） |
@@ -730,7 +734,7 @@ Stage3の道中地形で使う、素材ブロック配置を直接保持する�
 #### 旧連続地形イベント（`type: "TerrainStrip"`）
 
 グラディウス風の上下壁・洞窟・要塞回廊をセグメント列として生成する。接触判定は矩形セグメントごとに行い、
-見た目はテーマ別の手続き描画で表現する。Stage1 では `fever_cave` を使い、発熱回廊の上下壁を構成する。
+見た目はテーマ別の手続き描画またはcomposerで表現する。Stage1 では `fever_cave` の形状を維持しつつ、専用atlasを `terrain_composer` で描画する。Stage1の最終目標は後続PRでの `TerrainPieces` 化であり、この形式を完成形とはしない。
 
 | フィールド | 必須 | 説明 |
 |---|---|---|

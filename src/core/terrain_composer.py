@@ -109,6 +109,10 @@ class TerrainMaterialCatalog:
 
 
 TERRAIN_MATERIAL_CATALOGS: Mapping[str, TerrainMaterialCatalog] = {
+    "clot": TerrainMaterialCatalog(
+        rects_path=_resolve_repo_path("tools/stage1_terrain_rects.json"),
+        mask_dir=_resolve_repo_path("tools/stage1_terrain_alpha_masks"),
+    ),
     "data_block": TerrainMaterialCatalog(
         rects_path=_resolve_repo_path("tools/stage2_terrain_rects.json"),
         mask_dir=_resolve_repo_path("tools/stage2_terrain_alpha_masks"),

@@ -120,10 +120,13 @@ py -3 -m venv .venv
 | `stage-rect-preview` | ステージ地形素材 rect の全体/グループ別プレビュー画像とHTML一覧を生成（旧名 `stage3-rect-preview` も使用可） |
 | `stage-rect-editor` | ステージ地形素材 rect を画像上でドラッグ編集してJSON保存（旧名 `stage3-rect-editor` も使用可） |
 | `stage-alpha-mask-editor` | ステージ地形素材 rect ごとの手動透明マスクをペイント編集してPNG保存（旧名 `stage3-alpha-mask-editor` も使用可） |
-| `stage-terrain-composer` | `--stage 2` / `--stage 3` の地形素材を実寸のまま組み合わせたプレビュー画像とHTML一覧を生成（旧名 `stage3-terrain-composer` も使用可） |
+| `stage-terrain-composer` | `--stage 1` / `--stage 2` / `--stage 3` の地形素材を実寸のまま組み合わせたプレビュー画像とHTML一覧を生成（旧名 `stage3-terrain-composer` も使用可） |
 | `stage-composer-report` | 選択ステージのruntime表示・衝突面・composer表示を同じ座標で比較するHTMLレポートを生成（旧名 `stage3-composer-report` も使用可） |
+| `stage-designer` | `--stage 1` / `--stage 2` / `--stage 3` の地形・固定イベントを共通profileから編集 |
 | `balance` | バランスシート出力 |
 | `pr-media` / `pr-html` / `pr-report` | PR 用に画像/HTML/レポートを `media` ブランチへ上げて貼り付けリンクを出力 |
+
+Stage1 は現在、専用背景・atlas・rect/mask catalogを既存の `TerrainStrip` と固定clotへ適用する中間段階。道中地形をStage3型の `TerrainPieces` 個別配置SSOTへ移す作業は後続PRで行う。
 
 ### 設計原則（SSOT）
 マスターデータは1箇所だけに定義し、他はそこから導出します（反映漏れ防止）。詳細と機能追加チェックリストは **[CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)**（共有ソースは `docs/agent_guide_shared.md`）を参照。ターン終了時の Stop フックで `gen_docs.py` → `check_consistency.py` が自動実行され、`tests/test_consistency.py` でも同じ整合性を検証します。
