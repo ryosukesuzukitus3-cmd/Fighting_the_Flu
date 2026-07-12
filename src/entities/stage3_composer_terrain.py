@@ -704,11 +704,25 @@ def _default_piece_side(role: str, collision: str) -> str:
 
 
 def _piece_image(piece: Stage3ComposerPiece, raw: dict[str, Any], role: str, side: str) -> pygame.Surface:
-    flip_x = bool(raw.get("flip_x", False))
-    flip_y = bool(raw.get("flip_y", role == "ceiling_surface" or (role == "body_fill" and side == "top")))
+    flip_x = piece_effective_flip(raw, role, side, "x")
+    flip_y = piece_effective_flip(raw, role, side, "y")
     if not flip_x and not flip_y:
         return piece.image
     return pygame.transform.flip(piece.image, flip_x, flip_y)
+
+
+def piece_effective_flip(
+    raw: dict[str, Any], role: str, side: str, axis: str, *, default_y: bool | None = None
+) -> bool:
+    """Return the visible flip, including the legacy implicit Y default."""
+    key = f"flip_{axis}"
+    if key in raw:
+        return bool(raw[key])
+    if axis == "x":
+        return False
+    if default_y is not None:
+        return default_y
+    return role == "ceiling_surface" or (role == "body_fill" and side == "top")
 
 
 def _raw_piece_collision(raw: dict[str, Any]) -> str:

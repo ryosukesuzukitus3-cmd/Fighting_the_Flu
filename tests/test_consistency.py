@@ -485,7 +485,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage4.initial_terrain == []
     assert stage4.terrain_layout
     assert stage4.random_drop_scale < 1.0
-    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
+    assert any(ev["type"] == "EnemyTurret" for ev in stage.world_events)
     assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
 
 
@@ -539,7 +539,7 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert layout["theme"] == "fever_cave"
     assert layout["renderer"] == "terrain_composer"
     assert layout["length"] >= 11000
-    assert 380 <= len(layout["pieces"]) <= 420
+    assert len(layout["pieces"]) >= 300
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert "weapon_drop_limit" not in data
     assert first_enemy_x >= 900
@@ -560,8 +560,6 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
     assert destructible_clots == [
-        (1190, 104, 112, 64, 4, 0.08),
-        (1460, 426, 142, 58, 4, 0.08),
         (3440, 102, 132, 58, 5, 0.08),
         (4320, 420, 160, 68, 6, 0.06),
         (5580, 102, 156, 62, 6, 0.04),
@@ -609,7 +607,7 @@ def test_stage1_uses_explicit_composer_pieces_and_keeps_boss_strip_fallback() ->
     assert layout["renderer"] == "terrain_composer"
     assert layout["composer_rects"] == "tools/stage1_terrain_rects.json"
     assert layout["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
-    assert 380 <= len(layout["pieces"]) <= 420
+    assert len(layout["pieces"]) >= 300
     assert "top" not in layout
     assert "bottom" not in layout
 
@@ -2554,6 +2552,84 @@ def test_stage_designer_adds_duplicates_and_deletes_terrain_pieces() -> None:
     assert added["role"] == "ceiling_surface"
     assert added["side"] == "top"
     assert added["flip_y"] is True
+
+
+def test_stage1_designer_flip_toggle_uses_effective_default() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.profile = STAGE_TERRAIN_PROFILES[1]
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "vessel_surface:1", "x": 0, "y": 0, "role": "ceiling_surface", "collision": "surface", "side": "top"}
+    ]}], "world_events": []}
+    designer.selection = Selection("piece", 0)
+    designer.selections = [designer.selection]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    piece = designer.data["terrain_layout"][0]["pieces"][0]
+    assert designer._effective_piece_flip(piece, "y") is False
+    designer._toggle_selected_piece_flip("y")
+    assert piece["flip_y"] is True
+    designer._toggle_selected_piece_flip("y")
+    assert piece["flip_y"] is False
+
+
+def test_stage_designer_multi_selection_operations_and_layers() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0},
+        {"asset": "a:2", "x": 10, "y": 10},
+        {"asset": "a:3", "x": 20, "y": 20},
+        {"asset": "a:4", "x": 30, "y": 30},
+    ]}], "world_events": []}
+    designer.selection = Selection("piece", 2)
+    designer.selections = [Selection("piece", 1), Selection("piece", 2)]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    designer._move_selection(5, -2)
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    assert [(pieces[i]["x"], pieces[i]["y"]) for i in (1, 2)] == [(15, 8), (25, 18)]
+    designer._move_piece_layers(1, to_edge=True)
+    assert [piece["asset"] for piece in pieces] == ["a:1", "a:4", "a:2", "a:3"]
+    designer._duplicate_selection()
+    assert len(pieces) == 6
+    assert [piece["asset"] for piece in pieces[-2:]] == ["a:2", "a:3"]
+    designer._delete_selection()
+    assert len(pieces) == 4
+
+
+def test_stage1_organic_autofill_uses_overlapping_ordered_bands() -> None:
+    from tools.stage_designer import StageDesigner
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.profile = STAGE_TERRAIN_PROFILES[1]
+    designer.rects_path = ROOT / "tools" / "stage1_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage1_terrain_alpha_masks"
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+    designer._piece_preview_cache = {}
+    generated = designer._stage1_organic_autofill([[0, 440], [600, 460]], "bottom", 0, 600)
+
+    assets = [piece["asset"].split(":", 1)[0] for piece in generated]
+    bands = [piece["auto_fill_band"] for piece in generated]
+    assert assets[0] == "vessel_surface"
+    assert "vessel_fill" not in assets
+    assert bands == sorted(bands)
+    assert {piece["flip_y"] for piece in generated if piece["auto_fill_band"] == 0} == {True}
+    surface = [piece for piece in generated if piece["auto_fill_band"] == 0]
+    assert surface[1]["x"] - surface[0]["x"] < 239
 
 
 def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> None:

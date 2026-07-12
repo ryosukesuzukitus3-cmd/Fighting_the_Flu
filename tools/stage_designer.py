@@ -25,6 +25,7 @@ from src.entities.stage3_composer_terrain import (  # noqa: E402
     Stage3ComposerLayout,
     build_stage3_composer_layout,
     build_stage3_piece_layout,
+    piece_effective_flip,
     draw_stage3_composer_layout,
     load_stage3_composer_pieces,
 )
@@ -431,7 +432,12 @@ def _piece_asset_id(piece: Any) -> str:
     return f"{piece.group}:{piece.index + 1}"
 
 
-def _piece_defaults(role: str) -> dict[str, Any]:
+def _piece_defaults(role: str, *, stage_id: int | None = None) -> dict[str, Any]:
+    if stage_id == 1:
+        if role == "floor_surface":
+            return {"role": role, "collision": "surface", "side": "bottom", "flip_y": True}
+        if role == "ceiling_surface":
+            return {"role": role, "collision": "surface", "side": "top", "flip_y": False}
     if role == "floor_surface":
         return {"role": role, "collision": "surface", "side": "bottom"}
     if role == "ceiling_surface":
@@ -602,11 +608,16 @@ class StageDesigner:
         self.camera_x = float(args.x)
         self.mode = str(args.mode)
         self.selection: Selection | None = None
+        self.selections: list[Selection] = []
         self.show_help = True
         self.show_overlays = True
         self.dragging = False
         self.drag_offset = pygame.Vector2(0, 0)
         self.drag_start_world = pygame.Vector2(0, 0)
+        self.drag_origins: dict[tuple[str, int], tuple[float, float]] = {}
+        self.marquee_start: tuple[int, int] | None = None
+        self.marquee_current: tuple[int, int] | None = None
+        self.marquee_additive = False
         self.panning = False
         self.pan_anchor = pygame.Vector2(0, 0)
         self.pan_camera_x = self.camera_x
@@ -1242,10 +1253,36 @@ class StageDesigner:
                     best = (Selection("piece", i), dist)
         return None if best is None else best[0]
 
-    def _select_at(self, pos: tuple[int, int]) -> None:
-        self.selection = None
-        if not self.view_rect.collidepoint(pos):
+    def _objects_in_world_rect(self, rect: pygame.Rect) -> list[Selection]:
+        found: list[Selection] = []
+        if _layout(self.data).get("type") == "TerrainPieces":
+            composer_layout, _pieces = self._piece_layout()
+            for i, placement in enumerate(composer_layout.placements):
+                piece_rect = pygame.Rect(placement.x, placement.y, placement.image.get_width(), placement.image.get_height())
+                if rect.colliderect(piece_rect):
+                    found.append(Selection("piece", i))
+        for i, event in enumerate(self.data.get("world_events", [])):
+            if any(rect.colliderect(event_rect) for event_rect in self._event_preview_world_rects(event)):
+                found.append(Selection("event", i))
+        return found
+
+    def _apply_marquee_selection(self) -> None:
+        if self.marquee_start is None or self.marquee_current is None:
             return
+        sx1, sy1 = self.marquee_start
+        sx2, sy2 = self.marquee_current
+        wx1, wy1 = self._screen_to_world((sx1, sy1))
+        wx2, wy2 = self._screen_to_world((sx2, sy2))
+        rect = pygame.Rect(min(wx1, wx2), min(wy1, wy2), max(1, abs(wx2 - wx1)), max(1, abs(wy2 - wy1)))
+        found = self._objects_in_world_rect(rect)
+        self._set_selections([*self._selection_list(), *found] if self.marquee_additive else found)
+        self.message = f"Selected {len(self._selection_list())} object(s)"
+
+    def _select_at(self, pos: tuple[int, int], *, toggle: bool = False) -> Selection | None:
+        if not self.view_rect.collidepoint(pos):
+            if not toggle:
+                self._set_selections([])
+            return None
         event_index = self._event_at(pos)
         piece_selection: Selection | None = None
         if _layout(self.data).get("type") == "TerrainPieces":
@@ -1253,23 +1290,25 @@ class StageDesigner:
         elif self.mode == "terrain":
             piece_selection = self._terrain_point_at(pos)
 
+        candidate: Selection | None = None
         if event_index is not None and (self.mode != "terrain" or piece_selection is None):
-            self.selection = Selection("event", event_index)
-            ev = self.data["world_events"][event_index]
-            self.message = f"Selected event #{event_index + 1}: {ev.get('type')}"
-            return
-        if piece_selection is not None:
-            self.selection = piece_selection
-            if self.selection.kind == "piece":
-                self.message = f"Selected terrain piece #{self.selection.index + 1}"
-            else:
-                self.message = f"Selected {self.selection.side} point #{self.selection.index + 1}"
-            return
-        if event_index is not None:
-            index = event_index
-            self.selection = Selection("event", index)
-            ev = self.data["world_events"][index]
-            self.message = f"Selected event #{index + 1}: {ev.get('type')}"
+            candidate = Selection("event", event_index)
+        elif piece_selection is not None:
+            candidate = piece_selection
+        elif event_index is not None:
+            candidate = Selection("event", event_index)
+        if candidate is None:
+            if not toggle:
+                self._set_selections([])
+            return None
+        selected = self._selection_list()
+        if toggle:
+            selected = [item for item in selected if item != candidate] if candidate in selected else [*selected, candidate]
+        elif candidate not in selected:
+            selected = [candidate]
+        self._set_selections(selected)
+        self.message = f"Selected {len(selected)} object(s)" if len(selected) > 1 else f"Selected {candidate.kind} #{candidate.index + 1}"
+        return candidate
 
     def _selected_event(self) -> dict[str, Any] | None:
         if self.selection is None or self.selection.kind != "event":
@@ -1297,6 +1336,95 @@ class StageDesigner:
             return pieces[self.selection.index]
         self.selection = None
         return None
+
+    def _selection_list(self) -> list[Selection]:
+        selections = getattr(self, "selections", None)
+        if selections and self.selection in selections:
+            return list(selections)
+        return [] if self.selection is None else [self.selection]
+
+    def _set_selections(self, selections: list[Selection]) -> None:
+        unique: list[Selection] = []
+        for candidate in selections:
+            if candidate not in unique:
+                unique.append(candidate)
+        self.selections = unique
+        self.selection = unique[-1] if unique else None
+
+    def _is_selected(self, candidate: Selection) -> bool:
+        return candidate in self._selection_list()
+
+    def _stage1_flip_default(self, piece: dict[str, Any], axis: str) -> bool | None:
+        profile = getattr(self, "profile", None)
+        if getattr(profile, "stage_id", None) != 1 or axis != "y":
+            return None
+        role = str(piece.get("role", ""))
+        side = str(piece.get("side", "bottom"))
+        if role in {"floor_surface", "ceiling_surface"}:
+            return side == "bottom"
+        if role == "body_fill":
+            return side == "top"
+        return False
+
+    def _effective_piece_flip(self, piece: dict[str, Any], axis: str) -> bool:
+        role = str(piece.get("role", ""))
+        side = str(piece.get("side", "bottom"))
+        return piece_effective_flip(
+            piece, role, side, axis, default_y=self._stage1_flip_default(piece, axis)
+        )
+
+    @staticmethod
+    def _guide_y(points: list[list[int]], x: float) -> float:
+        for left, right in zip(points, points[1:]):
+            if left[0] <= x <= right[0]:
+                span = max(1, right[0] - left[0])
+                return left[1] + (right[1] - left[1]) * ((x - left[0]) / span)
+        return float(points[0][1] if x < points[0][0] else points[-1][1])
+
+    def _stage1_organic_autofill(
+        self, points: list[list[int]], side: str, start: int, end: int
+    ) -> list[dict[str, Any]]:
+        """Build corridor surface and two overlapping organic outer bands."""
+        pieces = self._composer_pieces()
+        overlap = max(1, int(getattr(getattr(self, "profile", None), "autofill_overlap", 24)))
+        marker = f"stage1:{side}:{start}:{end}"
+        generated: list[dict[str, Any]] = []
+
+        def band(group: str, role: str, depth: int, flip_y: bool) -> None:
+            options = pieces.get(group, [])
+            if not options:
+                return
+            x = float(start)
+            variant = 0
+            while x <= end:
+                source = options[variant % len(options)]
+                y_on_guide = self._guide_y(points, x + source.image.get_width() / 2)
+                if role in {"floor_surface", "ceiling_surface"}:
+                    y = y_on_guide + 48 if side == "bottom" else y_on_guide - 20
+                    collision = "surface"
+                else:
+                    fill_offset = 88 + max(0, depth - 1) * 54
+                    y = y_on_guide + fill_offset if side == "bottom" else y_on_guide - fill_offset
+                    collision = "none"
+                generated.append({
+                    "asset": _piece_asset_id(source),
+                    "x": int(round(x)),
+                    "y": int(round(y)),
+                    "role": role,
+                    "collision": collision,
+                    "side": side,
+                    "flip_y": flip_y,
+                    "auto_fill_id": marker,
+                    "auto_fill_band": depth,
+                })
+                x += max(24, source.image.get_width() - overlap)
+                variant += 1
+
+        # Array order is also draw order: corridor edge, near fill, far fill.
+        band("vessel_surface", "floor_surface" if side == "bottom" else "ceiling_surface", 0, side == "bottom")
+        band("clot_wide", "body_fill", 1, side == "top")
+        band("clot_wide", "body_fill", 2, side == "top")
+        return generated
 
     def _guide_lines(self) -> list[dict[str, Any]]:
         layout = _layout(self.data)
@@ -1426,6 +1554,23 @@ class StageDesigner:
         if end <= start:
             self.message = "Guide range is empty"
             return
+        if bool(getattr(getattr(self, "profile", None), "organic_autofill", False)):
+            generated = self._stage1_organic_autofill(points, side, start, end)
+            if not generated:
+                self.message = "Auto fill generated no pieces"
+                return
+            marker = f"stage1:{side}:{start}:{end}"
+            self._push_undo()
+            old_pieces = layout.setdefault("pieces", [])
+            layout["pieces"] = [
+                piece for piece in old_pieces
+                if not isinstance(piece, dict) or piece.get("auto_fill_id") != marker
+            ] + generated
+            self._set_selections([])
+            self._invalidate_terrain_cache()
+            self.dirty = True
+            self.message = f"Auto-filled {len(generated)} organic {side} pieces ({start}-{end})"
+            return
         local_points = [[int(round(float(p[0]) - start)), int(round(float(p[1])))] for p in points]
         if side == "top":
             top = local_points
@@ -1490,7 +1635,7 @@ class StageDesigner:
             )
         ]
         layout["pieces"] = [*kept, *generated]
-        self.selection = None
+        self._set_selections([])
         self._invalidate_terrain_cache()
         self.dirty = True
         self.message = f"Auto-filled {len(generated)} {side} pieces ({start}-{end})"
@@ -1521,7 +1666,7 @@ class StageDesigner:
             "asset": asset_id,
             "x": int(round(wx)),
             "y": int(round(wy)),
-            **_piece_defaults(role),
+            **_piece_defaults(role, stage_id=getattr(getattr(self, "profile", None), "stage_id", None)),
         }
         layout.setdefault("pieces", []).append(raw)
         self.selection = Selection("piece", len(layout["pieces"]) - 1)
@@ -1567,6 +1712,21 @@ class StageDesigner:
             self.message = "Nothing selected"
             return
         self._push_undo()
+        object_selections = [s for s in self._selection_list() if s.kind in {"piece", "event"}]
+        if object_selections:
+            pieces = _layout(self.data).get("pieces", [])
+            events = self.data.get("world_events", [])
+            for index in sorted((s.index for s in object_selections if s.kind == "piece"), reverse=True):
+                if 0 <= index < len(pieces):
+                    pieces.pop(index)
+            for index in sorted((s.index for s in object_selections if s.kind == "event"), reverse=True):
+                if 0 <= index < len(events):
+                    events.pop(index)
+            self._set_selections([])
+            self._invalidate_terrain_cache()
+            self.dirty = True
+            self.message = f"Deleted {len(object_selections)} object(s)"
+            return
         if self.selection.kind == "event":
             events = self.data.get("world_events", [])
             if 0 <= self.selection.index < len(events):
@@ -1606,6 +1766,33 @@ class StageDesigner:
             self.message = "Nothing selected"
             return
         self._push_undo()
+        object_selections = [s for s in self._selection_list() if s.kind in {"piece", "event"}]
+        if len(object_selections) > 1:
+            new_selections: list[Selection] = []
+            pieces = _layout(self.data).get("pieces", [])
+            for selected in sorted((s for s in object_selections if s.kind == "piece"), key=lambda s: s.index):
+                if not (0 <= selected.index < len(pieces)):
+                    continue
+                clone = copy.deepcopy(pieces[selected.index])
+                if offset:
+                    clone["x"] = int(round(float(clone.get("x", 0)) + 48))
+                    clone["y"] = int(round(float(clone.get("y", 0)) + 24))
+                pieces.append(clone)
+                new_selections.append(Selection("piece", len(pieces) - 1))
+            events = self.data.get("world_events", [])
+            originals = [(s.index, copy.deepcopy(events[s.index])) for s in object_selections if s.kind == "event" and 0 <= s.index < len(events)]
+            for _index, clone in sorted(originals):
+                if offset and _event_x(clone) is not None:
+                    _set_event_x(clone, (_event_x(clone) or 0.0) + 96)
+                if offset and _event_can_edit_y(clone):
+                    _set_event_y(clone, _event_y(clone, self.data) + 24)
+                events.append(clone)
+                new_selections.append(Selection("event", len(events) - 1))
+            self._set_selections(new_selections)
+            self._invalidate_terrain_cache()
+            self.dirty = True
+            self.message = f"Duplicated {len(new_selections)} object(s)"
+            return
         if self.selection.kind == "event":
             events = self.data.get("world_events", [])
             if not (0 <= self.selection.index < len(events)):
@@ -1782,19 +1969,64 @@ class StageDesigner:
             return
         key = f"flip_{axis}"
         self._push_undo()
-        enabled = not bool(piece.get(key, False))
-        if enabled:
-            piece[key] = True
-        else:
-            piece.pop(key, None)
+        enabled = not self._effective_piece_flip(piece, axis)
+        # Keep an explicit value. Removing the key can restore an implicit
+        # ceiling default and make the first Y press appear to do nothing.
+        piece[key] = enabled
         self._invalidate_terrain_cache()
         self.dirty = True
         self.message = f"Piece {key}: {enabled}"
+
+    def _move_piece_layers(self, direction: int, *, to_edge: bool = False) -> None:
+        pieces = _layout(self.data).get("pieces", [])
+        indices = sorted({s.index for s in self._selection_list() if s.kind == "piece"})
+        if not indices:
+            self.message = "Select terrain pieces first"
+            return
+        self._push_undo()
+        selected_ids = {id(pieces[i]) for i in indices if 0 <= i < len(pieces)}
+        if to_edge:
+            chosen = [piece for piece in pieces if id(piece) in selected_ids]
+            rest = [piece for piece in pieces if id(piece) not in selected_ids]
+            pieces[:] = [*rest, *chosen] if direction > 0 else [*chosen, *rest]
+        elif direction > 0:
+            for i in reversed(range(len(pieces) - 1)):
+                if id(pieces[i]) in selected_ids and id(pieces[i + 1]) not in selected_ids:
+                    pieces[i], pieces[i + 1] = pieces[i + 1], pieces[i]
+        else:
+            for i in range(1, len(pieces)):
+                if id(pieces[i]) in selected_ids and id(pieces[i - 1]) not in selected_ids:
+                    pieces[i], pieces[i - 1] = pieces[i - 1], pieces[i]
+        self._set_selections([Selection("piece", i) for i, piece in enumerate(pieces) if id(piece) in selected_ids])
+        self._invalidate_terrain_cache()
+        self.dirty = True
+        label = "frontmost" if direction > 0 and to_edge else "backmost" if to_edge else "forward" if direction > 0 else "backward"
+        self.message = f"Moved {len(selected_ids)} piece(s) {label}"
 
     def _move_selection(self, dx: float, dy: float) -> None:
         if self.selection is None:
             return
         self._push_undo()
+        object_selections = [s for s in self._selection_list() if s.kind in {"piece", "event"}]
+        if len(object_selections) > 1:
+            for selected in object_selections:
+                if selected.kind == "piece":
+                    pieces = _layout(self.data).get("pieces", [])
+                    if 0 <= selected.index < len(pieces):
+                        piece = pieces[selected.index]
+                        piece["x"] = int(round(float(piece.get("x", 0)) + dx))
+                        piece["y"] = int(round(float(piece.get("y", 0)) + dy))
+                else:
+                    events = self.data.get("world_events", [])
+                    if 0 <= selected.index < len(events):
+                        event = events[selected.index]
+                        if _event_x(event) is not None:
+                            _set_event_x(event, (_event_x(event) or 0.0) + dx)
+                        if _event_can_edit_y(event):
+                            _set_event_y(event, _event_y(event, self.data) + dy)
+            self._invalidate_terrain_cache()
+            self.dirty = True
+            return
         if self.selection.kind == "event":
             event = self._selected_event()
             if event is None:
@@ -1833,6 +2065,29 @@ class StageDesigner:
 
     def _set_selection_world_pos(self, wx: float, wy: float) -> None:
         if self.selection is None:
+            return
+        origins = getattr(self, "drag_origins", {})
+        if len(origins) > 1:
+            dx = wx - self.drag_start_world.x
+            dy = wy - self.drag_start_world.y
+            for selected in self._selection_list():
+                origin = origins.get((selected.kind, selected.index))
+                if origin is None:
+                    continue
+                if selected.kind == "piece":
+                    pieces = _layout(self.data).get("pieces", [])
+                    if 0 <= selected.index < len(pieces):
+                        pieces[selected.index]["x"] = int(round(origin[0] + dx))
+                        pieces[selected.index]["y"] = int(round(origin[1] + dy))
+                elif selected.kind == "event":
+                    events = self.data.get("world_events", [])
+                    if 0 <= selected.index < len(events):
+                        event = events[selected.index]
+                        _set_event_x(event, origin[0] + dx)
+                        if _event_can_edit_y(event):
+                            _set_event_y(event, origin[1] + dy)
+            self._invalidate_terrain_cache()
+            self.dirty = True
             return
         if self.selection.kind == "event":
             event = self._selected_event()
@@ -1972,7 +2227,7 @@ class StageDesigner:
             )
             if rect.right < 0 or rect.left > target.get_width():
                 continue
-            selected = self.selection == Selection("piece", i)
+            selected = self._is_selected(Selection("piece", i))
             color = POINT_BOTTOM_COLOR if placement.side == "bottom" else POINT_TOP_COLOR if placement.side == "top" else TERRAIN_COLOR
             pygame.draw.rect(target, color, rect, 2 if selected else 1)
             if selected:
@@ -2005,7 +2260,7 @@ class StageDesigner:
     def _draw_events(self, target: pygame.Surface) -> None:
         for i, event in enumerate(self.data.get("world_events", [])):
             color = _event_color(event)
-            selected = self.selection == Selection("event", i)
+            selected = self._is_selected(Selection("event", i))
             if event.get("type") == "BossGate":
                 if not self.show_overlays:
                     continue
@@ -2374,7 +2629,9 @@ class StageDesigner:
             "Guide: click add/select",
             "P auto-fill selected guide",
             "Shift-drag axis lock",
-            "Ctrl-drag copy",
+            "Ctrl+click toggle / drag box select",
+            "Ctrl+D duplicate selection",
+            "Ctrl+[ ] layer / +Shift edge",
             "O overlays on/off",
             "Ctrl+Wheel zoom",
             "Wheel pan stage/palette",
@@ -2454,6 +2711,11 @@ class StageDesigner:
         self._draw_guides(view)
         self._draw_events(view)
         surface.blit(view, self.view_rect.topleft)
+        if getattr(self, "marquee_start", None) is not None and getattr(self, "marquee_current", None) is not None:
+            x1, y1 = self.marquee_start
+            x2, y2 = self.marquee_current
+            marquee = pygame.Rect(min(x1, x2), min(y1, y2), max(1, abs(x2 - x1)), max(1, abs(y2 - y1)))
+            pygame.draw.rect(surface, (120, 220, 255), marquee, 2)
 
         toolbar = surface.subsurface(pygame.Rect(0, 0, surface.get_width(), TOOLBAR_H))
         toolbar.fill((8, 12, 15))
@@ -2496,6 +2758,8 @@ class StageDesigner:
             self._save()
         elif event.key == pygame.K_z and mods & pygame.KMOD_CTRL:
             self._undo()
+        elif event.key == pygame.K_d and mods & pygame.KMOD_CTRL:
+            self._duplicate_selection()
         elif event.key == pygame.K_c:
             path = ROOT / "captures" / "stage_designer_capture.png"
             self.capture(path)
@@ -2522,6 +2786,10 @@ class StageDesigner:
             self._auto_fill_from_guides()
         elif event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
             self._delete_selection()
+        elif event.key == pygame.K_LEFTBRACKET and mods & pygame.KMOD_CTRL:
+            self._move_piece_layers(-1, to_edge=bool(mods & pygame.KMOD_SHIFT))
+        elif event.key == pygame.K_RIGHTBRACKET and mods & pygame.KMOD_CTRL:
+            self._move_piece_layers(1, to_edge=bool(mods & pygame.KMOD_SHIFT))
         elif event.key == pygame.K_LEFTBRACKET:
             self._cycle_palette(-1)
         elif event.key == pygame.K_RIGHTBRACKET:
@@ -2592,14 +2860,29 @@ class StageDesigner:
         if self.guide_mode and self.view_rect.collidepoint(event.pos):
             self._handle_guide_mouse_down(event.pos)
             return
-        self._select_at(event.pos)
-        if self.selection is None:
+        ctrl = bool(pygame.key.get_mods() & pygame.KMOD_CTRL)
+        candidate = self._select_at(event.pos, toggle=ctrl)
+        if candidate is None:
+            self.marquee_start = event.pos
+            self.marquee_current = event.pos
+            self.marquee_additive = ctrl
+            return
+        if ctrl:
             return
         wx, wy = self._screen_to_world(event.pos)
         copied_for_drag = False
-        if pygame.key.get_mods() & pygame.KMOD_CTRL:
-            self._duplicate_selection(offset=False)
-            copied_for_drag = True
+        self.drag_origins = {}
+        for selected in self._selection_list():
+            if selected.kind == "piece":
+                pieces = _layout(self.data).get("pieces", [])
+                if 0 <= selected.index < len(pieces):
+                    piece = pieces[selected.index]
+                    self.drag_origins[(selected.kind, selected.index)] = (float(piece.get("x", 0)), float(piece.get("y", 0)))
+            elif selected.kind == "event":
+                events = self.data.get("world_events", [])
+                if 0 <= selected.index < len(events):
+                    obj = events[selected.index]
+                    self.drag_origins[(selected.kind, selected.index)] = (_event_x(obj) or wx, self._event_anchor_y(obj, _event_x(obj) or wx))
         if self.selection.kind == "event":
             event_obj = self._selected_event()
             if event_obj is None:
@@ -2672,6 +2955,9 @@ class StageDesigner:
             return
         if self.palette_drag is not None:
             return
+        if getattr(self, "marquee_start", None) is not None:
+            self.marquee_current = event.pos
+            return
         if self.dragging and self.selection is not None:
             wx, wy = self._screen_to_world(event.pos)
             if pygame.key.get_mods() & pygame.KMOD_SHIFT:
@@ -2692,6 +2978,11 @@ class StageDesigner:
                     wx, wy = self._screen_to_world(event.pos)
                     self._add_palette_payload_at(self.palette_drag, wx, wy)
                 self.palette_drag = None
+            if getattr(self, "marquee_start", None) is not None:
+                self.marquee_current = event.pos
+                self._apply_marquee_selection()
+                self.marquee_start = None
+                self.marquee_current = None
             self.dragging = False
 
     def _handle_event(self, event: pygame.event.Event) -> bool:

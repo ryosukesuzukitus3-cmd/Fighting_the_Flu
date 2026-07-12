@@ -104,7 +104,7 @@ Stage3は最終的に `AuthoredTerrain.top/bottom` をステージデータのSS
 - 地形変更前に敵配置だけ詰めることは避ける
 - ゲートは単独のHP壁にせず、近くの砲台台・砲台・地形走行敵と組み合わせた戦闘セットピースにする。Stage3では、最初のゲートを上下砲台のクロスファイア、ウェポンゲートを報酬庫、終盤ゲートをCrawlerで足元から押す突破戦として扱う
 
-`tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。現在は Stage3の `TerrainPieces.pieces` と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・追加・削除・保存・PNGキャプチャを行えるようにする。TerrainPiecesでは role/asset パレットから素材を選び、必要に応じて `collision` / `side` / `flip_x` / `flip_y` を切り替えて、最終的なブロック配置を直接編集する。作り込み時は、左をステージ表示、中央をevent/terrain共通パレット、右を操作説明・選択情報とする3カラムUIを使い、パレットからステージへのドラッグ&ドロップ配置、Ctrl+ホイールのズーム、パレットスクロールで細かい調整を行う。イベントはパレットとステージ表示の両方で実素材に近いプレビューを表示し、`count` や `formation` を持つ敵イベントは簡易編隊として見えるようにする。ドラッグ中は Shift で水平/垂直移動に固定し、Ctrl を押しながらドラッグを開始すると、オフセットなしで複製してから移動する。矢印キーは無選択時はパレットカーソル移動、選択中はオブジェクト位置の微調整に使う。
+`tools/run.py stage-designer` は、この調整をJSON手編集だけに頼らないための初期ツールとして使う。現在は Stage3の `TerrainPieces.pieces` と `world_events` を同じ画面上で表示し、選択・ドラッグ移動・追加・削除・保存・PNGキャプチャを行えるようにする。TerrainPiecesでは role/asset パレットから素材を選び、必要に応じて `collision` / `side` / `flip_x` / `flip_y` を切り替えて、最終的なブロック配置を直接編集する。作り込み時は、左をステージ表示、中央をevent/terrain共通パレット、右を操作説明・選択情報とする3カラムUIを使い、パレットからステージへのドラッグ&ドロップ配置、Ctrl+ホイールのズーム、パレットスクロールで細かい調整を行う。イベントはパレットとステージ表示の両方で実素材に近いプレビューを表示し、`count` や `formation` を持つ敵イベントは簡易編隊として見えるようにする。Ctrl+クリックと空白ドラッグの範囲選択でpiece/eventを複数選択でき、まとめてドラッグ・複製・削除する。pieceの配列順は描画レイヤー順でもあり、Ctrl+[ / Ctrl+]（Shift併用で端）で選択群の相対順を保ったまま変更する。矢印キーは無選択時はパレットカーソル移動、選択中はオブジェクト位置の微調整に使う。
 
 Stage2 へ制作フローを展開する入口として、`tools/run.py stage-designer --stage 2` は Stage2 JSON・Stage2背景・`data_block` イベントテンプレートを使う。Stage2 のブロック素材SSOTは `tools/stage2_terrain_rects.json` で、`assets/graphic/stage2_cyber_terrain_sheet.png` から cyber/data-block 系の terrain piece パレットを供給する。
 

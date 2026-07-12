@@ -29,6 +29,8 @@ class StageTerrainProfile:
     preview_camera_xs: tuple[float, ...]
     fallback_rects: Path | None = None
     fallback_mask_dir: Path | None = None
+    organic_autofill: bool = False
+    autofill_overlap: int = 0
 
 
 _STAGE3_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
@@ -45,6 +47,8 @@ STAGE_TERRAIN_PROFILES: Mapping[int, StageTerrainProfile] = MappingProxyType(
             terrain_kind="clot",
             label="Stage1",
             preview_camera_xs=(0, 1600, 3200, 4800, 6400, 8000),
+            organic_autofill=True,
+            autofill_overlap=24,
         ),
         2: StageTerrainProfile(
             stage_id=2,
