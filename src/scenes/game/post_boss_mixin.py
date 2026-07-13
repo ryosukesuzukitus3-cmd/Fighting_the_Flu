@@ -264,9 +264,11 @@ class GameScenePostBossMixin:
         self._defeat_dialogue_delay  = 0.0 if is_final else (2.5 if pages else 0.0)  # type: ignore[attr-defined]
 
     def _go_next_after_boss(self) -> None:
-        """ボス後フェーズ終了: 武器・HPを引き継いで次シーンへ遷移する。"""
+        """ボス後フェーズ終了: 武器・HP・先輩強化を引き継いで次シーンへ遷移する。"""
         self.game.shared.carry_hp     = self.player.hp  # type: ignore[attr-defined]
         self.game.shared.carry_weapon = self.player.weapon.snapshot()  # type: ignore[attr-defined]
+        if self._companion is not None:  # type: ignore[attr-defined]
+            self.game.shared.carry_companion = self._companion.snapshot()  # type: ignore[attr-defined]
 
         if self._post_boss_next_id is not None:  # type: ignore[attr-defined]
             from src.scenes.stageclear import StageClearScene

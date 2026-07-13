@@ -19,9 +19,12 @@ class GameState:
     # ステージ引き継ぎ（ボス撃破→StageClear 間のみ使用。pop 相当で取得後は None にする）
     carry_hp:     int | None  = None
     carry_weapon: dict | None = None
+    # 先輩（カロナール）の強化スナップショット引き継ぎ（weapon と同じ役割）
+    carry_companion: dict | None = None
 
-    # コンティニュー用: ステージ開始時のウェポンスナップショット
-    stage_start_weapon: dict | None = None
+    # コンティニュー用: ステージ開始時のスナップショット
+    stage_start_weapon:    dict | None = None
+    stage_start_companion: dict | None = None
 
     def take_carry(self) -> tuple[int, dict] | None:
         """引き継ぎデータを取り出す。データがなければ None を返す。"""

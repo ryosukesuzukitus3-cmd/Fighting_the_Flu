@@ -197,16 +197,22 @@ class GameSceneUpgradeMixin:
             self._slot_display_label, top_avail,
         )
 
-        # 下段: 先輩
+        # 下段: 先輩（不在時は行ごとグレーアウトして「使えない」ことを明示）
         bot_avail = lambda i: (c is not None and cs > 0
                                and c.is_upgrade_available(COMPANION_SLOTS[i][0]))
-        senpai_label = f"カロナール先輩  (在庫 x{cs})" if c is not None else "カロナール先輩  (未参戦)"
-        screen.blit(small.render(senpai_label, True, (150, 235, 170)), (cx - 258, cy - 16))
+        if c is not None:
+            senpai_label, label_col = f"カロナール先輩  (在庫 x{cs})", (150, 235, 170)
+        elif self.game.story.karonaru_lost:  # type: ignore[attr-defined]
+            senpai_label, label_col = "カロナール先輩  (離脱中……)", (110, 115, 120)
+        else:
+            senpai_label, label_col = "カロナール先輩  (未参戦)", (110, 115, 120)
+        screen.blit(small.render(senpai_label, True, label_col), (cx - 258, cy - 16))
         self._draw_slot_row(
             screen, COMPANION_SLOTS, cy + 6,
             self._upg_bottom_cursor, self._upg_bottom_choice,       # type: ignore[attr-defined]
             self._upg_zone == "bottom",                             # type: ignore[attr-defined]
             self._companion_slot_label, bot_avail,
+            dim=(c is None),
         )
 
         # 決定ボタン
@@ -228,7 +234,7 @@ class GameSceneUpgradeMixin:
         screen.blit(hint, (cx - hint.get_width() // 2, cy + 140))
 
     def _draw_slot_row(self, screen, slots, y, cursor, choice, zone_active,
-                       label_fn, avail_fn) -> None:
+                       label_fn, avail_fn, dim: bool = False) -> None:
         box_w, box_h, gap = 120, 58, 12
         total = len(slots) * box_w + (len(slots) - 1) * gap
         sx0 = screen.get_width() // 2 - total // 2
@@ -237,7 +243,10 @@ class GameSceneUpgradeMixin:
             focused = zone_active and i == cursor
             chosen  = choice == i
             bx = sx0 + i * (box_w + gap)
-            if focused and avail:
+            if dim:
+                # 先輩不在: カーソル・選択に関係なく行全体をグレーアウト
+                bg, bd, tx = (16, 16, 22), (38, 38, 46), (58, 58, 68)
+            elif focused and avail:
                 bg, bd, tx = (255, 220, 80), (255, 200, 0), (20, 20, 20)
             elif chosen:
                 bg, bd, tx = (40, 120, 70), (120, 230, 150), (235, 255, 240)

@@ -194,6 +194,42 @@ def test_companion_damage_retire_and_revive_cycle() -> None:
     assert c.hp == c.max_hp
 
 
+def test_companion_snapshot_restore_roundtrip() -> None:
+    """先輩の強化状態はスナップショット経由でシーン再生成をまたいで復元できる
+    （実機FB: 死亡・ステージ遷移で強化がリセットされる、の恒久修正）。"""
+    from src.entities.companion import Karonaru, _HP_BY_LEVEL
+
+    src = Karonaru(_GameStub())
+    src.apply_upgrade("kt_hp")
+    src.apply_upgrade("kt_hp")
+    src.apply_upgrade("kt_shot")
+    src.apply_upgrade("kt_supply")
+    src.apply_upgrade("kt_magnet")
+    src.stock = 2
+    snap = src.snapshot()
+
+    dst = Karonaru(_GameStub())
+    dst.restore_state(snap)
+    assert (dst.lv_hp, dst.lv_shot, dst.lv_supply, dst.lv_magnet) == (2, 1, 1, 1)
+    assert dst.stock == 2
+    assert dst.max_hp == _HP_BY_LEVEL[2]
+    assert dst.hp == dst.max_hp
+    # 補給タイマーが再アームされている（Lv>0 なのに永遠に撃たない事故の防止）
+    assert dst._supply_timer > 0.0
+
+
+def test_companion_restore_clamps_broken_data() -> None:
+    """壊れたスナップショット（範囲外・欠損）でもクラッシュせず安全側に丸める。"""
+    from src.entities.companion import Karonaru, _KT_MAX_LEVEL
+
+    c = Karonaru(_GameStub())
+    c.restore_state({"lv_hp": 99, "lv_shot": -5, "stock": -3})
+    assert c.lv_hp == _KT_MAX_LEVEL
+    assert c.lv_shot == 0
+    assert c.lv_supply == 0 and c.lv_magnet == 0
+    assert c.stock == 0
+
+
 def test_companion_max_mode_does_not_fall() -> None:
     """薬効最大形態は致死ダメージでも落ちず HP1 で踏みとどまる（台本「今度は落ちない」）。"""
     from src.entities.companion import Karonaru
