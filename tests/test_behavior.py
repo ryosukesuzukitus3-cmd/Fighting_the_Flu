@@ -27,8 +27,10 @@ def test_weapon_upgrade_caps_each_track() -> None:
     w = Weapon()
     for _ in range(20):
         w.upgrade("weapon_main")
-    assert w.main_level == len(Weapon._MAIN_LEVELS) - 1
+    assert w.main_level == len(Weapon._MAIN_LEVELS) - 2
     assert w.main_at_max
+    assert w.main_type == "wide2"
+    w.grant_medic()
     assert w.main_type == "medic"
 
     for _ in range(20):

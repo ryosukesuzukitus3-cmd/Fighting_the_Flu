@@ -1989,7 +1989,7 @@ def test_matching_zero_drone_tracks_boss_and_can_be_destroyed() -> None:
     assert drone.world_x == drone.rect.centerx + 1000.0
     assert drone.drops_enabled is False
     assert drone.drop_chance == 0.0
-    assert drone.take_damage(12) is True
+    assert drone.take_damage(22) is True
 
 
 def test_matching_zero_rear_drone_requires_laser_damage() -> None:

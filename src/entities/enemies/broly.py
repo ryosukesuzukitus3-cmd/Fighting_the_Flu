@@ -21,6 +21,13 @@ _BEAM_H         = 200   # 画面上のビーム高さ（粒子砲フレームの
 _FIRE_SHAKE     = 4.5    # 発射時の画面シェイク強度
 
 _ENH_CHARGE   = 650.0
+# Particle cannon tuning: a clearly telegraphed, stationary firing pose with
+# a collision band that follows the visible glow.
+_WINDUP_TIME = 0.82
+_FIRE_HOLD_TIME = 1.30
+_BEAM_FADE_TIME = _FIRE_HOLD_TIME
+_BEAM_TAPER = 0.48
+_BEAM_H = 286
 _STATS        = enemy_stats("EnemyBroly")
 
 
@@ -68,7 +75,6 @@ class EnemyBroly(Enemy):
                 self._timer = 0.0
                 self._fire_warning()
         elif self._state == "windup":
-            self.world_x -= self.speed * 0.22 * dt
             if self._player is not None:
                 self._target_y = float(self._player.sy)
             self.world_y += (self._target_y - self.world_y) * min(1.0, dt * 6.5)
@@ -80,6 +86,12 @@ class EnemyBroly(Enemy):
                 self._vy = (dy / d) * (215.0 if self.enhanced else 170.0)
                 self._fire_charge_beam()
                 self._fire_shock()
+                self._state = "fire"
+        elif self._state == "fire":
+            # Never slide during the visible cannon discharge.
+            if self._timer >= _FIRE_HOLD_TIME:
+                self._state = "charge"
+                self._timer = 0.0
         elif self._state == "charge":
             self.world_x -= self._charge_speed * dt
             self.world_y += self._vy * dt
@@ -131,9 +143,11 @@ class EnemyBroly(Enemy):
             _BEAM_H,
             palette=ZUNDA_PALETTE,
             lifetime=_BEAM_FADE_TIME,
-            warning_only=True,
+            damage=16 if self.enhanced else 12,
+            warning_only=False,
             taper_time=_BEAM_TAPER,
             frames=zunda_beam_frames(self._game.resources),
+            frame_fps=11.0,
             frame_mode="progress",
         )
         self._enemy_bullets.add(beam)

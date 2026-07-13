@@ -65,7 +65,8 @@ class Weapon:
 
     @property
     def main_at_max(self) -> bool:
-        return self.main_level >= len(_MAIN_LEVELS) - 1
+        # MEDIC is a story reward, not a normal pickup-tree upgrade.
+        return self.main_level >= len(_MAIN_LEVELS) - 2
 
     @property
     def speed_multiplier(self) -> float:
@@ -77,7 +78,7 @@ class Weapon:
 
     def upgrade(self, item_type: str) -> None:
         if item_type == "weapon_main":
-            self.main_level = min(self.main_level + 1, len(_MAIN_LEVELS) - 1)
+            self.main_level = min(self.main_level + 1, len(_MAIN_LEVELS) - 2)
         elif item_type == "speed":
             self.speed_level = min(self.speed_level + 1, _SPEED_MAX_LEVEL)
         elif item_type == "laser":
@@ -88,6 +89,10 @@ class Weapon:
             self.magnet_level = min(self.magnet_level + 1, 3)
         elif item_type == "barrier":
             self.has_barrier = True
+
+    def grant_medic(self) -> None:
+        """Unlock the final normal-shot form as Karonaru's return reward."""
+        self.main_level = len(_MAIN_LEVELS) - 1
 
     def downgrade(self) -> None:
         """被弾時に1段階降格（barrier → laser → homing → main の順、speedは永続）"""

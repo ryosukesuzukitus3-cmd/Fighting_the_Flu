@@ -177,6 +177,9 @@ _TURRET_STUN_DUR   = 4.0   # 全砲台撃破後のスタン時間（秒）
 _TURRET_STUN_MULT  = 1.8   # スタン中の被ダメ倍率
 
 
+_POSTURE_DAMAGE_MULT = 0.16
+
+
 class Boss(pygame.sprite.Sprite):
     def __init__(self, game: "Game", stage_id: int = 1) -> None:
         super().__init__()
@@ -328,7 +331,7 @@ class Boss(pygame.sprite.Sprite):
                 self._weak_timer = _WEAK_DUR   # 露出＝ダウン（被ダメ倍率は既存）
                 self._armor = 0
             else:
-                self._down_timer = STANCE_DOWN_DUR
+                self._down_timer = STANCE_DOWN_DUR * 0.65
                 if gimmick == "shield":
                     self._shield_active = False
 
@@ -1134,11 +1137,15 @@ class Boss(pygame.sprite.Sprite):
     # ─────────────────────────────────────────
     def take_damage(self, amount: int, stance: float | None = None) -> bool:
         # ── バトルv2: 体幹を並行して削る（stance 未指定はダメージ量相当）──
+        posture_intact = (BATTLE_V2_ENABLED and self._stance_max > 0
+                           and self._stance > 0 and not self.is_stance_down)
         if BATTLE_V2_ENABLED:
             self.add_stance(float(amount) if stance is None else stance)
         # ── ギミックによる被ダメージ補正 ──────────────────────────
         gimmick = self._current_gimmick()
         dealt = amount
+        if posture_intact:
+            dealt = max(1, int(amount * _POSTURE_DAMAGE_MULT))
         if BATTLE_V2_ENABLED and self._down_timer > 0:
             dealt = int(amount * STANCE_DOWN_MULT)   # 体幹ダウン中は大ダメージ
         elif gimmick == "shield" and self._shield_active:

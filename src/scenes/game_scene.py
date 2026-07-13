@@ -537,7 +537,7 @@ class GameScene(
                     self.game.sound.play_se(se, volume=0.225)
                     self.camera.shake(6.0)
                     self._laser_flash_timer = 0.08
-                    if self._heat is not None and self._heat.add(HEAT_PER_LASER):
+                    if self._heat is not None and self._heat.add(HEAT_PER_LASER * 0.45):
                         self._on_overheat_started()
                 if just_ended:
                     self.particles.spawn_hit(int(msx), int(msy))
@@ -1322,12 +1322,25 @@ class GameScene(
                           color=(255, 235, 170), life=1.5)
         self._play_shogi_snap(px + 30, py)
         self.particles.spawn_big_explosion(px + 60, py)
-        self.camera.shake(12.0)
+        self.camera.shake(6.0)
         self._laser_flash_timer = max(self._laser_flash_timer, 0.1)
-        self.enemy_bullets.empty()
+        # A held piece no longer clears the whole screen; it launches a
+        # readable volley of the matching shogi missiles instead.
+        from src.entities.bullets.player_bullet import HomingBullet
+        world_x = self.camera.to_world_x(px + 28)
+        missile_count = 6 + min(8, int(stance_pts / 6.0))
+        for i in range(missile_count):
+            missile = HomingBullet(
+                world_x, py + (i - (missile_count - 1) / 2) * 7,
+                self.enemies, game=self.game, boss=self._boss,
+                init_angle=(i - (missile_count - 1) / 2) * 6,
+            )
+            missile.damage = 1
+            self.player_bullets.add(missile)
         if inv > 0:
             self.player._invincible_timer = max(self.player._invincible_timer, inv)
         for enemy in list(self.enemies):
+            continue
             # 「打つ」はレーザー限定の子機（サクラ）にも通る特別扱い
             damage_fn = getattr(enemy, "take_laser_damage", enemy.take_damage)
             if damage_fn(zako_dmg):
@@ -1335,8 +1348,8 @@ class GameScene(
         if self._boss is not None and self._in_boss_fight:
             was_form2 = self._boss._form2
             was_form3 = self._boss._form3
-            self._boss.add_stance(stance_pts, ignore_shield=True)
-            if self._boss.take_damage(boss_dmg, stance=0.0):
+            self._boss.add_stance(stance_pts * 0.25, ignore_shield=True)
+            if self._boss.take_damage(min(1, boss_dmg), stance=0.0):
                 self._on_boss_killed()
                 return
             if self._boss is not None and not was_form2 and self._boss._form2:
