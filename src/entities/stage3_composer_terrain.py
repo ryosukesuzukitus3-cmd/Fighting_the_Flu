@@ -882,6 +882,7 @@ def draw_stage3_composer_layout(
     *,
     camera_x: float,
     debug_lines: bool = False,
+    skip_placement_indices: frozenset[int] | None = None,
 ) -> None:
     target_rect = target.get_rect()
     base_color = (28, 33, 36, 232)
@@ -899,7 +900,13 @@ def draw_stage3_composer_layout(
             area_h = max(0, run.y - layout.surface_depth)
             target.blit(base, (sx, 0), area=pygame.Rect(0, 0, width, area_h))
 
-    for placement in sorted(layout.placements, key=lambda placement: placement.draw_order):
+    skipped = skip_placement_indices or frozenset()
+    for placement_index, placement in sorted(
+        enumerate(layout.placements),
+        key=lambda item: item[1].draw_order,
+    ):
+        if placement_index in skipped:
+            continue
         if placement.clip.right < camera_x or placement.clip.left > camera_x + target_rect.width:
             continue
         _blit_with_world_clip(

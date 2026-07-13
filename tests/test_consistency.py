@@ -2607,14 +2607,14 @@ def test_stage_designer_multi_selection_operations_and_layers() -> None:
 
     designer._move_selection(5, -2)
     pieces = designer.data["terrain_layout"][0]["pieces"]
-    assert [(pieces[i]["x"], pieces[i]["y"]) for i in (1, 2)] == [(15, 8), (25, 18)]
+    assert [(pieces[i]["x"], pieces[i]["y"]) for i in (1, 2)] == [(95, -2), (15, 8)]
     designer._move_piece_layers(1, to_edge=True)
-    assert [piece["asset"] for piece in pieces] == ["a:1", "a:4", "a:2", "a:3"]
+    assert [piece["asset"] for piece in pieces] == ["a:1", "a:3", "a:4", "a:2", "a:2"]
     designer._duplicate_selection()
-    assert len(pieces) == 6
-    assert [piece["asset"] for piece in pieces[-2:]] == ["a:2", "a:3"]
+    assert len(pieces) == 7
+    assert [piece["asset"] for piece in pieces[-2:]] == ["a:2", "a:2"]
     designer._delete_selection()
-    assert len(pieces) == 4
+    assert len(pieces) == 5
 
 
 def test_stage_designer_interleaves_piece_and_destructible_terrain_layers() -> None:
@@ -2696,10 +2696,10 @@ def test_stage_designer_ctrl_drag_copies_selected_group_after_drag_threshold() -
         pygame.key.set_mods(0)
 
     pieces = designer.data["terrain_layout"][0]["pieces"]
-    assert len(pieces) == 3
+    assert len(pieces) == 2
     assert (pieces[0]["x"], pieces[0]["y"]) == (0, 0)
-    assert (pieces[2]["x"], pieces[2]["y"]) == (30, 30)
-    assert pieces[2]["draw_order"] == max(piece["draw_order"] for piece in pieces)
+    assert (pieces[1]["x"], pieces[1]["y"]) == (30, 30)
+    assert pieces[1]["draw_order"] == max(piece["draw_order"] for piece in pieces)
     assert len(designer.undo_stack) == 1
 
 
@@ -2738,6 +2738,50 @@ def test_stage_designer_ctrl_drag_copies_multi_selection_to_front_in_z_order() -
         *(piece["draw_order"] for piece in pieces),
         *(event["draw_order"] for event in events),
     ])
+
+
+def test_stage_designer_scales_rect_terrain_preview_with_zoom() -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer._event_image_cache = {}
+    designer._event_rect_image = lambda _event, _w, _h: pygame.Surface((80, 40), pygame.SRCALPHA)
+    event = {"type": "Terrain", "kind": "clot", "w": 80, "h": 40}
+
+    image = designer._event_image(event, max_w=160, max_h=80)
+
+    assert image.get_size() == (160, 80)
+
+
+def test_stage_designer_defers_piece_layout_rebuild_while_dragging() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 10, "y": 20},
+    ]}], "world_events": []}
+    designer.selection = Selection("piece", 0)
+    designer.selections = [designer.selection]
+    designer.dragging = True
+    designer.drag_start_world = pygame.Vector2(10, 20)
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.drag_origins = {}
+    designer.dirty = False
+    designer._drag_terrain_dirty = False
+    cached_layout = object()
+    designer._piece_layout_cache_key = "cached"
+    designer._piece_layout_cache = cached_layout
+    designer._terrain_cache_key = "cached"
+    designer._terrain_cache = object()
+    designer._composer_layout_cache_key = "cached"
+    designer._composer_layout_cache = object()
+
+    designer._set_selection_world_pos(75, 90)
+
+    assert designer.data["terrain_layout"][0]["pieces"][0]["x"] == 75
+    assert designer.data["terrain_layout"][0]["pieces"][0]["y"] == 90
+    assert designer._piece_layout_cache is cached_layout
+    assert designer._drag_terrain_dirty is True
 
 
 def test_stage1_event_palette_can_restore_boss_gate_and_boss() -> None:

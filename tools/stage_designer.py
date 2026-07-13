@@ -669,6 +669,13 @@ class StageDesigner:
         self._piece_layout_cache_key: str | None = None
         self._piece_layout_cache: tuple[Stage3ComposerLayout, dict[str, list[Any]]] | None = None
         self._backdrop_cache: dict[tuple[int, int], pygame.Surface] = {}
+        # During a piece drag the static part of the viewport stays unchanged.
+        # Reusing it avoids rebuilding and scaling hundreds of Stage1 pieces on
+        # every MOUSEMOTION event.
+        self._drag_view_cache_key: tuple[Any, ...] | None = None
+        self._drag_view_cache: pygame.Surface | None = None
+        self._drag_piece_display_cache: dict[tuple[int, int, int], pygame.Surface] = {}
+        self._drag_terrain_dirty = False
 
     @property
     def view_rect(self) -> pygame.Rect:
@@ -698,6 +705,26 @@ class StageDesigner:
         self._composer_layout_cache = None
         self._piece_layout_cache_key = None
         self._piece_layout_cache = None
+        self._drag_view_cache_key = None
+        self._drag_view_cache = None
+
+    def _clear_drag_view_cache(self) -> None:
+        self._drag_view_cache_key = None
+        self._drag_view_cache = None
+        if hasattr(self, "_drag_piece_display_cache"):
+            self._drag_piece_display_cache.clear()
+
+    def _dragged_piece_indices(self) -> frozenset[int]:
+        if not getattr(self, "dragging", False):
+            return frozenset()
+        return frozenset(item.index for item in self._selection_list() if item.kind == "piece")
+
+    def _mark_piece_position_changed(self) -> None:
+        """Defer the expensive collision/layout rebuild until drag release."""
+        if getattr(self, "dragging", False):
+            self._drag_terrain_dirty = True
+            return
+        self._invalidate_terrain_cache()
 
     def _composer_asset_paths(self, event: dict[str, Any] | None = None) -> tuple[Path, Path]:
         profile = getattr(self, "profile", None)
@@ -1039,7 +1066,13 @@ class StageDesigner:
             image = pygame.Surface((42, 42), pygame.SRCALPHA)
             pygame.draw.circle(image, _event_color(event), (21, 21), 18)
             pygame.draw.circle(image, (240, 248, 245), (21, 21), 18, 2)
-        fitted = image.copy() if etype in RECT_TERRAIN_TYPES else _fit_surface(image, max_w, max_h)
+        if etype in RECT_TERRAIN_TYPES:
+            # Rect terrain is built at its world size.  The editor draws it
+            # after zooming the viewport, so the preview itself must match the
+            # screen-space rect rather than retaining that unscaled size.
+            fitted = image if image.get_size() == (max_w, max_h) else pygame.transform.smoothscale(image, (max_w, max_h))
+        else:
+            fitted = _fit_surface(image, max_w, max_h)
         if bool(event.get("enhanced", False)):
             fitted = fitted.copy()
             tint = pygame.Surface(fitted.get_size(), pygame.SRCALPHA)
@@ -2125,7 +2158,8 @@ class StageDesigner:
                             _set_event_x(event, (_event_x(event) or 0.0) + dx)
                         if _event_can_edit_y(event):
                             _set_event_y(event, _event_y(event, self.data) + dy)
-            self._invalidate_terrain_cache()
+            if any(selected.kind == "piece" for selected in self._selection_list()):
+                self._mark_piece_position_changed()
             self.dirty = True
             return
         if self.selection.kind == "event":
@@ -2187,7 +2221,8 @@ class StageDesigner:
                         _set_event_x(event, origin[0] + dx)
                         if _event_can_edit_y(event):
                             _set_event_y(event, origin[1] + dy)
-            self._invalidate_terrain_cache()
+            if any(selected.kind == "piece" for selected in self._selection_list()):
+                self._mark_piece_position_changed()
             self.dirty = True
             return
         if self.selection.kind == "event":
@@ -2203,7 +2238,7 @@ class StageDesigner:
                 return
             piece["x"] = int(round(wx - self.drag_offset.x))
             piece["y"] = int(round(wy - self.drag_offset.y))
-            self._invalidate_terrain_cache()
+            self._mark_piece_position_changed()
         elif self.selection.kind == "guide_point":
             line = self._selected_guide_line()
             if line is None:
@@ -2318,8 +2353,16 @@ class StageDesigner:
         if not self.show_overlays:
             return
         composer_layout, _pieces = self._piece_layout()
+        dragged = self._dragged_piece_indices()
+        raw_pieces = _layout(self.data).get("pieces", [])
         for i, placement in enumerate(composer_layout.placements):
-            sx, sy = self._world_to_screen(float(placement.x), float(placement.y))
+            if i in dragged and i < len(raw_pieces):
+                raw = raw_pieces[i]
+                x = float(raw.get("x", placement.x))
+                y = float(raw.get("y", placement.y))
+            else:
+                x, y = float(placement.x), float(placement.y)
+            sx, sy = self._world_to_screen(x, y)
             rect = pygame.Rect(
                 sx,
                 sy - TOOLBAR_H,
@@ -2334,6 +2377,34 @@ class StageDesigner:
             if selected:
                 label = self.small_font.render(placement.asset or placement.role, True, color)
                 target.blit(label, (rect.left, max(0, rect.top - 16)))
+
+    def _draw_dragged_terrain_pieces(self, target: pygame.Surface) -> None:
+        """Paint only moving pieces over the cached, static viewport."""
+        dragged = self._dragged_piece_indices()
+        if not dragged:
+            return
+        composer_layout, _pieces = self._piece_layout()
+        raw_pieces = _layout(self.data).get("pieces", [])
+        display_cache = getattr(self, "_drag_piece_display_cache", {})
+        for index in dragged:
+            if not (0 <= index < len(composer_layout.placements) and index < len(raw_pieces)):
+                continue
+            placement = composer_layout.placements[index]
+            raw = raw_pieces[index]
+            x = float(raw.get("x", placement.x))
+            y = float(raw.get("y", placement.y))
+            sx, sy = self._world_to_screen(x, y)
+            width = max(1, int(round(placement.image.get_width() * self.zoom)))
+            height = max(1, int(round(placement.image.get_height() * self.zoom)))
+            key = (id(placement.image), width, height)
+            image = display_cache.get(key)
+            if image is None:
+                image = placement.image if placement.image.get_size() == (width, height) else pygame.transform.smoothscale(
+                    placement.image, (width, height)
+                )
+                display_cache[key] = image
+            target.blit(image, (sx, sy - TOOLBAR_H))
+        self._drag_piece_display_cache = display_cache
 
     def _draw_guides(self, target: pygame.Surface) -> None:
         if not self.show_overlays:
@@ -2804,22 +2875,48 @@ class StageDesigner:
         surface = pygame.Surface(self.screen.get_size())
         surface.fill((10, 13, 16))
         visible_w, visible_h = self._visible_world_size()
-        crop_y = max(0, int(round(self.camera_y)))
-        canvas_h = max(SCREEN_HEIGHT, crop_y + visible_h)
-        world_view = self._load_backdrop(visible_w, canvas_h)
         layout = _layout(self.data)
-        if layout.get("type") == "TerrainPieces":
-            composer_layout, _pieces = self._piece_layout()
-            draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
+        dragged = self._dragged_piece_indices() if layout.get("type") == "TerrainPieces" else frozenset()
+        drag_key = (
+            round(self.camera_x, 3),
+            round(self.camera_y, 3),
+            round(self.zoom, 3),
+            visible_w,
+            visible_h,
+            dragged,
+        )
+        cache_hit = (
+            bool(dragged)
+            and getattr(self, "_drag_view_cache_key", None) == drag_key
+            and getattr(self, "_drag_view_cache", None) is not None
+        )
+        if cache_hit:
+            view = self._drag_view_cache.copy()
         else:
-            composer_layout = self._composer_layout()
-            draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
-        crop = pygame.Rect(0, crop_y, visible_w, visible_h)
-        view = pygame.Surface((visible_w, visible_h), pygame.SRCALPHA)
-        view.blit(world_view, (0, max(0, int(round(-self.camera_y)))), crop)
-        if self.zoom != 1.0:
-            view = pygame.transform.smoothscale(view, (VIEW_W, VIEW_H))
+            crop_y = max(0, int(round(self.camera_y)))
+            canvas_h = max(SCREEN_HEIGHT, crop_y + visible_h)
+            world_view = self._load_backdrop(visible_w, canvas_h)
+            if layout.get("type") == "TerrainPieces":
+                composer_layout, _pieces = self._piece_layout()
+                draw_stage3_composer_layout(
+                    world_view,
+                    composer_layout,
+                    camera_x=self.camera_x,
+                    skip_placement_indices=dragged,
+                )
+            else:
+                composer_layout = self._composer_layout()
+                draw_stage3_composer_layout(world_view, composer_layout, camera_x=self.camera_x)
+            crop = pygame.Rect(0, crop_y, visible_w, visible_h)
+            view = pygame.Surface((visible_w, visible_h), pygame.SRCALPHA)
+            view.blit(world_view, (0, max(0, int(round(-self.camera_y)))), crop)
+            if self.zoom != 1.0:
+                view = pygame.transform.smoothscale(view, (VIEW_W, VIEW_H))
+            if dragged:
+                self._drag_view_cache_key = drag_key
+                self._drag_view_cache = view.copy()
         if layout.get("type") == "TerrainPieces":
+            self._draw_dragged_terrain_pieces(view)
             self._draw_terrain_pieces(view)
         else:
             self._draw_terrain_points(view)
@@ -2973,6 +3070,8 @@ class StageDesigner:
             return
         if event.button != 1:
             return
+        self._drag_terrain_dirty = False
+        self._clear_drag_view_cache()
         if self.guide_mode and self.view_rect.collidepoint(event.pos):
             self._handle_guide_mouse_down(event.pos)
             return
@@ -3146,6 +3245,11 @@ class StageDesigner:
             self.ctrl_copy_pending = False
             self.ctrl_copy_candidate = None
             self.dragging = False
+            if getattr(self, "_drag_terrain_dirty", False):
+                self._invalidate_terrain_cache()
+                self._drag_terrain_dirty = False
+            else:
+                self._clear_drag_view_cache()
 
     def _handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.QUIT:
