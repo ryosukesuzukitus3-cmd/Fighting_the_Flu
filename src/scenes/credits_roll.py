@@ -13,8 +13,8 @@ _FAST_MULT = 3.6
 _SIDE_PAD = 72
 _FADEOUT_MS = 2400
 _FADEOUT_SEC = _FADEOUT_MS / 1000.0
-_FINAL_HOLD_SEC = 6.0         # 他が流れ切った後、最終行を中央で保持する秒数
-_FINAL_GAP_ENTRIES = 4        # 最終行（Thank you）の手前に足す空行数（少し離す）
+_FINAL_HOLD_SEC = 3.0         # 他が流れ切った後、最終行を中央で保持する秒数
+_FINAL_GAP_ENTRIES = 7        # 最終行（Thank you）の手前に足す空行数（少し離す）
 
 # エンドロール記法（script.py CREDITS / POSTCREDIT のテキスト先頭マーカー）
 _TITLE_MARK = "■"             # セクション見出し（大・金・下線）
