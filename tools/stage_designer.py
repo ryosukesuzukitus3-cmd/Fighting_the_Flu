@@ -2835,7 +2835,7 @@ class StageDesigner:
             "Ctrl+click toggle / Ctrl-drag copy",
             "Drag blank space: box select",
             "Ctrl+D duplicate selection",
-            "Ctrl+[ ] layer / +Shift edge",
+            "Ctrl+[ ] or Ctrl+Shift+Up/Down layer",
             "O overlays on/off",
             "Ctrl+Wheel zoom",
             "Wheel pan stage/palette",
@@ -2974,8 +2974,24 @@ class StageDesigner:
     def _handle_key(self, event: pygame.event.Event) -> bool:
         mods = pygame.key.get_mods()
         typed = str(getattr(event, "unicode", ""))
+        ctrl = bool(mods & pygame.KMOD_CTRL)
+        shift = bool(mods & pygame.KMOD_SHIFT)
+        # On Japanese keyboard layouts Ctrl+[ can arrive as the @ key or as
+        # the ESC control character.  Accept the character as well as the
+        # physical key and provide an arrow-key alternative that avoids the
+        # layout-dependent bracket mapping altogether.
+        layer_back = ctrl and (
+            event.key in (pygame.K_LEFTBRACKET, pygame.K_AT)
+            or typed in {"[", "\x1b"}
+            or (shift and event.key == pygame.K_DOWN)
+        )
+        layer_forward = ctrl and (
+            event.key == pygame.K_RIGHTBRACKET
+            or typed in {"]", "\x1d"}
+            or (shift and event.key == pygame.K_UP)
+        )
         step = 10 if mods & pygame.KMOD_CTRL else 1
-        if event.key == pygame.K_ESCAPE:
+        if event.key == pygame.K_ESCAPE and not layer_back:
             return False
         if event.key == pygame.K_e:
             self.mode = "events"
@@ -3017,10 +3033,10 @@ class StageDesigner:
             self._auto_fill_from_guides()
         elif event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
             self._delete_selection()
-        elif event.key == pygame.K_LEFTBRACKET and mods & pygame.KMOD_CTRL:
-            self._move_terrain_layers(-1, to_edge=bool(mods & pygame.KMOD_SHIFT))
-        elif event.key == pygame.K_RIGHTBRACKET and mods & pygame.KMOD_CTRL:
-            self._move_terrain_layers(1, to_edge=bool(mods & pygame.KMOD_SHIFT))
+        elif layer_back:
+            self._move_terrain_layers(-1, to_edge=shift)
+        elif layer_forward:
+            self._move_terrain_layers(1, to_edge=shift)
         elif event.key == pygame.K_LEFTBRACKET:
             self._cycle_palette(-1)
         elif event.key == pygame.K_RIGHTBRACKET:

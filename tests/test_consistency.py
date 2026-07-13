@@ -2597,6 +2597,24 @@ def test_stage_designer_interleaves_piece_and_destructible_terrain_layers() -> N
     assert "draw_order" not in designer.data["world_events"][1]
 
 
+def test_stage_designer_layer_shortcuts_accept_jis_and_arrow_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    moved: list[tuple[int, bool]] = []
+    designer._move_terrain_layers = lambda direction, *, to_edge=False: moved.append((direction, to_edge))
+
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: pygame.KMOD_CTRL)
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_AT, unicode="["))
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHTBRACKET, unicode="]"))
+
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: pygame.KMOD_CTRL | pygame.KMOD_SHIFT)
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN, unicode=""))
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP, unicode=""))
+
+    assert moved == [(-1, False), (1, False), (-1, True), (1, True)]
+
+
 def test_stage_designer_ctrl_drag_copies_selected_group_after_drag_threshold() -> None:
     from tools.stage_designer import Selection, StageDesigner
 
