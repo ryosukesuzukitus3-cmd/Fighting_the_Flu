@@ -668,6 +668,7 @@ class StageDesigner:
         self._composer_layout_cache: Stage3ComposerLayout | None = None
         self._piece_layout_cache_key: str | None = None
         self._piece_layout_cache: tuple[Stage3ComposerLayout, dict[str, list[Any]]] | None = None
+        self._piece_layout_revision = 0
         self._backdrop_cache: dict[tuple[int, int], pygame.Surface] = {}
         # During a piece drag the static part of the viewport stays unchanged.
         # Reusing it avoids rebuilding and scaling hundreds of Stage1 pieces on
@@ -705,6 +706,7 @@ class StageDesigner:
         self._composer_layout_cache = None
         self._piece_layout_cache_key = None
         self._piece_layout_cache = None
+        self._piece_layout_revision = getattr(self, "_piece_layout_revision", 0) + 1
         self._drag_view_cache_key = None
         self._drag_view_cache = None
 
@@ -810,7 +812,10 @@ class StageDesigner:
 
     def _piece_layout(self) -> tuple[Stage3ComposerLayout, dict[str, list[Any]]]:
         layout = _layout(self.data)
-        key = "pieces:" + json.dumps(layout, sort_keys=True, ensure_ascii=False)
+        # Piece coordinates change for every mouse event while dragging.  A
+        # revision invalidated by completed edits is enough here; serializing
+        # the full Stage1 piece list each frame defeats the drag cache.
+        key = f"pieces:{getattr(self, '_piece_layout_revision', 0)}"
         if (
             getattr(self, "_piece_layout_cache_key", None) == key
             and getattr(self, "_piece_layout_cache", None) is not None
@@ -1006,7 +1011,14 @@ class StageDesigner:
         next_index = max(0, min(len(entries) - 1, index + dx + dy * PALETTE_COLS))
         self._select_palette_payload(entries[next_index])
 
-    def _event_image(self, event: dict[str, Any], *, max_w: int = 64, max_h: int = 52) -> pygame.Surface:
+    def _event_image(
+        self,
+        event: dict[str, Any],
+        *,
+        max_w: int = 64,
+        max_h: int = 52,
+        exact_rect_size: bool = False,
+    ) -> pygame.Surface:
         etype = str(event.get("type", ""))
         material_role = str(event.get("material_role", _event_material_role(event) or ""))
         key = (
@@ -1014,7 +1026,7 @@ class StageDesigner:
             f"{event.get('surface_anchor', '')}:{material_role}:{event.get('material_asset', '')}:"
             f"{event.get('fixed_drop', '')}:"
             f"{event.get('enhanced', False)}:{event.get('destructible', False)}:"
-            f"{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}"
+            f"{event.get('w', '')}:{event.get('h', '')}:{max_w}x{max_h}:exact={exact_rect_size}"
         )
         if key in self._event_image_cache:
             return self._event_image_cache[key]
@@ -1067,10 +1079,11 @@ class StageDesigner:
             pygame.draw.circle(image, _event_color(event), (21, 21), 18)
             pygame.draw.circle(image, (240, 248, 245), (21, 21), 18, 2)
         if etype in RECT_TERRAIN_TYPES:
-            # Rect terrain is built at its world size.  The editor draws it
-            # after zooming the viewport, so the preview itself must match the
-            # screen-space rect rather than retaining that unscaled size.
-            fitted = image if image.get_size() == (max_w, max_h) else pygame.transform.smoothscale(image, (max_w, max_h))
+            # Palette/info previews are fitted into their allotted box.  The
+            # editing viewport explicitly opts into exact screen-space sizing.
+            fitted = (
+                image if image.get_size() == (max_w, max_h) else pygame.transform.smoothscale(image, (max_w, max_h))
+            ) if exact_rect_size else _fit_surface(image, max_w, max_h)
         else:
             fitted = _fit_surface(image, max_w, max_h)
         if bool(event.get("enhanced", False)):
@@ -2471,7 +2484,12 @@ class StageDesigner:
                     max(1, int(round(world_rect.width * self.zoom))),
                     max(1, int(round(world_rect.height * self.zoom))),
                 )
-                preview = self._event_image(event, max_w=rect.width, max_h=rect.height)
+                preview = self._event_image(
+                    event,
+                    max_w=rect.width,
+                    max_h=rect.height,
+                    exact_rect_size=True,
+                )
                 target.blit(preview, rect.topleft)
                 if self.show_overlays:
                     fill = (*color, 42 if selected else 20)
