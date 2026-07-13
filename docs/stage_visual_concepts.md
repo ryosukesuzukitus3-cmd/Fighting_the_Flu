@@ -3,7 +3,7 @@
 この資料は、ステージ作り込み時の見た目とレイアウト判断の基準にする。
 ここに置いた画像は実装用素材ではなく、ゲーム内描画・地形・背景・セットピースへ翻訳するための参照画像。
 
-現在の Stage1 は、専用背景・atlas・rect/mask catalogを既存の `TerrainStrip` と固定clotへ適用した中間段階。以後の修正でもこの資料の方向を維持し、後続PRでStage3型の `TerrainPieces` 個別配置SSOTへ移行する。
+現在の Stage1 主経路は、専用背景・atlas・rect/mask catalogを使う `TerrainPieces.pieces` の個別配置SSOTへ移行済み。以後の配置調整もこの資料の方向を維持し、`stage-designer --stage 1` 上で行う。
 
 ## 共通方針
 
@@ -30,10 +30,11 @@
 - 破壊可能地形: 同じStage1 catalogの血栓・細胞塊を固定clotの寸法へfitする。画面端まで穴を開ける壁ではなく、通路に少し出た小さな詰まりにする。
 - 砲台台座: 血栓が固まった専用素材を使い、汎用の茶色い岩や灰色ブロックにしない。
 
-実装段階:
+現在の実装:
 
-- PR2（現在）: 道中とBoss用の形状・衝突は従来の `TerrainStrip` のまま維持する。通常segmentはcomposer素材で描き、破壊可能segmentは破壊後に見た目が残らないよう従来描画を維持する。
-- PR3（最終目標）: 道中を `TerrainPieces.pieces` へ変換し、血管壁・血栓台座・ゲートを個別ブロック配置のSSOTにする。
+- 主経路: 約395個のpieceが血管壁・血栓台座・装飾を保持する。素材種類・`x` / `y`・`role`・`collision`・反転を個別編集できる。
+- 最終調整: 通路幅、surfaceの連続性、敵との位置関係は `stage-designer --stage 1` で確認して詰める。
+- 継続部分: Boss用fallbackの `TerrainStrip` と、破壊可能clot・ゲートなどの `world_events` は残す。
 
 Stage1 レイアウトの戻りどころ:
 
@@ -46,7 +47,7 @@ Stage1 レイアウトの戻りどころ:
 | 5860-7050 | 中ボス・高密度区間 | 中ボス報酬と強化砲台を地形に合わせる |
 | 7050-7650 | ボス前 | 最後の血栓ゲートからBossGateまで呼吸を作る |
 | 7650-8500 | ボス部屋 | 事前配置した上下clotとBossを収める |
-| 8500-11200 | 生成バッファ | 現行 `TerrainStrip.length` の余白。PR3で必要範囲を再確定する |
+| 8500-11200 | 配置余白 | 現行 `TerrainPieces.length` の余白。必要に応じてdesignerで整理する |
 
 ## Stage2: ミーム汚染 / 控えめサイバー
 

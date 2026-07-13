@@ -332,6 +332,7 @@ class EnemySpawner:
                     surface_anchor=event.get("surface_anchor"),
                     material_role=material_role,
                     material_asset=event.get("material_asset"),
+                    draw_order=(int(event["draw_order"]) if "draw_order" in event else None),
                 ))
             return True
 

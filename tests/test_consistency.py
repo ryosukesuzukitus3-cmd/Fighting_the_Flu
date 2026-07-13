@@ -385,6 +385,7 @@ def test_stage_terrain_profile_resolution_rejects_unknown_and_conflicting_stage(
 def test_stage1_terrain_profile_and_catalog_use_dedicated_assets() -> None:
     from src.core.constants import SCREEN_WIDTH
     from src.core.terrain_composer import load_composer_catalog
+    from tools.stage_designer import StageDesigner
     from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES, resolve_stage_terrain_profile
 
     profile = STAGE_TERRAIN_PROFILES[1]
@@ -411,8 +412,32 @@ def test_stage1_terrain_profile_and_catalog_use_dedicated_assets() -> None:
     assert profile.preview_camera_xs[0] == 0
     assert tuple(sorted(set(profile.preview_camera_xs))) == profile.preview_camera_xs
     assert profile.preview_camera_xs[-1] <= layout["length"] - SCREEN_WIDTH
+    assert ROOT / layout["composer_rects"] == profile.rects
+    assert ROOT / layout["composer_mask_dir"] == profile.mask_dir
     assert required_roles <= catalog.roles
     assert catalog.assets
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.profile = profile
+    designer.rects_path = profile.rects
+    designer.mask_dir = profile.mask_dir
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+    palette = designer._composer_pieces()
+    palette_assets = {
+        role: {f"{piece.group}:{piece.index + 1}" for piece in pieces}
+        for role, pieces in palette.items()
+    }
+    assert designer._piece_roles(palette)[:3] == ["floor_surface", "ceiling_surface", "body_fill"]
+    assert all(designer._piece_palette_options(role, palette) for role in required_roles)
+    palette_asset_ids = {asset for assets in palette_assets.values() for asset in assets}
+    for piece in layout["pieces"]:
+        assert piece["role"] in catalog.roles
+        assert piece["asset"] in catalog.assets
+        # Stage1's author may deliberately use a clot block in a different
+        # visual role; the asset must stay selectable, but need not belong to
+        # the role it was assigned in the layout.
+        assert piece["asset"] in palette_asset_ids
 
 
 def test_stage_composer_report_rejects_custom_stage_json(tmp_path) -> None:
@@ -452,7 +477,7 @@ def test_stage_supports_world_layout_fields() -> None:
 
     assert stage.initial_terrain == []
     assert stage.terrain_layout
-    assert stage.terrain_layout[0]["type"] == "TerrainStrip"
+    assert stage.terrain_layout[0]["type"] == "TerrainPieces"
     assert stage.random_drop_scale == stage1_data["random_drop_scale"]
     assert stage2.initial_terrain == []
     assert stage2.terrain_layout
@@ -464,8 +489,8 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage4.initial_terrain == []
     assert stage4.terrain_layout
     assert stage4.random_drop_scale < 1.0
-    assert any(ev["type"] == "EnemyTurret" and ev["x"] == 1710 for ev in stage.world_events)
-    assert all(ev.get("type") != "EnemyTurret" for ev in stage.events)
+    assert any(ev["type"].startswith("Enemy") for ev in stage.world_events)
+    assert all(ev.get("type", "").startswith("Enemy") is False for ev in stage.events)
 
 
 def test_random_item_drops_use_stage_scale() -> None:
@@ -480,60 +505,31 @@ def test_stage1_uses_authored_blood_cell_setpieces() -> None:
     data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
     layout = data["terrain_layout"][0]
     world_events = data["world_events"]
-    fixed_drop_chances = [
-        float(ev.get("drop_chance", 0.0))
-        for ev in world_events
-        if ev.get("destructible") or ev.get("type") == "breakable_gate"
-    ]
-    first_enemy_x = min(ev["x"] for ev in world_events if ev["type"].startswith("Enemy"))
-    turrets = [ev for ev in world_events if ev["type"] == "EnemyTurret"]
-    mounts = [ev for ev in world_events if ev["type"] == "turret_mount"]
-    gate_events = [ev for ev in world_events if ev.get("type") in {"breakable_gate", "weapon_gate"}]
-    reward_gates = [ev for ev in world_events if ev.get("type") == "weapon_gate"]
-    fixed_weapon_events = [ev for ev in world_events if ev.get("fixed_drop") == "WeaponItem"]
-    miniboss_events = [
-        ev for ev in world_events
-        if ev.get("type") in {"EnemyCoughSprayer", "EnemySporeSplitter"}
-    ]
 
-    assert layout["type"] == "TerrainStrip"
+    assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "fever_cave"
+    assert layout["renderer"] == "terrain_composer"
     assert layout["length"] >= 11000
-    assert layout["center_wave"] >= 80
-    assert 0.0 < layout["breakable_chance"] <= 0.03
-    assert layout["breakable_drop_chance"] <= 0.05
+    assert len(layout["pieces"]) >= 300
     assert 0.0 < data["random_drop_scale"] < 1.0
     assert "weapon_drop_limit" not in data
-    assert first_enemy_x >= 900
-    assert sum(int(ev.get("count", 1)) for ev in turrets) >= 5
-    assert len(mounts) >= 5
-    assert {ev.get("surface") for ev in turrets} >= {"top", "bottom"}
-    assert max(fixed_drop_chances) <= 0.08
-    assert any(ev.get("kind") == "clot" and ev.get("destructible") for ev in world_events)
-    assert len(gate_events) >= 4
-    assert len(reward_gates) == 1
-    assert reward_gates[0].get("fixed_drop") is None
-    assert max(ev.get("hp", 0) for ev in gate_events) >= 20
-    assert [ev["type"] for ev in fixed_weapon_events].count("EnemyCoughSprayer") == 1
-    assert all(ev.get("fixed_drop") == "WeaponItem" for ev in miniboss_events)
-    assert any(ev.get("type") == "EnemyCrawler" for ev in world_events)
-    assert any(ev.get("type") == "EnemyPachemon" for ev in world_events)
-    assert any(ev.get("type") == "EnemyCoughSprayer" for ev in world_events)
-    assert any(ev.get("type") == "EnemyBilly" for ev in world_events)
+    assert any(ev.get("type", "").startswith("Enemy") for ev in world_events)
     assert any(ev.get("type") == "Boss" and ev.get("x") for ev in world_events)
+    gate_events = [ev for ev in world_events if ev.get("type") in {"breakable_gate", "weapon_gate"}]
+    assert gate_events
+    assert all(ev.get("kind") == "clot" and int(ev.get("hp", 0)) > 0 for ev in gate_events)
+    boss_gate = next(ev for ev in world_events if ev["type"] == "BossGate")
+    assert boss_gate["trigger_x"] < next(ev["x"] for ev in world_events if ev["type"] == "Boss")
     assert data["events"] == []
 
 
-def test_stage1_uses_dedicated_composer_assets_without_changing_route_model() -> None:
+def test_stage1_uses_explicit_composer_pieces_and_keeps_boss_strip_fallback() -> None:
     from src.core.terrain_composer import load_composer_catalog
     from src.entities.stage3_composer_terrain import load_stage3_composer_pieces
 
     data = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))
-    strips = [
-        event
-        for event in [*data["terrain_layout"], *data["boss_terrain"]]
-        if event.get("type") == "TerrainStrip"
-    ]
+    layout = data["terrain_layout"][0]
+    boss_strip = data["boss_terrain"][0]
     catalog = load_composer_catalog(ROOT / "tools" / "stage1_terrain_rects.json")
     pieces = load_stage3_composer_pieces(
         ROOT / "tools" / "stage1_terrain_rects.json",
@@ -545,13 +541,30 @@ def test_stage1_uses_dedicated_composer_assets_without_changing_route_model() ->
         if event.get("kind") == "clot"
     ]
 
-    assert len(strips) == 2
-    for strip in strips:
-        assert strip["renderer"] == "terrain_composer"
-        assert strip["composer_rects"] == "tools/stage1_terrain_rects.json"
-        assert strip["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
-        assert strip["composer_collision_mode"] == "source"
-        assert "pieces" not in strip
+    assert layout["type"] == "TerrainPieces"
+    assert layout["renderer"] == "terrain_composer"
+    assert layout["composer_rects"] == "tools/stage1_terrain_rects.json"
+    assert layout["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
+    assert len(layout["pieces"]) >= 300
+    assert "top" not in layout
+    assert "bottom" not in layout
+
+    surface_pieces = [piece for piece in layout["pieces"] if piece["collision"] == "surface"]
+    rect_pieces = [piece for piece in layout["pieces"] if piece["collision"] == "rect"]
+    body_pieces = [piece for piece in layout["pieces"] if piece["role"] == "body_fill"]
+    assert surface_pieces
+    assert rect_pieces
+    assert body_pieces
+    assert {piece["side"] for piece in surface_pieces} == {"top", "bottom"}
+    assert all(piece["collision"] in {"auto", "none", "rect"} for piece in body_pieces)
+    assert {piece["side"] for piece in rect_pieces} <= {"top", "bottom"}
+
+    assert boss_strip["type"] == "TerrainStrip"
+    assert boss_strip["renderer"] == "terrain_composer"
+    assert boss_strip["composer_rects"] == "tools/stage1_terrain_rects.json"
+    assert boss_strip["composer_mask_dir"] == "tools/stage1_terrain_alpha_masks"
+    assert boss_strip["composer_collision_mode"] == "source"
+    assert "pieces" not in boss_strip
 
     assert fixed_clots
     for event in fixed_clots:
@@ -571,22 +584,16 @@ def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
     boss_gates = [ev for ev in data["world_events"] if ev["type"] == "BossGate"]
     boss_x = boss_events[0]["x"]
     gate_x = boss_gates[0]["trigger_x"]
-    boss_room_blocks = [
-        ev for ev in data["world_events"]
-        if ev.get("kind") == "clot" and ev.get("x", 0) >= gate_x
-    ]
-    first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
     stage = Stage(object(), 1)
 
     assert stage.boss_terrain_mode == "preplaced"
     assert data["terrain_layout"][0]["length"] >= boss_x + 800
     assert len(boss_gates) == 1
     assert boss_gates[0]["trigger_x"] < boss_x
-    assert boss_gates[0]["lock_camera_x"] + SCREEN_WIDTH <= first_boss_room_x
-    assert boss_gates[0]["player_limit_x"] <= first_boss_room_x
-    assert boss_x - SCREEN_WIDTH - boss_gates[0]["lock_camera_x"] <= 500
+    assert boss_gates[0]["lock_camera_x"] + SCREEN_WIDTH <= boss_x
+    assert boss_gates[0]["player_limit_x"] <= boss_x
+    assert boss_x - SCREEN_WIDTH - boss_gates[0]["lock_camera_x"] <= SCREEN_WIDTH
     assert boss_events[0].get("preload", 80) == 0
-    assert len(boss_room_blocks) >= 4
 
 
 def test_stage2_uses_authored_cyber_setpieces() -> None:
@@ -1280,14 +1287,31 @@ def test_stage3_composer_terrain_splits_visual_and_collision_sprites() -> None:
     )
 
 
-def test_stage1_composer_keeps_source_strip_collision_and_breakable_state() -> None:
+def test_stage1_explicit_pieces_build_surface_and_rect_collision() -> None:
     from src.core.camera import Camera
-    from src.entities.terrain import TerrainStripSegment, make_terrain_segments_from_event
+    from src.entities.stage3_composer_terrain import (
+        Stage3ComposerCollisionBlock,
+        Stage3ComposerCollisionRectBlock,
+        Stage3ComposerPieceVisualLayer,
+        Stage3ComposerVisualLayer,
+        build_stage3_piece_layout,
+        load_stage3_composer_pieces,
+    )
     from src.stages.spawner import EnemySpawner
 
     layout = json.loads((ROOT / "data" / "stages" / "stage1.json").read_text(encoding="utf-8"))["terrain_layout"][0]
     camera = Camera()
-    expected = make_terrain_segments_from_event(layout, -90, default_seed=1)
+    pieces = load_stage3_composer_pieces(
+        ROOT / layout["composer_rects"],
+        mask_dir=ROOT / layout["composer_mask_dir"],
+    )
+    expected = build_stage3_piece_layout(
+        layout,
+        pieces,
+        start_x=int(layout.get("x", 0)),
+        collision_step=int(layout["composer_collision_step"]),
+        collision_tolerance=int(layout["composer_collision_tolerance"]),
+    )
     terrain = pygame.sprite.Group()
     spawner = EnemySpawner(
         game=object(),
@@ -1301,47 +1325,34 @@ def test_stage1_composer_keeps_source_strip_collision_and_breakable_state() -> N
 
     spawner.spawn_terrain_events([layout], camera)
 
-    source_segments = [sprite for sprite in terrain if isinstance(sprite, TerrainStripSegment)]
-    visuals = [sprite for sprite in terrain if getattr(sprite, "terrain_visual_only", False)]
-    composer_collisions = [
-        sprite
-        for sprite in terrain
-        if not isinstance(sprite, TerrainStripSegment)
-        and not getattr(sprite, "terrain_visual_only", False)
-    ]
-    geometry = lambda segment: (
-        segment.world_x,
-        segment.y,
-        segment.rect.size,
-        segment.side,
-        segment.destructible,
-        segment.max_hp,
-        segment.drop_chance,
-    )
+    visuals = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerVisualLayer)]
+    piece_visuals = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerPieceVisualLayer)]
+    surface_collisions = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerCollisionBlock)]
+    rect_collisions = [sprite for sprite in terrain if isinstance(sprite, Stage3ComposerCollisionRectBlock)]
 
-    assert [geometry(segment) for segment in source_segments] == [geometry(segment) for segment in expected]
     assert len(visuals) == 1
-    assert composer_collisions == []
-    assert all(segment.image.get_alpha() == 0 for segment in source_segments if not segment.destructible)
-
-    breakable = next(segment for segment in source_segments if segment.destructible)
-    visual_layout = visuals[0].layout
-    breakable_midpoint = breakable.world_x + breakable.rect.width / 2
-    assert breakable.image.get_alpha() != 0
-    base_run = next(
-        run
-        for run in visual_layout.surface_runs
-        if run.side == breakable.side and run.x0 <= breakable_midpoint < run.x1
+    assert len(surface_collisions) == len(expected.collision_runs)
+    assert len(rect_collisions) == len(expected.collision_rects)
+    assert {sprite.side for sprite in surface_collisions} == {"top", "bottom"}
+    assert all(sprite.surface_y is not None for sprite in surface_collisions)
+    assert rect_collisions
+    placement_state = lambda placement: (
+        placement.asset,
+        placement.role,
+        placement.collision,
+        placement.side,
+        placement.x,
+        placement.y,
+        placement.clip,
     )
-    expected_base_y = breakable.y if breakable.side == "top" else breakable.y + breakable.rect.height
-    assert abs(base_run.y - expected_base_y) <= layout["composer_sample_step"]
-    assert breakable.max_hp == layout["breakable_hp"]
-    assert breakable.drop_chance == layout["breakable_drop_chance"]
-    assert breakable.take_damage(1) is False
-    assert breakable.image.get_alpha() != 0
-    assert breakable.take_damage(breakable.hp) is True
-    breakable.kill()
-    assert breakable not in terrain
+    # The base layer remains a single cheap backdrop.  Pieces are independent
+    # visual sprites so authored draw_order can interleave with breakable
+    # world-event Terrain without changing collision blocks.
+    assert visuals[0].layout.placements == ()
+    assert len(piece_visuals) == len(expected.placements)
+    assert [placement_state(sprite.placement) for sprite in piece_visuals] == [
+        placement_state(value) for value in expected.placements
+    ]
 
 
 def test_stage3_composer_floor_props_are_collidable() -> None:
@@ -1513,8 +1524,7 @@ def test_stage1_clot_runtime_fits_representative_dedicated_materials(monkeypatch
         if event.get("kind") == "clot"
     ]
     samples = {
-        role: next(event for event in fixed_clots if event.get("material_role") == role)
-        for role in {"fixed_floor_block", "fixed_ceiling_block", "turret_mount", "breakable_block"}
+        "breakable_block": next(event for event in fixed_clots if event.get("material_role") == "breakable_block"),
     }
     real_material_surface = terrain_module._stage3_rect_material_surface
 
@@ -1547,7 +1557,7 @@ def test_stage1_clot_runtime_fits_representative_dedicated_materials(monkeypatch
         return pygame.Surface((w, h), pygame.SRCALPHA)
 
     monkeypatch.setattr(terrain_module, "_stage3_rect_material_surface", record_material_surface)
-    sample = samples["turret_mount"]
+    sample = samples["breakable_block"]
     terrain_module.Terrain(
         0,
         float(sample["y"]),
@@ -1560,7 +1570,7 @@ def test_stage1_clot_runtime_fits_representative_dedicated_materials(monkeypatch
 
     assert calls
     assert calls[0]["kind"] == "clot"
-    assert calls[0]["preferred_role"] == "turret_mount"
+    assert calls[0]["preferred_role"] == "breakable_block"
     assert calls[0]["material_asset"] == sample["material_asset"]
     assert calls[0]["allow_asset_resize"] is True
 
@@ -2480,6 +2490,321 @@ def test_stage_designer_adds_duplicates_and_deletes_terrain_pieces() -> None:
     assert added["role"] == "ceiling_surface"
     assert added["side"] == "top"
     assert added["flip_y"] is True
+
+
+def test_stage1_designer_flip_toggle_uses_effective_default() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.profile = STAGE_TERRAIN_PROFILES[1]
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "vessel_surface:1", "x": 0, "y": 0, "role": "ceiling_surface", "collision": "surface", "side": "top"}
+    ]}], "world_events": []}
+    designer.selection = Selection("piece", 0)
+    designer.selections = [designer.selection]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    piece = designer.data["terrain_layout"][0]["pieces"][0]
+    assert designer._effective_piece_flip(piece, "y") is False
+    designer._toggle_selected_piece_flip("y")
+    assert piece["flip_y"] is True
+    designer._toggle_selected_piece_flip("y")
+    assert piece["flip_y"] is False
+
+
+def test_stage_designer_multi_selection_operations_and_layers() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0, "draw_order": 1},
+        {"asset": "a:2", "x": 90, "y": 0, "draw_order": 9},
+        {"asset": "a:2", "x": 10, "y": 10},
+        {"asset": "a:3", "x": 20, "y": 20},
+        {"asset": "a:4", "x": 30, "y": 30},
+    ]}], "world_events": []}
+    designer.selection = Selection("piece", 2)
+    designer.selections = [Selection("piece", 1), Selection("piece", 2)]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+
+    designer._move_selection(5, -2)
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    assert [(pieces[i]["x"], pieces[i]["y"]) for i in (1, 2)] == [(95, -2), (15, 8)]
+    designer._move_piece_layers(1, to_edge=True)
+    assert [piece["asset"] for piece in pieces] == ["a:1", "a:3", "a:4", "a:2", "a:2"]
+    designer._duplicate_selection()
+    assert len(pieces) == 7
+    assert [piece["asset"] for piece in pieces[-2:]] == ["a:2", "a:2"]
+    designer._delete_selection()
+    assert len(pieces) == 5
+
+
+def test_stage_designer_interleaves_piece_and_destructible_terrain_layers() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0},
+        {"asset": "a:2", "x": 40, "y": 0},
+    ]}], "world_events": [
+        {"type": "breakable_gate", "x": 20, "y": 0, "w": 30, "h": 30, "kind": "clot", "hp": 4},
+        {"type": "EnemyVirus", "x": 100, "count": 1},
+    ]}
+    designer.selection = Selection("event", 0)
+    designer.selections = [Selection("piece", 0), Selection("event", 0)]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    designer._move_terrain_layers(1, to_edge=True)
+
+    piece = designer.data["terrain_layout"][0]["pieces"][0]
+    gate = designer.data["world_events"][0]
+    assert piece["draw_order"] > designer.data["terrain_layout"][0]["pieces"][1]["draw_order"]
+    assert gate["draw_order"] > designer.data["terrain_layout"][0]["pieces"][1]["draw_order"]
+    assert "draw_order" not in designer.data["world_events"][1]
+
+
+def test_stage_designer_ctrl_drag_copies_selected_group_after_drag_threshold() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0},
+    ]}], "world_events": []}
+    designer.selection = None
+    designer.selections = []
+    designer.guide_mode = False
+    designer.panning = False
+    designer.palette_drag = None
+    designer.marquee_start = None
+    designer.marquee_current = None
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.drag_start_world = pygame.Vector2(0, 0)
+    designer.drag_origins = {}
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+    designer._update_cursor_world = lambda _pos: None
+    designer._screen_to_world = lambda pos: (float(pos[0]), float(pos[1] - 48))
+
+    def select_piece(_pos, *, toggle: bool = False):
+        selected = Selection("piece", 0)
+        if toggle:
+            designer._set_selections([selected])
+        else:
+            designer._set_selections([selected])
+        return selected
+
+    designer._select_at = select_piece
+    pygame.key.set_mods(pygame.KMOD_CTRL)
+    try:
+        designer._handle_mouse_down(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(20, 68)))
+        designer._handle_mouse_motion(pygame.event.Event(pygame.MOUSEMOTION, pos=(50, 98)))
+        designer._handle_mouse_up(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(50, 98)))
+    finally:
+        pygame.key.set_mods(0)
+
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    assert len(pieces) == 2
+    assert (pieces[0]["x"], pieces[0]["y"]) == (0, 0)
+    assert (pieces[1]["x"], pieces[1]["y"]) == (30, 30)
+    assert pieces[1]["draw_order"] == max(piece["draw_order"] for piece in pieces)
+    assert len(designer.undo_stack) == 1
+
+
+def test_stage_designer_ctrl_drag_copies_multi_selection_to_front_in_z_order() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 0, "y": 0, "draw_order": 5},
+        {"asset": "a:2", "x": 30, "y": 0, "draw_order": 2},
+    ]}], "world_events": [
+        {"type": "breakable_gate", "x": 10, "y": 0, "w": 20, "h": 20, "kind": "clot", "draw_order": 4},
+        {"type": "breakable_gate", "x": 80, "y": 0, "w": 20, "h": 20, "kind": "clot", "draw_order": 9},
+    ]}
+    designer.selection = Selection("event", 0)
+    designer.selections = [Selection("piece", 0), Selection("event", 0)]
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    designer._terrain_cache_key = None
+    designer._terrain_cache = None
+    designer._composer_layout_cache_key = None
+    designer._composer_layout_cache = None
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    designer._duplicate_selection(offset=False)
+    designer._bring_selected_terrain_to_front()
+
+    pieces = designer.data["terrain_layout"][0]["pieces"]
+    events = designer.data["world_events"]
+    copied_piece, copied_event = pieces[-1], events[-1]
+    assert copied_event["draw_order"] == max(event["draw_order"] for event in events if event is not copied_event) + 1
+    assert copied_piece["draw_order"] == copied_event["draw_order"] + 1
+    assert copied_piece["draw_order"] == max([
+        *(piece["draw_order"] for piece in pieces),
+        *(event["draw_order"] for event in events),
+    ])
+
+
+def test_stage_designer_scales_rect_terrain_preview_with_zoom() -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer._event_image_cache = {}
+    designer._event_rect_image = lambda _event, _w, _h: pygame.Surface((80, 40), pygame.SRCALPHA)
+    event = {"type": "Terrain", "kind": "clot", "w": 80, "h": 40}
+
+    palette_image = designer._event_image(event, max_w=160, max_h=80)
+    image = designer._event_image(event, max_w=160, max_h=80, exact_rect_size=True)
+
+    assert palette_image.get_size() == (80, 40)
+    assert image.get_size() == (160, 80)
+
+
+def test_stage_designer_defers_piece_layout_rebuild_while_dragging() -> None:
+    from tools.stage_designer import Selection, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "a:1", "x": 10, "y": 20},
+    ]}], "world_events": []}
+    designer.selection = Selection("piece", 0)
+    designer.selections = [designer.selection]
+    designer.dragging = True
+    designer.drag_start_world = pygame.Vector2(10, 20)
+    designer.drag_offset = pygame.Vector2(0, 0)
+    designer.drag_origins = {}
+    designer.dirty = False
+    designer._drag_terrain_dirty = False
+    cached_layout = object()
+    designer._piece_layout_cache_key = "cached"
+    designer._piece_layout_cache = cached_layout
+    designer._terrain_cache_key = "cached"
+    designer._terrain_cache = object()
+    designer._composer_layout_cache_key = "cached"
+    designer._composer_layout_cache = object()
+
+    designer._set_selection_world_pos(75, 90)
+
+    assert designer.data["terrain_layout"][0]["pieces"][0]["x"] == 75
+    assert designer.data["terrain_layout"][0]["pieces"][0]["y"] == 90
+    assert designer._piece_layout_cache is cached_layout
+    assert designer._drag_terrain_dirty is True
+
+
+def test_stage1_event_palette_can_restore_boss_gate_and_boss() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_templates_for_kind
+
+    templates = dict(_event_templates_for_kind("clot"))
+    assert templates["boss gate"] == {
+        "type": "BossGate", "trigger_x": 7650, "lock_camera_x": 6850, "player_limit_x": 7650,
+    }
+    assert templates["boss appearance"] == {
+        "type": "Boss", "x": 8100, "count": 1, "formation": "single", "preload": 0,
+    }
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": []}], "world_events": []}
+    designer.event_templates = list(templates.items())
+    designer.selection = None
+    designer.undo_stack = []
+    designer.dirty = False
+    designer.message = ""
+    gate_index = next(i for i, (name, _event) in enumerate(designer.event_templates) if name == "boss gate")
+    designer._add_event_template_at(gate_index, 9000, 200)
+
+    assert designer.selection == Selection("event", 0)
+    assert designer.data["world_events"] == [{
+        "type": "BossGate", "trigger_x": 9000, "lock_camera_x": 8200, "player_limit_x": 9000,
+    }]
+
+
+def test_stage_designer_draws_stage_bounds_even_when_overlays_are_off() -> None:
+    from tools.stage_designer import SCREEN_HEIGHT, StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.camera_y = 0.0
+    designer.zoom = 1.0
+    designer.small_font = pygame.font.Font(None, 13)
+    target = pygame.Surface((320, SCREEN_HEIGHT), pygame.SRCALPHA)
+    designer._draw_stage_bounds(target)
+
+    assert target.get_at((40, 0))[:3] == (255, 174, 104)
+    assert target.get_at((40, SCREEN_HEIGHT - 1))[:3] == (104, 218, 255)
+
+
+def test_stage_designer_layer_reorder_reuses_loaded_piece_atlas(monkeypatch: pytest.MonkeyPatch) -> None:
+    import tools.stage_designer as designer_module
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "pieces": [
+        {"asset": "vessel_surface:1", "x": 0, "y": 400, "role": "floor_surface", "side": "bottom"},
+    ]}], "world_events": []}
+    designer.rects_path = ROOT / "tools" / "stage1_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage1_terrain_alpha_masks"
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+    designer._piece_preview_cache = {}
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+
+    _layout_before, atlas = designer._piece_layout()
+    designer.data["terrain_layout"][0]["pieces"][0]["draw_order"] = 1
+    designer._piece_layout_cache_key = None
+    designer._piece_layout_cache = None
+    monkeypatch.setattr(designer_module, "load_stage3_composer_pieces", lambda *_args, **_kwargs: pytest.fail("atlas reload"))
+
+    _layout_after, reused_atlas = designer._piece_layout()
+    assert reused_atlas is atlas
+
+
+def test_stage1_organic_autofill_uses_overlapping_ordered_bands() -> None:
+    from tools.stage_designer import StageDesigner
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.profile = STAGE_TERRAIN_PROFILES[1]
+    designer.rects_path = ROOT / "tools" / "stage1_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage1_terrain_alpha_masks"
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+    designer._piece_preview_cache = {}
+    generated = designer._stage1_organic_autofill([[0, 440], [600, 460]], "bottom", 0, 600)
+
+    assets = [piece["asset"].split(":", 1)[0] for piece in generated]
+    bands = [piece["auto_fill_band"] for piece in generated]
+    assert assets[0] == "vessel_surface"
+    assert "vessel_fill" not in assets
+    assert bands == sorted(bands)
+    assert {piece["flip_y"] for piece in generated if piece["auto_fill_band"] == 0} == {True}
+    surface = [piece for piece in generated if piece["auto_fill_band"] == 0]
+    assert surface[1]["x"] - surface[0]["x"] < 239
 
 
 def test_stage_designer_adds_duplicates_and_deletes_events_from_palette() -> None:

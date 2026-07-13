@@ -306,6 +306,7 @@ class Terrain(pygame.sprite.Sprite):
         surface_anchor: str | None = None,
         material_role: str | None = None,
         material_asset: str | None = None,
+        draw_order: int | None = None,
     ) -> None:
         super().__init__()
         self.world_x = float(world_x)
@@ -323,6 +324,9 @@ class Terrain(pygame.sprite.Sprite):
         )
         self._material_role = material_role
         self._material_asset = material_asset
+        # None preserves legacy Group insertion order.  Authored terrain can
+        # opt into an explicit shared order with TerrainPieces.
+        self.draw_order = draw_order
         self.image   = self._make_surface(
             w, h, kind,
             destructible=destructible,

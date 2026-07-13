@@ -69,6 +69,7 @@ class Stage3PlacedPiece:
     role: str
     collision: str = "auto"
     asset: str = ""
+    draw_order: int = 0
 
 
 @dataclass(frozen=True)
@@ -353,6 +354,7 @@ def _place_piece(
     role: str,
     collision: str = "auto",
     asset: str = "",
+    draw_order: int = 0,
     allow_partial: bool = True,
 ) -> None:
     image_rect = pygame.Rect(x, y, image.get_width(), image.get_height())
@@ -361,7 +363,7 @@ def _place_piece(
     clipped = image_rect.clip(clip)
     if clipped.width <= 0 or clipped.height <= 0:
         return
-    placements.append(Stage3PlacedPiece(image, x, y, clipped, side, role, collision, asset))
+    placements.append(Stage3PlacedPiece(image, x, y, clipped, side, role, collision, asset, draw_order))
 
 
 def _surface_band_depth(pieces: dict[str, list[Stage3ComposerPiece]]) -> int:
@@ -704,11 +706,25 @@ def _default_piece_side(role: str, collision: str) -> str:
 
 
 def _piece_image(piece: Stage3ComposerPiece, raw: dict[str, Any], role: str, side: str) -> pygame.Surface:
-    flip_x = bool(raw.get("flip_x", False))
-    flip_y = bool(raw.get("flip_y", role == "ceiling_surface" or (role == "body_fill" and side == "top")))
+    flip_x = piece_effective_flip(raw, role, side, "x")
+    flip_y = piece_effective_flip(raw, role, side, "y")
     if not flip_x and not flip_y:
         return piece.image
     return pygame.transform.flip(piece.image, flip_x, flip_y)
+
+
+def piece_effective_flip(
+    raw: dict[str, Any], role: str, side: str, axis: str, *, default_y: bool | None = None
+) -> bool:
+    """Return the visible flip, including the legacy implicit Y default."""
+    key = f"flip_{axis}"
+    if key in raw:
+        return bool(raw[key])
+    if axis == "x":
+        return False
+    if default_y is not None:
+        return default_y
+    return role == "ceiling_surface" or (role == "body_fill" and side == "top")
 
 
 def _raw_piece_collision(raw: dict[str, Any]) -> str:
@@ -752,6 +768,7 @@ def build_stage3_piece_layout(
             role=role,
             collision=collision,
             asset=_asset_id(piece),
+            draw_order=int(raw.get("draw_order", i)),
             allow_partial=False,
         )
 
@@ -865,6 +882,7 @@ def draw_stage3_composer_layout(
     *,
     camera_x: float,
     debug_lines: bool = False,
+    skip_placement_indices: frozenset[int] | None = None,
 ) -> None:
     target_rect = target.get_rect()
     base_color = (28, 33, 36, 232)
@@ -882,7 +900,13 @@ def draw_stage3_composer_layout(
             area_h = max(0, run.y - layout.surface_depth)
             target.blit(base, (sx, 0), area=pygame.Rect(0, 0, width, area_h))
 
-    for placement in layout.placements:
+    skipped = skip_placement_indices or frozenset()
+    for placement_index, placement in sorted(
+        enumerate(layout.placements),
+        key=lambda item: item[1].draw_order,
+    ):
+        if placement_index in skipped:
+            continue
         if placement.clip.right < camera_x or placement.clip.left > camera_x + target_rect.width:
             continue
         _blit_with_world_clip(
@@ -1053,6 +1077,7 @@ class Stage3ComposerVisualLayer(pygame.sprite.Sprite):
         self.image = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(0, 0))
         self._last_camera_x: int | None = None
+        self.draw_order = -1_000_000
 
     def update(self, dt: float, camera: object) -> None:
         camera_x = int(round(float(getattr(camera, "x", 0.0))))
@@ -1066,6 +1091,29 @@ class Stage3ComposerVisualLayer(pygame.sprite.Sprite):
 
     def is_off_left(self, camera: object) -> bool:
         return False
+
+
+class Stage3ComposerPieceVisualLayer(pygame.sprite.Sprite):
+    """A single authored TerrainPieces visual, independently layerable."""
+
+    terrain_visual_only = True
+
+    def __init__(self, placement: Stage3PlacedPiece) -> None:
+        super().__init__()
+        self.placement = placement
+        self.image = placement.image
+        self.world_x = float(placement.x)
+        self.y = float(placement.y)
+        self.draw_order = placement.draw_order
+        self.rect = self.image.get_rect(topleft=(int(self.world_x), int(self.y)))
+
+    def update(self, dt: float, camera: object) -> None:
+        to_screen_x = getattr(camera, "to_screen_x", None)
+        sx = to_screen_x(self.world_x) if callable(to_screen_x) else self.world_x - float(getattr(camera, "x", 0.0))
+        self.rect.topleft = (int(sx), int(self.y))
+
+    def is_off_left(self, camera: object) -> bool:
+        return self.world_x + self.rect.width < float(getattr(camera, "x", 0.0))
 
 
 class Stage3ComposerCollisionBlock(pygame.sprite.Sprite):
@@ -1162,7 +1210,16 @@ def make_stage3_composer_terrain_from_pieces(
         collision_step=collision_step,
         collision_tolerance=collision_tolerance,
     )
-    sprites: list[pygame.sprite.Sprite] = [Stage3ComposerVisualLayer(layout)]
+    # Keep the opaque subsurface base in one cheap layer, but expose each
+    # authored piece as a sprite so it can be interleaved with destructible
+    # Terrain world-events through draw_order.  Collision sprites remain
+    # transparent and therefore do not affect visual ordering.
+    base_layout = Stage3ComposerLayout(
+        layout.surface_runs, (), layout.collision_runs, layout.collision_rects,
+        layout.surface_depth, layout.bounds,
+    )
+    sprites: list[pygame.sprite.Sprite] = [Stage3ComposerVisualLayer(base_layout)]
+    sprites.extend(Stage3ComposerPieceVisualLayer(placement) for placement in layout.placements)
     sprites.extend(Stage3ComposerCollisionBlock(run) for run in layout.collision_runs)
     sprites.extend(Stage3ComposerCollisionRectBlock(rect) for rect in layout.collision_rects)
     return sprites
