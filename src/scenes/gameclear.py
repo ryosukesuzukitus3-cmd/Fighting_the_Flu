@@ -42,16 +42,16 @@ class GameClearScene(Scene):
             self._go_credits()
 
     def _go_credits(self) -> None:
-        """エンドロール＋用法・用量注意 → タイトルへ。"""
+        """エンドロール＋用法・用量注意 → 注意書き（フィクション表記）→ タイトルへ。"""
         from src.scenes.credits_roll import CreditsRollScene
-        from src.scenes.title import TitleScene
+        from src.scenes.disclaimer_scene import DisclaimerScene
         from src.scenes.story_flow import credits_pages
 
-        def _to_title() -> None:
-            self.game.change_scene(TitleScene(self.game))
+        def _to_disclaimer() -> None:
+            self.game.change_scene(DisclaimerScene(self.game))
 
         self.game.change_scene(CreditsRollScene(
-            self.game, credits_pages(), _to_title,
+            self.game, credits_pages(), _to_disclaimer,
         ))
 
     def draw(self, screen: pygame.Surface) -> None:

@@ -96,12 +96,13 @@ class TitleScene(Scene):
                 self._debug_jump_gameclear()
 
     def _debug_jump_credits(self) -> None:
-        """スタッフロール（エンドロール）へ直行。確認用。"""
+        """スタッフロール（エンドロール）へ直行。確認用。本編同様、終了後は注意書きへ。"""
         from src.scenes.credits_roll import CreditsRollScene
+        from src.scenes.disclaimer_scene import DisclaimerScene
         from src.scenes.story_flow import credits_pages
         self.game.change_scene(CreditsRollScene(
             self.game, credits_pages(),
-            lambda: self.game.change_scene(TitleScene(self.game)),
+            lambda: self.game.change_scene(DisclaimerScene(self.game)),
         ))
 
     def _debug_jump_gameclear(self) -> None:
