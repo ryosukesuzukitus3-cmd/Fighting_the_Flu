@@ -65,6 +65,8 @@ Stage1 レイアウトの戻りどころ:
 - 地形: 黒いデータ塊、壊れたパネル、浮遊する足場。
 - セットピース: ノイズゲート、通信障害の壁、画面端ではなく通路内に置かれた崩落ブロック。
 
+主経路は188個の `TerrainPieces.pieces` で構成し、Stage2素材の種類・座標・衝突・反転を `stage-designer --stage 2` から個別に調整する。Boss用fallbackの `TerrainStrip` と、破壊可能な `world_events` は従来どおり残す。
+
 ## Stage3: 審査ゲート / 労働要塞
 
 ![Stage3 reference](assets/stage_concepts/stage3_labor_fortress_reference.png)
