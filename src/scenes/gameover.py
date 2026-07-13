@@ -23,7 +23,7 @@ class GameOverScene(Scene):
         pass
 
     def _do_continue(self) -> None:
-        """現在のステージをステージ開始時のウェポン状態で再スタート。"""
+        """現在のステージをステージ開始時のウェポン・先輩強化状態で再スタート。"""
         self.game.shared.lives -= 1
         stage = self._stage
         wdata = self.game.shared.stage_start_weapon
@@ -34,6 +34,9 @@ class GameOverScene(Scene):
         else:
             self.game.shared.carry_hp     = PLAYER_MAX_HP
             self.game.shared.carry_weapon = None
+        # 先輩の強化もステージ開始時の状態で復元（死亡でリセットさせない）
+        cdata = self.game.shared.stage_start_companion
+        self.game.shared.carry_companion = dict(cdata) if cdata else None
         from src.scenes.game_scene import GameScene
         self.game.change_scene(GameScene(self.game, stage_id=stage))
 

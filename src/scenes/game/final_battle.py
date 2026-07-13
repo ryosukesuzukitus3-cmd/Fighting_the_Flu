@@ -263,6 +263,10 @@ class FinalBattleDirector:
             from src.entities.companion import Karonaru
             scene._companion = Karonaru(scene.game, popup_fn=scene._spawn_popup,
                                         spawn_heal_fn=scene._companion_spawn_heal)
+            # ブラックホール前の強化状態を引き継いで復帰する
+            snap = scene.game.shared.stage_start_companion
+            if snap:
+                scene._companion.restore_state(snap)
         companion = scene._companion
         arrival_y = float(scene.player.rect.centery) + 18.0
         end_x = max(62.0, float(scene.player.rect.centerx) - 76.0)
@@ -343,6 +347,9 @@ class FinalBattleDirector:
             from src.entities.companion import Karonaru
             scene._companion = Karonaru(scene.game, popup_fn=scene._spawn_popup,
                                         spawn_heal_fn=scene._companion_spawn_heal)
+            snap = scene.game.shared.stage_start_companion
+            if snap:
+                scene._companion.restore_state(snap)
             scene._companion.sx = float(scene.player.rect.centerx) - 50.0
             scene._companion.sy = float(scene.player.rect.centery) + 16.0
         companion = scene._companion

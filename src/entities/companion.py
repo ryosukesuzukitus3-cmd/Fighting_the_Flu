@@ -242,6 +242,32 @@ class Karonaru(pygame.sprite.Sprite):
         elif key == "kt_magnet":
             self.lv_magnet = min(self.lv_magnet + 1, _KT_MAX_LEVEL)
 
+    def snapshot(self) -> dict:
+        """強化状態の引き継ぎ用スナップショット（weapon.snapshot と同じ役割）。
+
+        シーン再生成（ステージ遷移・コンティニュー・最終決戦の復帰）で
+        インスタンスが作り直されても強化がリセットされないようにする。
+        """
+        return {
+            "lv_hp":     self.lv_hp,
+            "lv_shot":   self.lv_shot,
+            "lv_supply": self.lv_supply,
+            "lv_magnet": self.lv_magnet,
+            "stock":     self.stock,
+        }
+
+    def restore_state(self, data: dict) -> None:
+        """スナップショットから強化状態を復元する（HPは新しい最大値で全快）。"""
+        self.lv_hp     = max(0, min(int(data.get("lv_hp", 0)), _KT_MAX_LEVEL))
+        self.lv_shot   = max(0, min(int(data.get("lv_shot", 0)), _KT_MAX_LEVEL))
+        self.lv_supply = max(0, min(int(data.get("lv_supply", 0)), _KT_MAX_LEVEL))
+        self.lv_magnet = max(0, min(int(data.get("lv_magnet", 0)), _KT_MAX_LEVEL))
+        self.stock     = max(0, int(data.get("stock", 0)))
+        self.max_hp = _HP_BY_LEVEL[self.lv_hp]
+        self.hp     = self.max_hp
+        if self.lv_supply > 0:
+            self._supply_timer = self._supply_interval()
+
     def is_upgrade_available(self, key: str) -> bool:
         return {
             "kt_hp":     self.lv_hp,
@@ -335,6 +361,8 @@ class Karonaru(pygame.sprite.Sprite):
         self._return_timer = _RETURN_TIME
         self._blink_visible = True
         self.game.sound.play_se_alias("SE_KARONARU_RETIRE")
+        # 無告知で消えると「死んだ？」に見えるため、復帰予定を明示する
+        self._popup(f"先輩 撤退！（{int(_RETURN_TIME)}秒で復帰）", (255, 160, 120))
 
     def _revive(self, player) -> None:
         self.hp             = self.max_hp
@@ -343,6 +371,7 @@ class Karonaru(pygame.sprite.Sprite):
         self._blink_visible = True
         self._blink_timer   = 0.0
         self.reseed_trail(player)
+        self._popup("先輩 復帰にょ", (150, 235, 170))
 
     # ── 描画 ─────────────────────────────────────────────────────
 

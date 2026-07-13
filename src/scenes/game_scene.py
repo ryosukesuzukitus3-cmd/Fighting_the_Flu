@@ -252,6 +252,8 @@ class GameScene(
             self.game.shared.lives      = 3
             self.game.shared.carry_hp     = None
             self.game.shared.carry_weapon = None
+            self.game.shared.carry_companion       = None
+            self.game.shared.stage_start_companion = None
             self.game.playlog.begin_run()
 
         if not self._is_debug_stage:
@@ -263,6 +265,17 @@ class GameScene(
             self.player.restore_state(carry[0], carry[1])
 
         self.game.shared.stage_start_weapon = self.player.weapon.snapshot()
+
+        # 先輩の強化引き継ぎ（weapon と同じ流れ。シーン再生成でリセットさせない）
+        comp_carry = self.game.shared.carry_companion
+        self.game.shared.carry_companion = None
+        if self._companion is not None:
+            if comp_carry:
+                self._companion.restore_state(comp_carry)
+            self.game.shared.stage_start_companion = self._companion.snapshot()
+        elif comp_carry:
+            # 先輩不在ステージ（S4）でも、最終決戦の復帰時に引き継げるよう保持する
+            self.game.shared.stage_start_companion = comp_carry
 
         _next_stage_path = _Path("data") / "stages" / f"stage{self._stage_id + 1}.json"
         _is_final_stage  = not _next_stage_path.exists()
