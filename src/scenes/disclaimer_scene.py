@@ -19,7 +19,6 @@ _FADE_OUT = 0.7   # 秒
 class DisclaimerScene(Scene):
     def on_enter(self) -> None:
         self._font_body  = self.game.resources.pixelfont(22)
-        self._font_small = self.game.resources.pixelfont(17)
         self._timer      = 0.0
         self._leave_t    = -1.0   # 負＝まだ退場していない
 
@@ -47,18 +46,11 @@ class DisclaimerScene(Scene):
         else:
             alpha = min(255, int(255 * (self._timer / _FADE_IN)))
 
-        *body, punch = BOOT_DISCLAIMER
         line_h = self._font_body.get_linesize() + 10
-        total_h = line_h * len(body) + self._font_small.get_linesize() + 26
+        total_h = line_h * len(BOOT_DISCLAIMER)
         y = (SCREEN_HEIGHT - total_h) // 2
-        for line in body:
+        for line in BOOT_DISCLAIMER:
             surf = self._font_body.render(line, True, (215, 210, 200))
             surf.set_alpha(alpha)
             screen.blit(surf, (SCREEN_WIDTH // 2 - surf.get_width() // 2, y))
             y += line_h
-        # オチの行は小さく・暗く・少し遅れて出す
-        punch_alpha = max(0, alpha - 110) if self._leave_t < 0 and self._timer < _FADE_IN + 1.0 else alpha
-        if self._timer >= _FADE_IN + 0.8 or self._leave_t >= 0:
-            surf = self._font_small.render(punch, True, (140, 135, 125))
-            surf.set_alpha(punch_alpha)
-            screen.blit(surf, (SCREEN_WIDTH // 2 - surf.get_width() // 2, y + 16))

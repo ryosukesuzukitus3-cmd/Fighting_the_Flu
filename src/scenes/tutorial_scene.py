@@ -229,7 +229,7 @@ class TutorialScene(Scene):
                 self.game.sound.play_se("music/se/メニュー操作SE：決定.mp3", volume=0.6)
                 self._choosing = False
                 if self._choice == 0:
-                    self._start_move()
+                    self._say(script.TUTORIAL["accept"], then=self._start_move)
                 else:
                     self._say(script.TUTORIAL["skip"], then=self._on_complete)
             return

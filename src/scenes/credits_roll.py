@@ -13,7 +13,8 @@ _FAST_MULT = 3.6
 _SIDE_PAD = 72
 _FADEOUT_MS = 2400
 _FADEOUT_SEC = _FADEOUT_MS / 1000.0
-_FINAL_HOLD_SEC = 6.0         # 最終行（Thank you for playing）を中央で保持する秒数
+_FINAL_HOLD_SEC = 6.0         # 他が流れ切った後、最終行を中央で保持する秒数
+_FINAL_GAP_ENTRIES = 4        # 最終行（Thank you）の手前に足す空行数（少し離す）
 
 # エンドロール記法（script.py CREDITS / POSTCREDIT のテキスト先頭マーカー）
 _TITLE_MARK = "■"             # セクション見出し（大・金・下線）
@@ -39,9 +40,10 @@ class CreditsRollScene(Scene):
         self._hint_font = self.game.resources.pixelfont(16)
         self._entries: list[tuple[str, str, tuple[int, int, int]]] = []
         self._build_entries()
+        self._insert_final_gap()
         self._content_h = sum(self._entry_height(kind, text) for text, kind, _ in self._entries)
         self._scroll_y = float(SCREEN_HEIGHT + 70)
-        self._stop_y = self._final_stop_scroll_y()
+        self._init_final_entry_geometry()
         self._hold_timer = 0.0
         self._timer = 0.0
         self._finished = False
@@ -67,9 +69,10 @@ class CreditsRollScene(Scene):
             self._finish(fadeout=False)
             return
 
-        # 最終行（Thank you for playing）が画面中央に達したらスクロールを止めて保持
-        if self._scroll_y <= self._stop_y:
-            self._scroll_y = self._stop_y
+        # Thank you for playing（最終行）だけ画面中央で止まり、他はそのまま
+        # 流れて消えていく（描画側で最終行の y をクランプ）。他が流れ切ったら
+        # 最終行を単独で保持 → 時間経過 or キーでフェードアウト。
+        if self._scroll_y + self._final_prefix_h < -80:
             self._hold_timer += dt
             if (self._hold_timer >= _FINAL_HOLD_SEC
                     or inp.is_just_pressed(pygame.K_RETURN)
@@ -80,21 +83,23 @@ class CreditsRollScene(Scene):
         speed = _SCROLL_SPEED
         if inp.is_pressed(pygame.K_RETURN) or inp.is_pressed(pygame.K_SPACE):
             speed *= _FAST_MULT
-        self._scroll_y = max(self._stop_y, self._scroll_y - speed * dt)
+        self._scroll_y -= speed * dt
 
     def draw(self, screen: pygame.Surface) -> None:
         screen.blit(self._bg, (0, 0))
         self._draw_slow_rays(screen)
 
         y = self._scroll_y
-        for text, kind, color in self._entries:
+        for i, (text, kind, color) in enumerate(self._entries):
             h = self._entry_height(kind, text)
-            if text and -70 <= y <= SCREEN_HEIGHT + 40:
+            # 最終行（Thank you for playing）だけ中央より上へは行かない
+            draw_y = max(y, self._final_center_y) if i == self._final_idx else y
+            if text and -70 <= draw_y <= SCREEN_HEIGHT + 40:
                 font = self._font_for(kind, text)
                 surf = font.render(text, True, color)
-                screen.blit(surf, (SCREEN_WIDTH // 2 - surf.get_width() // 2, int(y)))
+                screen.blit(surf, (SCREEN_WIDTH // 2 - surf.get_width() // 2, int(draw_y)))
                 if kind == "title":
-                    line_y = int(y + surf.get_height() + 12)
+                    line_y = int(draw_y + surf.get_height() + 12)
                     pygame.draw.line(screen, (190, 160, 70), (190, line_y), (SCREEN_WIDTH - 190, line_y), 1)
             y += h
 
@@ -102,19 +107,34 @@ class CreditsRollScene(Scene):
         hint = self._hint_font.render("ENTER: FAST   X: TITLE", True, (130, 125, 110))
         screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 18, SCREEN_HEIGHT - 28))
 
-    def _final_stop_scroll_y(self) -> float:
-        """最終の実エントリが画面中央に来る scroll_y を返す。"""
-        last_idx = None
-        for i, (text, _, _) in enumerate(self._entries):
-            if text:
-                last_idx = i
-        if last_idx is None:
-            return float(-self._content_h - 200)   # 実質、停止なし
-        prefix = sum(self._entry_height(kind, text)
-                     for text, kind, _ in self._entries[:last_idx])
-        text, kind, _ = self._entries[last_idx]
+    def _last_text_index(self) -> int | None:
+        for i in range(len(self._entries) - 1, -1, -1):
+            if self._entries[i][0]:
+                return i
+        return None
+
+    def _insert_final_gap(self) -> None:
+        """最終行（Thank you）の手前に空行を足して、少し離す。"""
+        idx = self._last_text_index()
+        if idx is None:
+            return
+        gap = [("", "space", DEFAULT_TEXT_COLOR)] * _FINAL_GAP_ENTRIES
+        self._entries[idx:idx] = gap
+
+    def _init_final_entry_geometry(self) -> None:
+        """最終行のインデックス・手前の高さ合計・中央クランプ位置を確定する。"""
+        idx = self._last_text_index()
+        if idx is None:
+            self._final_idx = -1
+            self._final_prefix_h = self._content_h
+            self._final_center_y = 0.0
+            return
+        self._final_idx = idx
+        self._final_prefix_h = sum(self._entry_height(kind, text)
+                                   for text, kind, _ in self._entries[:idx])
+        text, kind, _ = self._entries[idx]
         font = self._font_for(kind, text)
-        return float(SCREEN_HEIGHT // 2 - font.get_linesize() // 2 - prefix)
+        self._final_center_y = float(SCREEN_HEIGHT // 2 - font.get_linesize() // 2)
 
     def _finish(self, *, fadeout: bool) -> None:
         if self._finished:
