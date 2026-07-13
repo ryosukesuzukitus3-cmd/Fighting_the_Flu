@@ -598,6 +598,7 @@ def test_stage1_preplaces_boss_room_before_boss_alert() -> None:
 
 def test_stage2_uses_authored_cyber_setpieces() -> None:
     from src.core.constants import SCREEN_WIDTH
+    from src.entities.stage3_composer_terrain import build_stage3_piece_layout, load_stage3_composer_pieces
     from src.stages.stage import Stage
 
     data = json.loads((ROOT / "data" / "stages" / "stage2.json").read_text(encoding="utf-8"))
@@ -625,13 +626,29 @@ def test_stage2_uses_authored_cyber_setpieces() -> None:
     assert data["events"] == []
     assert data["boss_terrain_mode"] == "preplaced"
     assert 0.0 < data["random_drop_scale"] < 1.0
-    assert layout["type"] == "TerrainStrip"
+    pieces = layout["pieces"]
+    surface_pieces = [piece for piece in pieces if piece.get("collision") == "surface"]
+    assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "meme_static"
     assert layout["renderer"] == "terrain_composer"
     assert layout["composer_rects"] == "tools/stage2_terrain_rects.json"
     assert layout["composer_mask_dir"] == "tools/stage2_terrain_alpha_masks"
     assert layout["length"] >= boss_x + 800
-    assert layout["breakable_drop_chance"] <= 0.05
+    assert len(pieces) >= 150
+    assert surface_pieces
+    assert {piece.get("side") for piece in surface_pieces} == {"top", "bottom"}
+    assert all({"asset", "x", "y", "role", "collision"} <= set(piece) for piece in pieces)
+    composer_layout = build_stage3_piece_layout(
+        layout,
+        load_stage3_composer_pieces(
+            ROOT / layout["composer_rects"],
+            mask_dir=ROOT / layout["composer_mask_dir"],
+        ),
+        collision_step=int(layout["composer_collision_step"]),
+        collision_tolerance=int(layout["composer_collision_tolerance"]),
+    )
+    assert len(composer_layout.placements) == len(pieces)
+    assert {run.side for run in composer_layout.collision_runs} >= {"top", "bottom"}
     assert len(world_events) >= 40
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 5
     assert len(mounts) >= 4
@@ -2578,6 +2595,24 @@ def test_stage_designer_interleaves_piece_and_destructible_terrain_layers() -> N
     assert piece["draw_order"] > designer.data["terrain_layout"][0]["pieces"][1]["draw_order"]
     assert gate["draw_order"] > designer.data["terrain_layout"][0]["pieces"][1]["draw_order"]
     assert "draw_order" not in designer.data["world_events"][1]
+
+
+def test_stage_designer_layer_shortcuts_accept_jis_and_arrow_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tools.stage_designer import StageDesigner
+
+    designer = StageDesigner.__new__(StageDesigner)
+    moved: list[tuple[int, bool]] = []
+    designer._move_terrain_layers = lambda direction, *, to_edge=False: moved.append((direction, to_edge))
+
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: pygame.KMOD_CTRL)
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_AT, unicode="["))
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHTBRACKET, unicode="]"))
+
+    monkeypatch.setattr(pygame.key, "get_mods", lambda: pygame.KMOD_CTRL | pygame.KMOD_SHIFT)
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN, unicode=""))
+    designer._handle_key(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_UP, unicode=""))
+
+    assert moved == [(-1, False), (1, False), (-1, True), (1, True)]
 
 
 def test_stage_designer_ctrl_drag_copies_selected_group_after_drag_threshold() -> None:

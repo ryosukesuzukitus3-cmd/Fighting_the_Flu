@@ -658,11 +658,11 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 `terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
 固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `weapon_gate` / `turret_mount` を使える。`gate` / `breakable_gate` / `weapon_gate` は既定で破壊可能になる。
 `weapon_gate` は報酬用の血栓ゲートで、未指定でも `fixed_drop: "WeaponItem"` として扱われ、内部に青白い報酬コアを描く。
-Stage1とStage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
+Stage1・Stage2・Stage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
 `AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する中間形式。輪郭から自動充填して初期ブロック配置を作る補助用途としては残すが、Stage3の最終地形SSOTにはしない。
 `TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
-Stage1 の主経路は約395個の `TerrainPieces.pieces` へ移行済みで、これが道中の見た目と衝突のSSOTである。`stage-designer --stage 1` で各pieceの素材種類・`x` / `y`・`role`・`collision`・`flip_x` / `flip_y` を個別編集し、配置の最終調整もdesigner上で行う。Boss用fallbackの `TerrainStrip` と、HP・dropを持つ破壊可能な `world_events` は残し、固定clotはStage1 catalogの `material_role` / `material_asset` で描く。
+Stage1 の主経路は約395個、Stage2 の主経路は188個の `TerrainPieces.pieces` へ移行済みで、これが道中の見た目と衝突のSSOTである。`stage-designer --stage 1` / `--stage 2` で各pieceの素材種類・`x` / `y`・`role`・`collision`・`flip_x` / `flip_y` を個別編集し、配置の最終調整もdesigner上で行う。Boss用fallbackの `TerrainStrip` と、HP・dropを持つ破壊可能な `world_events` は残し、固定clotは各Stage catalogの `material_role` / `material_asset` で描く。
 
 Stage1/2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
 
