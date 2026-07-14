@@ -249,7 +249,7 @@ class TutorialScene(Scene):
             for b in self.player.weapon.get_bullets(wx, wy, self._targets,
                                                     game=self.game, boss=None):
                 self.player_bullets.add(b)
-            self.game.sound.play_se("music/se/ウェポン：normalshot_shot.mp3", volume=0.35)
+            self.game.sound.play_se_alias("SE_NORMALSHOT", volume=0.35)
             self._shots += 1
 
         self.player_bullets.update(dt, self.camera)
