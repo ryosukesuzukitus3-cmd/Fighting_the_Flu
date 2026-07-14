@@ -1780,6 +1780,44 @@ def test_miniboss_enemies_hold_front_screen_position() -> None:
         assert 560.0 <= sx <= 700.0
 
 
+def test_minibosses_have_distinct_high_resolution_attack_signatures() -> None:
+    from src.entities.enemies.cough_sprayer import EnemyCoughSprayer
+    from src.entities.enemies.spore_splitter import EnemySporeSplitter
+
+    class Resources:
+        def image(self, path: str) -> pygame.Surface:
+            assert path in {
+                "graphic/enemy_cough_sprayer_hires.png",
+                "graphic/enemy_spore_splitter_hires.png",
+            }
+            return pygame.Surface((512, 512), pygame.SRCALPHA)
+
+    class Sound:
+        def play_se_alias(self, *args, **kwargs) -> None:
+            pass
+
+    class Game:
+        resources = Resources()
+        sound = Sound()
+
+    class Player:
+        sx, sy = 180.0, 280.0
+
+    bullets = pygame.sprite.Group()
+    cough = EnemyCoughSprayer(Game(), 560.0, 280.0, bullets, Player(), enhanced=True)
+    cough._pattern_idx = 3  # cough_burst
+    cough._fire_current()
+    assert len(bullets) == 7
+
+    bullets.empty()
+    splitter = EnemySporeSplitter(Game(), 560.0, 280.0, bullets, Player(), enhanced=True)
+    splitter._spit_spores()
+    assert len(bullets) == 5  # aimed spore spread
+    bullets.empty()
+    splitter._spit_spores()
+    assert len(bullets) == 8  # radial spore bloom
+
+
 def test_boss_phase_configs_reference_known_patterns() -> None:
     from src.entities.enemies.boss import _PHASE_CONFIGS
 
