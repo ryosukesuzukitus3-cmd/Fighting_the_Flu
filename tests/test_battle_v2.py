@@ -119,6 +119,14 @@ def test_shield_boss_stance_break_and_down_cycle(game):
     assert b.stance_ratio() == pytest.approx(1.0)
 
 
+def test_intact_stance_heavily_reduces_boss_hp_damage(game):
+    b = _fight_boss(game, 4)
+    b._shield_active = False
+    hp0 = b.hp
+    b.take_damage(25)
+    assert hp0 - b.hp == 4  # int(25 * 0.16), before the stance is broken
+
+
 def test_weakpoint_boss_stance_break_exposes_core(game):
     b = _fight_boss(game, 2)
     hp0 = b.hp

@@ -210,6 +210,7 @@ class GameScene(
         # 第二形態移行フラッシュ
         self._form2_flash_timer: float = 0.0
         self._boss_kill_flash_timer: float = 0.0
+        self._boss_break_flash_timer: float = 0.0
         self._laser_flash_timer: float = 0.0
 
         # ポップアップテキスト
@@ -357,6 +358,7 @@ class GameScene(
         # 演出タイマー
         if self._form2_flash_timer     > 0: self._form2_flash_timer     -= dt
         if self._boss_kill_flash_timer > 0: self._boss_kill_flash_timer -= dt
+        if self._boss_break_flash_timer > 0: self._boss_break_flash_timer -= dt
         if self._laser_flash_timer     > 0: self._laser_flash_timer     -= dt
         if self._stage_banner_timer    > 0: self._stage_banner_timer    -= dt
         self._final.update_timers(dt)
@@ -825,6 +827,13 @@ class GameScene(
             alpha = int(255 * (self._boss_kill_flash_timer / _FLASH_DUR))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
             flash.fill((255, 255, 255, alpha))
+            screen.blit(flash, (0, 0))
+
+        if self._boss_break_flash_timer > 0:
+            _BREAK_FLASH_DUR = 0.34
+            alpha = int(230 * (self._boss_break_flash_timer / _BREAK_FLASH_DUR))
+            flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            flash.fill((255, 218, 70, alpha))
             screen.blit(flash, (0, 0))
 
         if self._paused:   self._draw_pause(screen)
@@ -1314,9 +1323,9 @@ class GameScene(
 
     # ── バトルv2: ボム / 熱暴走 / 体幹ブレイク演出 ─────────────────
     def _fire_bomb(self) -> None:
-        """持ち駒を「打つ」: 弾消し＋全体ダメージ＋ボス体幹へ大ダメージ。"""
+        """持ち駒を「打つ」: 対応する駒ミサイル群と、控えめな体幹ダメージ。"""
         piece = self._pieces.pop(0)
-        zako_dmg, boss_dmg, stance_pts, inv = PIECE_EFFECTS[piece]
+        _, _, stance_pts, inv = PIECE_EFFECTS[piece]
         px, py = int(self.player.sx), int(self.player.sy)
         self._spawn_popup(f"「{piece}」、打つ！", px + 16, py - 30,
                           color=(255, 235, 170), life=1.5)
@@ -1339,23 +1348,10 @@ class GameScene(
             self.player_bullets.add(missile)
         if inv > 0:
             self.player._invincible_timer = max(self.player._invincible_timer, inv)
-        for enemy in list(self.enemies):
-            continue
-            # 「打つ」はレーザー限定の子機（サクラ）にも通る特別扱い
-            damage_fn = getattr(enemy, "take_laser_damage", enemy.take_damage)
-            if damage_fn(zako_dmg):
-                self._on_enemy_killed(enemy)
         if self._boss is not None and self._in_boss_fight:
-            was_form2 = self._boss._form2
-            was_form3 = self._boss._form3
+            # The missiles carry the damage.  Keep only a modest posture hit
+            # here, so a held piece cannot skip a boss phase on activation.
             self._boss.add_stance(stance_pts * 0.25, ignore_shield=True)
-            if self._boss.take_damage(min(1, boss_dmg), stance=0.0):
-                self._on_boss_killed()
-                return
-            if self._boss is not None and not was_form2 and self._boss._form2:
-                self._final.on_form2_transition()
-            if self._boss is not None and not was_form3 and self._boss._form3:
-                self._final.on_form3_transition()
 
     def _award_combo_pieces(self, prev_combo: int) -> None:
         """コンボ閾値の通過で持ち駒を獲得（バトルv2）。"""
@@ -1387,7 +1383,11 @@ class GameScene(
         text = "王手！！" if self._boss_stage_id() == 4 else "BREAK!!"
         self._spawn_popup(text, bx, by - 46, color=(255, 215, 70), life=1.6)
         self.particles.spawn_big_explosion(bx, by)
-        self.camera.shake(10.0)
+        self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=28, speed=340.0)
+        self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=20, speed=160.0)
+        self.camera.shake(18.0)
+        self._hitstop_timer = max(self._hitstop_timer, 0.16)
+        self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.34)
         if self._boss_stage_id() == 4:
             self._play_shogi_snap(bx, by)
         else:
