@@ -348,15 +348,20 @@ def test_terrain_composer_catalog_follows_event_rects() -> None:
 
     stage2 = json.loads((ROOT / "data" / "stages" / "stage2.json").read_text(encoding="utf-8"))
     stage3 = json.loads((ROOT / "data" / "stages" / "stage3.json").read_text(encoding="utf-8"))
+    stage4 = json.loads((ROOT / "data" / "stages" / "stage4.json").read_text(encoding="utf-8"))
     stage2_rects, _stage2_masks = resolve_composer_paths(stage2["terrain_layout"][0])
     stage3_rects, _stage3_masks = resolve_composer_paths(stage3["terrain_layout"][0])
+    stage4_rects, _stage4_masks = resolve_composer_paths(stage4["terrain_layout"][0])
     stage2_catalog = load_composer_catalog(stage2_rects)
     stage3_catalog = load_composer_catalog(stage3_rects)
+    stage4_catalog = load_composer_catalog(stage4_rects)
 
     assert stage2_rects == (ROOT / "tools" / "stage2_terrain_rects.json").resolve()
     assert stage3_rects == (ROOT / "tools" / "stage3_terrain_rects.json").resolve()
+    assert stage4_rects == (ROOT / "tools" / "stage4_terrain_rects.json").resolve()
     assert "block_square:11" in stage2_catalog.assets
     assert "block_square:11" not in stage3_catalog.assets
+    assert "shogi_monument:1" in stage4_catalog.assets
 
 
 def test_terrain_composer_catalog_rejects_unknown_path_and_asset(tmp_path) -> None:
@@ -370,12 +375,11 @@ def test_terrain_composer_catalog_rejects_unknown_path_and_asset(tmp_path) -> No
 
 
 def test_stage_terrain_profile_resolution_rejects_unknown_and_conflicting_stage(tmp_path) -> None:
-    from tools.stage_terrain_profiles import resolve_stage_terrain_profile
+    from tools.stage_terrain_profiles import STAGE_TERRAIN_PROFILES, resolve_stage_terrain_profile
 
     stage4_path = tmp_path / "stage4.json"
     stage4_path.write_text('{"stage_id": 4}', encoding="utf-8")
-    with pytest.raises(ValueError, match="no terrain tooling profile"):
-        resolve_stage_terrain_profile(stage_json=stage4_path)
+    assert resolve_stage_terrain_profile(stage_json=stage4_path) is STAGE_TERRAIN_PROFILES[4]
 
     stage3_path = ROOT / "data" / "stages" / "stage3.json"
     with pytest.raises(ValueError, match="conflicts"):
@@ -488,6 +492,7 @@ def test_stage_supports_world_layout_fields() -> None:
     assert stage3.random_drop_scale < 1.0
     assert stage4.initial_terrain == []
     assert stage4.terrain_layout
+    assert stage4.terrain_layout[0]["type"] == "TerrainPieces"
     assert stage4.random_drop_scale < 1.0
     assert any(ev["type"].startswith("Enemy") for ev in stage.world_events)
     assert all(ev.get("type", "").startswith("Enemy") is False for ev in stage.events)
@@ -819,6 +824,7 @@ def test_stage3_ceiling_attackers_keep_clearance_from_hud() -> None:
 
 def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     from src.core.constants import SCREEN_WIDTH
+    from src.entities.stage3_composer_terrain import build_stage3_piece_layout, load_stage3_composer_pieces
     from src.stages.stage import Stage
 
     data = json.loads((ROOT / "data" / "stages" / "stage4.json").read_text(encoding="utf-8"))
@@ -846,11 +852,29 @@ def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     assert data["events"] == []
     assert data["boss_terrain_mode"] == "preplaced"
     assert 0.0 < data["random_drop_scale"] < 1.0
-    assert layout["type"] == "TerrainStrip"
+    pieces = layout["pieces"]
+    surface_pieces = [piece for piece in pieces if piece.get("collision") == "surface"]
+    assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "shogi_void"
-    assert layout["profile"] == "ceiling"
+    assert layout["renderer"] == "terrain_composer"
+    assert layout["composer_rects"] == "tools/stage4_terrain_rects.json"
+    assert layout["composer_mask_dir"] == "tools/stage4_terrain_alpha_masks"
     assert layout["length"] >= boss_x + 800
-    assert layout["breakable_drop_chance"] <= 0.04
+    assert len(pieces) >= 250
+    assert surface_pieces
+    assert {piece.get("side") for piece in surface_pieces} == {"top", "bottom"}
+    assert all({"asset", "x", "y", "role", "collision"} <= set(piece) for piece in pieces)
+    composer_layout = build_stage3_piece_layout(
+        layout,
+        load_stage3_composer_pieces(
+            ROOT / layout["composer_rects"],
+            mask_dir=ROOT / layout["composer_mask_dir"],
+        ),
+        collision_step=int(layout["composer_collision_step"]),
+        collision_tolerance=int(layout["composer_collision_tolerance"]),
+    )
+    assert len(composer_layout.placements) == len(pieces)
+    assert {run.side for run in composer_layout.collision_runs} >= {"top", "bottom"}
     assert len(world_events) >= 45
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 15
     assert len(mounts) >= 3
@@ -2208,6 +2232,7 @@ def test_stage_designer_stage_profiles_select_stage_defaults() -> None:
     default_profile = _profile_from_args(_parse_args([]))
     stage1_profile = _profile_from_args(_parse_args(["--stage", "1"]))
     stage2_profile = _profile_from_args(_parse_args(["--stage", "2"]))
+    stage4_profile = _profile_from_args(_parse_args(["--stage", "4"]))
     inferred_stage1_profile = _profile_from_args(
         _parse_args(["--stage-json", str(ROOT / "data" / "stages" / "stage1.json")])
     )
@@ -2232,6 +2257,11 @@ def test_stage_designer_stage_profiles_select_stage_defaults() -> None:
     assert stage2_profile.fallback_mask_dir == DEFAULT_MASK_DIR
     assert stage2_profile.background == ROOT / "assets" / "graphic" / "stage2_cyber_static_bg.png"
     assert stage2_profile.terrain_kind == "data_block"
+    assert stage4_profile.stage_id == 4
+    assert stage4_profile.stage_json == ROOT / "data" / "stages" / "stage4.json"
+    assert stage4_profile.rects == ROOT / "tools" / "stage4_terrain_rects.json"
+    assert stage4_profile.mask_dir == ROOT / "tools" / "stage4_terrain_alpha_masks"
+    assert stage4_profile.terrain_kind == "shogi_void"
 
 
 def test_stage_designer_stage2_event_palette_uses_data_blocks() -> None:

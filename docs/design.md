@@ -658,13 +658,13 @@ Boss3 の要塞スプライトは built-in 画像生成で作成し、`assets/gr
 `terrain_layout` はステージ開始時にまとめて生成する地形定義。未指定の場合は既存互換の `initial_terrain` を使う。
 固定ブロックは `Terrain` のほか、意図が読みやすい別名として `solid` / `platform` / `gate` / `breakable_gate` / `weapon_gate` / `turret_mount` を使える。`gate` / `breakable_gate` / `weapon_gate` は既定で破壊可能になる。
 `weapon_gate` は報酬用の血栓ゲートで、未指定でも `fixed_drop: "WeaponItem"` として扱われ、内部に青白い報酬コアを描く。
-Stage1・Stage2・Stage3の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
+Stage1・Stage2・Stage3・Stage4の作り込み地形は `TerrainPieces` を優先する。`TerrainPieces` は素材IDと座標を持つ個別ブロック配置をステージデータのSSOTにし、設計ツールでブロック単位に差し替え・移動できるようにする。
 `AuthoredTerrain` は `top` / `bottom` の制御点で移動可能領域を直接指定する中間形式。輪郭から自動充填して初期ブロック配置を作る補助用途としては残すが、Stage3の最終地形SSOTにはしない。
 `TerrainStrip` / `cave_section` / `corridor` は既存ステージ移行用の旧形式として扱う。
 
-Stage1 の主経路は約395個、Stage2 の主経路は188個の `TerrainPieces.pieces` へ移行済みで、これが道中の見た目と衝突のSSOTである。`stage-designer --stage 1` / `--stage 2` で各pieceの素材種類・`x` / `y`・`role`・`collision`・`flip_x` / `flip_y` を個別編集し、配置の最終調整もdesigner上で行う。Boss用fallbackの `TerrainStrip` と、HP・dropを持つ破壊可能な `world_events` は残し、固定clotは各Stage catalogの `material_role` / `material_asset` で描く。
+Stage1 の主経路は約395個、Stage2は188個、Stage4は280個の `TerrainPieces.pieces` へ移行済みで、これが道中の見た目と衝突のSSOTである。`stage-designer --stage N` で各pieceの素材種類・`x` / `y`・`role`・`collision`・`flip_x` / `flip_y` を個別編集し、配置の最終調整もdesigner上で行う。Boss用fallbackの `TerrainStrip` と、HP・dropを持つ破壊可能な `world_events` は残し、固定clotなどの破壊可能地形は各Stage catalogの `material_role` / `material_asset` で描く。
 
-Stage1/2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
+Stage1〜4 のcomposer表示確認には `tools/run.py stage-terrain-composer --stage N`、runtime・衝突面との比較には `tools/run.py stage-composer-report --stage N` を使う。rect・maskは、コマンドの明示引数、`terrain_layout` の `composer_rects` / `composer_mask_dir`、ステージprofileの順で解決する。canonical `terrain_composer` を使うステージデータでは `composer_rects` と `composer_mask_dir` を必ず明示する。旧 `stage3-terrain-composer` / `stage3-composer-report` は互換aliasとして残す。
 
 #### 地形イベント（`type: "Terrain"`）
 
@@ -689,14 +689,14 @@ Stage1/2/3 のcomposer表示確認には `tools/run.py stage-terrain-composer --
 
 #### 明示ブロック地形イベント（`type: "TerrainPieces"`）
 
-Stage1とStage3の道中地形で使う、素材ブロック配置を直接保持する形式。`pieces` の各要素が1つの地形素材を表し、runtimeは保存済みブロックから描画と簡略化した衝突面を生成する。
+Stage1〜4の道中地形で使う、素材ブロック配置を直接保持する形式。`pieces` の各要素が1つの地形素材を表し、runtimeは保存済みブロックから描画と簡略化した衝突面を生成する。
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
 | `time` | △ | `events` に書く場合の生成タイミング（秒）。`terrain_layout` では不要 |
 | `type` | ○ | `"TerrainPieces"` |
-| `theme` | ○ | 見た目テーマ。Stage1では `"fever_cave"`、Stage3では `"fortress"` |
-| `renderer` | ○ | Stage1/2/3では `"terrain_composer"`（旧 `"stage3_composer"` も互換対応） |
+| `theme` | ○ | 見た目テーマ。Stage1では `"fever_cave"`、Stage3では `"fortress"`、Stage4では `"shogi_void"` |
+| `renderer` | ○ | Stage1〜4では `"terrain_composer"`（旧 `"stage3_composer"` も互換対応） |
 | `composer_rects` | ○ | この地形が使うrect catalog。repo root相対パス |
 | `composer_mask_dir` | ○ | rectごとのalpha maskディレクトリ。repo root相対パス |
 | `length` | ○ | ステージ地形の横幅（px） |

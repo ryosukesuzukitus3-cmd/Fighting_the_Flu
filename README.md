@@ -126,7 +126,7 @@ py -3 -m venv .venv
 | `balance` | バランスシート出力 |
 | `pr-media` / `pr-html` / `pr-report` | PR 用に画像/HTML/レポートを `media` ブランチへ上げて貼り付けリンクを出力 |
 
-Stage1 と Stage2 の主経路は `TerrainPieces.pieces` を個別配置SSOTとして使う。`stage-designer --stage 1` / `--stage 2` で素材種類・`x` / `y`・`role`・`collision`・反転を個別調整できる。Stage1 の Guide自動充填は通路側surfaceと少し重なる有機素材の外側2層を生成する。編集ビューはステージ上端（y=0）と下端（y=540）を常時表示する。Ctrl+クリックまたは空白ドラッグで複数選択し、Ctrl+ドラッグまたはCtrl+Dで複製、Delで一括削除できる。Ctrl+[ / Ctrl+]は通常TerrainPieceと破壊可能terrain eventをまたいで1段背面/前面へ、Shift併用で最背面/最前面へ移動する。BossGateとBoss出現もStage1/2イベントパレットから再配置できる。Boss用fallbackの `TerrainStrip` と、破壊可能な `world_events` は従来どおり残す。
+Stage1〜Stage4 の主経路は `TerrainPieces.pieces` を個別配置SSOTとして使う。`stage-designer --stage N` で素材種類・`x` / `y`・`role`・`collision`・反転を個別調整できる。Stage1 の Guide自動充填は通路側surfaceと少し重なる有機素材の外側2層を生成する。編集ビューはステージ上端（y=0）と下端（y=540）を常時表示する。Ctrl+クリックまたは空白ドラッグで複数選択し、Ctrl+ドラッグまたはCtrl+Dで複製、Delで一括削除できる。Ctrl+[ / Ctrl+]は通常TerrainPieceと破壊可能terrain eventをまたいで1段背面/前面へ、Shift併用で最背面/最前面へ移動する。BossGateとBoss出現もStage1/2イベントパレットから再配置できる。Boss用fallbackの `TerrainStrip` と、破壊可能な `world_events` は従来どおり残す。
 
 ### 設計原則（SSOT）
 マスターデータは1箇所だけに定義し、他はそこから導出します（反映漏れ防止）。詳細と機能追加チェックリストは **[CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)**（共有ソースは `docs/agent_guide_shared.md`）を参照。ターン終了時の Stop フックで `gen_docs.py` → `check_consistency.py` が自動実行され、`tests/test_consistency.py` でも同じ整合性を検証します。
