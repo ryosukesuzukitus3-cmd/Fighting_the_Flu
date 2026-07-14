@@ -25,10 +25,10 @@ _DRONE_OFFSETS = (
     (118.0, 92.0),
     (-218.0, 122.0),
 )
-_DRONE_HP = 12
-_DRONE_SCALE = 0.21
-_SHOT_INTERVAL = 1.85
-_SHOT_SPEED = 215.0
+_DRONE_HP = 22
+_DRONE_SCALE = 0.25
+_SHOT_INTERVAL = 1.10
+_SHOT_SPEED = 290.0
 
 
 class MatchingZeroDrone(pygame.sprite.Sprite):
@@ -119,16 +119,12 @@ class MatchingZeroDrone(pygame.sprite.Sprite):
         dx = self._player.sx - sx
         dy = self._player.sy - sy
         d = math.hypot(dx, dy) or 1.0
-        self._enemy_bullets.add(
-            EnemyBullet(
-                sx,
-                sy,
-                (dx / d) * _SHOT_SPEED,
-                (dy / d) * _SHOT_SPEED,
-                radius=5,
-                color=(70, 225, 255),
-            )
-        )
+        for offset in (-8.0, 8.0):
+            self._enemy_bullets.add(EnemyBullet(
+                sx, sy, (dx / d) * _SHOT_SPEED,
+                (dy / d) * _SHOT_SPEED + offset,
+                radius=6, color=(70, 225, 255),
+            ))
         self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.38)
 
     def blocks_projectile_damage(self, bullet) -> bool:

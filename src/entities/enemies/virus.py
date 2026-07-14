@@ -15,8 +15,8 @@ class EnemyVirus(Enemy):
         hp    = _STATS.enhanced_hp    if enhanced else _STATS.base_hp
         speed = _STATS.enhanced_speed if enhanced else _STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=speed, enhanced=enhanced)
-        raw        = game.resources.image("graphic/enemy_virus.png")
+        raw        = game.resources.image("graphic/enemy_virus_hires_v2.png")
         w, h       = raw.get_width(), raw.get_height()
-        self.image = pygame.transform.smoothscale(raw, (int(w * 0.77), int(h * 0.77)))
+        self.image = pygame.transform.smoothscale(raw, (68, 68))
         self.rect  = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._init_glow()

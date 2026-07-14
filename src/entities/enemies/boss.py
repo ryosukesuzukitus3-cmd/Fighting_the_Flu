@@ -119,6 +119,10 @@ _FORM2_CONFIG = {
     4: ("graphic/藤井四段第二形態_もう一度.png", 0.2266, 300),
 }
 
+# Stage 2's former source was a small enemy sprite enlarged as a boss.  Use
+# the dedicated high-resolution portrait for the opening form instead.
+_BOSS_CONFIG[2] = ("graphic/boss_broly_hires.png", 0.20, 200)
+
 # 超サイヤ人ブロリー（ステージ2 第二形態）: 通常HPを削り切ると変身する最終ゲージ
 _SSJ_HP    = 170
 _SSJ_SCALE = 2.25   # 通常ブロリー(2.0)より一回り大きい
@@ -167,14 +171,17 @@ _SHIELD_DUR  = 3.0    # シールド展開（無敵）時間（秒）
 
 # weakpoint ギミック
 _ARMOR_MAX   = 40     # 装甲耐久（この分のダメージで割れる）
-_WEAK_DUR    = 5.0    # 弱点露出時間（秒）
+_WEAK_DUR    = STANCE_DOWN_DUR * 0.65  # 弱点露出は短く、集中攻撃の隙にする
 _WEAK_MULT   = 2.0    # 露出中の被ダメ倍率
 
 # turrets ギミック
 _TURRET_SUMMON_CD  = 9.0   # 砲台再召喚クールダウン（秒）
 _TURRET_GUARD_MULT = 0.0   # 砲台健在中の被ダメ倍率（0=シールド中は本体無効）
-_TURRET_STUN_DUR   = 4.0   # 全砲台撃破後のスタン時間（秒）
+_TURRET_STUN_DUR   = STANCE_DOWN_DUR * 0.65  # 子機全撃破後の短いスタン（秒）
 _TURRET_STUN_MULT  = 1.8   # スタン中の被ダメ倍率
+
+
+_POSTURE_DAMAGE_MULT = 0.16
 
 
 class Boss(pygame.sprite.Sprite):
@@ -328,7 +335,7 @@ class Boss(pygame.sprite.Sprite):
                 self._weak_timer = _WEAK_DUR   # 露出＝ダウン（被ダメ倍率は既存）
                 self._armor = 0
             else:
-                self._down_timer = STANCE_DOWN_DUR
+                self._down_timer = STANCE_DOWN_DUR * 0.65
                 if gimmick == "shield":
                     self._shield_active = False
 
@@ -992,6 +999,20 @@ class Boss(pygame.sprite.Sprite):
             for i in range(6):
                 a = math.radians(i * 60 + self._spiral_angle)
                 enemy_bullets.add(EnemyBullet(bx, by, math.cos(a) * 185, math.sin(a) * 185, radius=5, color=(160, 180, 255)))
+            # Living Sakura drones turn the fortress volley into a readable
+            # crossfire.  Destroying the drones therefore removes both the
+            # damage shield and these extra lanes before the short stun.
+            for drone in self._summoned:
+                if not drone.alive():
+                    continue
+                dx = player.sx - drone.rect.centerx
+                dy = player.sy - drone.rect.centery
+                d = math.hypot(dx, dy) or 1.0
+                enemy_bullets.add(EnemyBullet(
+                    drone.rect.centerx, drone.rect.centery,
+                    dx / d * 320.0, dy / d * 320.0,
+                    radius=5, color=(255, 105, 190),
+                ))
             self._spiral_angle = (self._spiral_angle + spin_dir * 30) % 360
 
         # ── Stage3/Form3: 落石。上から降る弾で横移動を要求する。
@@ -1134,11 +1155,15 @@ class Boss(pygame.sprite.Sprite):
     # ─────────────────────────────────────────
     def take_damage(self, amount: int, stance: float | None = None) -> bool:
         # ── バトルv2: 体幹を並行して削る（stance 未指定はダメージ量相当）──
+        posture_intact = (BATTLE_V2_ENABLED and self._stance_max > 0
+                           and self._stance > 0 and not self.is_stance_down)
         if BATTLE_V2_ENABLED:
             self.add_stance(float(amount) if stance is None else stance)
         # ── ギミックによる被ダメージ補正 ──────────────────────────
         gimmick = self._current_gimmick()
         dealt = amount
+        if posture_intact:
+            dealt = max(1, int(amount * _POSTURE_DAMAGE_MULT))
         if BATTLE_V2_ENABLED and self._down_timer > 0:
             dealt = int(amount * STANCE_DOWN_MULT)   # 体幹ダウン中は大ダメージ
         elif gimmick == "shield" and self._shield_active:

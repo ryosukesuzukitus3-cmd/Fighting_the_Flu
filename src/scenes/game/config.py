@@ -82,7 +82,7 @@ UPGRADE_SLOTS: list[tuple[str, str]] = [
     ("laser",       "LASER"),
     ("speed",       "SPEED"),
 ]
-MAIN_NEXT_NAMES = ["RAPID1", "RAPID2", "WIDE", "WIDE+", "MEDIC", "(MAX)"]
+MAIN_NEXT_NAMES = ["RAPID1", "RAPID2", "WIDE", "WIDE+", "(MAX)", "MEDIC"]
 
 # ── カロナール先輩 強化スロット（下段＝先輩・支援重視4系統）────────
 COMPANION_SLOTS: list[tuple[str, str]] = [

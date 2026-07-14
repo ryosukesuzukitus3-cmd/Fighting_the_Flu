@@ -34,6 +34,8 @@ class EnemyDef:
 
 
 ENEMY_DEFS: list[EnemyDef] = [
+    EnemyDef("EnemyLinkDrone", "要塞リンク機", "music/se/game_explosion9.mp3", 0.6, drop_chance=0.14, stats=EnemyStats(7, 55.0, 14, 75.0), doc_movement="接近して三連射", doc_notes="Stage 3 固有: 砲台地帯で優先撃破を促す"),
+    EnemyDef("EnemyShogiPawn", "歩兵駒", "music/se/game_explosion9.mp3", 0.6, drop_chance=0.14, stats=EnemyStats(6, 115.0, 12, 150.0), doc_movement="直進して成り弾", doc_notes="Stage 4 固有: 横一列の回避筋を作る"),
     EnemyDef("EnemyVirus",    "直進型",             "music/se/game_explosion9.mp3",   0.9, drop_chance=0.10, stats=EnemyStats(1, 160.0, 3, 210.0, "直進"), doc_movement="直進"),
     EnemyDef("EnemyTakeshi",  "波状移動型",          "music/se/お前ら人間じゃねぇ!.mp3", 0.45, drop_chance=0.10, stats=EnemyStats(2, 110.0, 6, 145.0, "sin波"), doc_movement="波状移動"),
     EnemyDef("EnemyBroly",    "突進型",              "music/se/ブロリー_ヘェア！.mp3",   0.9, drop_chance=0.10, stats=EnemyStats(5, 80.0, 14, 100.0, "突進(charge:520→650)"), doc_movement="プレイヤーへ突進"),

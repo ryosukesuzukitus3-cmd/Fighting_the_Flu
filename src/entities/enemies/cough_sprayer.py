@@ -21,16 +21,16 @@ _BULLET_SPEED = 185.0
 _FAN_BASE = (-0.26, 0.0, 0.26)
 _FAN_ENH = (-0.38, -0.14, 0.14, 0.38)
 _ANCHOR_SX = SCREEN_WIDTH - 178.0
-_SCALE = 2.0   # 中ボスは約2倍に大型化
+_SPRITE_SIZE = (286, 190)
 
 # 攻撃パターン（一定間隔で巡回し、移動と合わせて単調さを解消）
-_PATTERNS = ("fan", "ring", "spiral", "burst")
+_PATTERNS = ("fan", "ring", "spiral", "cough_burst")
 # パターン別の発射間隔（base, enhanced）
 _FIRE_INTERVAL = {
     "fan":    (_BASE_INTERVAL, _ENH_INTERVAL),
     "ring":   (1.85, 1.45),
     "spiral": (0.34, 0.26),
-    "burst":  (0.42, 0.32),
+    "cough_burst": (0.58, 0.44),
 }
 # 移動モード（縦移動のバリエーション。横はアンカー保持）
 _MOVE_MODES = ("hover", "sweep", "zigzag")
@@ -39,7 +39,7 @@ _MOVE_MODES = ("hover", "sweep", "zigzag")
 class EnemyCoughSprayer(Enemy):
     """画面右前方に居座り、咳のような弾を吐く中ボス敵。
 
-    移動（hover/sweep/zigzag）と攻撃（fan/ring/spiral/burst）を時間で巡回し、
+    移動（hover/sweep/zigzag）と攻撃（fan/ring/spiral/咳の散弾）を時間で巡回し、
     大型（約2倍）で存在感のある中ボスとして振る舞う。
     """
 
@@ -72,9 +72,8 @@ class EnemyCoughSprayer(Enemy):
         self._move_idx = random.randrange(len(_MOVE_MODES))
         self._move_timer = random.uniform(3.8, 4.8)
 
-        raw = game.resources.image("graphic/enemy_cough_sprayer.png")
-        w, h = raw.get_size()
-        self.image = pygame.transform.scale(raw, (int(w * _SCALE), int(h * _SCALE)))
+        raw = game.resources.image("graphic/enemy_cough_sprayer_hires.png")
+        self.image = pygame.transform.smoothscale(raw, _SPRITE_SIZE)
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._init_glow()
 
@@ -156,8 +155,8 @@ class EnemyCoughSprayer(Enemy):
             self._fire_ring()
         elif pattern == "spiral":
             self._fire_spiral()
-        elif pattern == "burst":
-            self._fire_burst()
+        elif pattern == "cough_burst":
+            self._fire_cough_burst()
         else:
             self._fire_fan()
         self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.42)
@@ -180,17 +179,10 @@ class EnemyCoughSprayer(Enemy):
                         color=(150, 250, 200))
         self._spiral_angle += 0.42
 
-    def _fire_burst(self) -> None:
-        # プレイヤーへ向け、進行方向に対し垂直へ少しずらした3連弾
-        from src.entities.bullets.enemy_bullet import EnemyBullet
+    def _fire_cough_burst(self) -> None:
+        """咳き込みの本命。遅い飛沫と速い芯を混ぜた広い散弾。"""
         base = self._aim_angle()
-        perp = base + math.pi / 2.0
-        sx, sy = self.rect.center
-        for k in (-1, 0, 1):
-            ox = math.cos(perp) * 10.0 * k
-            oy = math.sin(perp) * 10.0 * k
-            self._enemy_bullets.add(
-                EnemyBullet(sx + ox, sy + oy,
-                            math.cos(base) * 230.0, math.sin(base) * 230.0,
-                            radius=4, color=(120, 255, 235))
-            )
+        for i in range(7):
+            offset = (i - 3) * 0.15
+            speed = 145.0 + (115.0 if i in (2, 3, 4) else 0.0)
+            self._spawn(base + offset, speed=speed, color=(130, 255, 225))

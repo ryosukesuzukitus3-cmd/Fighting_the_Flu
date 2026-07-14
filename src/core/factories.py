@@ -143,7 +143,19 @@ def _enemy_debris_shard(game: "Game", wx: float, wy: float, ctx: dict):
     return EnemyDebrisShard(game, wx, wy, enhanced=ctx["enhanced"])
 
 
+def _enemy_link_drone(game: "Game", wx: float, wy: float, ctx: dict):
+    from src.entities.enemies.link_drone import EnemyLinkDrone
+    return EnemyLinkDrone(game, wx, wy, ctx.get("enemy_bullets"), ctx.get("player"), enhanced=ctx["enhanced"])
+
+
+def _enemy_shogi_pawn(game: "Game", wx: float, wy: float, ctx: dict):
+    from src.entities.enemies.shogi_pawn import EnemyShogiPawn
+    return EnemyShogiPawn(game, wx, wy, ctx.get("enemy_bullets"), ctx.get("player"), enhanced=ctx["enhanced"])
+
+
 _ENEMY_BUILDERS: dict[str, Callable] = {
+    "EnemyLinkDrone": _enemy_link_drone,
+    "EnemyShogiPawn": _enemy_shogi_pawn,
     "EnemyVirus": _enemy_virus,
     "EnemyTakeshi": _enemy_takeshi,
     "EnemyBroly": _enemy_broly,

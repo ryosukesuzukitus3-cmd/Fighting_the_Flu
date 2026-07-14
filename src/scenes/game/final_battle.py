@@ -354,6 +354,7 @@ class FinalBattleDirector:
             scene._companion.sy = float(scene.player.rect.centery) + 16.0
         companion = scene._companion
         companion.set_max()
+        scene.player.weapon.grant_medic()
         companion.reseed_trail(scene.player)
         self._karonaru_heal_player()
         scene.game.story.karonaru_lost        = False

@@ -94,6 +94,8 @@ WeaponItem を取得すると**在庫**に加算され、任意のタイミン�
 <!-- AUTOGEN:enemies START -->
 | 敵種別 | 移動パターン | 備考 |
 |---|---|---|
+| EnemyLinkDrone | 接近して三連射 | Stage 3 固有: 砲台地帯で優先撃破を促す |
+| EnemyShogiPawn | 直進して成り弾 | Stage 4 固有: 横一列の回避筋を作る |
 | EnemyVirus | 直進 | — |
 | EnemyTakeshi | 波状移動 | — |
 | EnemyBroly | プレイヤーへ突進 | — |

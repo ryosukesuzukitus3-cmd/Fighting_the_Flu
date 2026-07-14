@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 _SPLITTER_STATS = enemy_stats("EnemySporeSplitter")
 _POD_STATS = enemy_stats("EnemySporePod")
 _ANCHOR_SX = SCREEN_WIDTH - 162.0
-_SCALE = 2.0   # 中ボスは約2倍に大型化
+_SPRITE_SIZE = (204, 204)
 _MOVE_MODES = ("drift", "wide", "quiver")   # 縦移動のバリエーション（横はアンカー保持）
 
 
@@ -98,9 +98,8 @@ class EnemySporeSplitter(Enemy):
         self._game = game
         self._enemy_bullets = enemy_bullets
         self._player = player
-        raw = game.resources.image("graphic/enemy_spore_splitter.png")
-        w, h = raw.get_size()
-        self.image = pygame.transform.scale(raw, (int(w * _SCALE), int(h * _SCALE)))
+        raw = game.resources.image("graphic/enemy_spore_splitter_hires.png")
+        self.image = pygame.transform.smoothscale(raw, _SPRITE_SIZE)
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._base_y = world_y
         self._time = random.uniform(0.0, math.tau)
@@ -109,8 +108,9 @@ class EnemySporeSplitter(Enemy):
         self._move_idx = random.randrange(len(_MOVE_MODES))
         self._move_timer = random.uniform(4.0, 5.0)
         # 胞子弾の発射
-        self._spit_interval = 2.4 if enhanced else 3.0
+        self._spit_interval = 1.75 if enhanced else 2.25
         self._spit_timer = self._spit_interval * random.uniform(0.5, 0.9)
+        self._spit_phase = 0
         self._init_glow()
 
     @property
@@ -159,15 +159,26 @@ class EnemySporeSplitter(Enemy):
         from src.entities.bullets.enemy_bullet import EnemyBullet
         sx, sy = self.rect.center
         base = math.atan2(self._player.sy - sy, self._player.sx - sx)
-        count = 4 if self.enhanced else 3
-        for i in range(count):
-            off = (i - (count - 1) / 2.0) * 0.30
-            a = base + off
-            speed = random.uniform(140.0, 178.0)
-            self._enemy_bullets.add(
-                EnemyBullet(sx, sy, math.cos(a) * speed, math.sin(a) * speed,
-                            radius=5, color=(236, 126, 48))
-            )
+        if self._spit_phase % 2 == 0:
+            # 照準した胞子散布: 中央の速い芯と外側の遅い胞子で回避を迫る。
+            count = 5 if self.enhanced else 4
+            for i in range(count):
+                off = (i - (count - 1) / 2.0) * 0.24
+                speed = 235.0 if i == count // 2 else random.uniform(138.0, 172.0)
+                self._enemy_bullets.add(
+                    EnemyBullet(sx, sy, math.cos(base + off) * speed, math.sin(base + off) * speed,
+                                radius=6, color=(246, 128, 42))
+                )
+        else:
+            # 胞子ブルーム: 分裂体らしい遅い環状散布。間に逃げ道を残す。
+            count = 8 if self.enhanced else 6
+            for i in range(count):
+                a = base + math.tau * i / count + math.pi / count
+                self._enemy_bullets.add(
+                    EnemyBullet(sx, sy, math.cos(a) * 128.0, math.sin(a) * 128.0,
+                                radius=5, color=(255, 180, 65))
+                )
+        self._spit_phase += 1
         self._game.sound.play_se_alias("SE_ENEMY_SHOT", volume=0.4)
 
     def split(self, game: "Game") -> list[EnemySporePod]:
