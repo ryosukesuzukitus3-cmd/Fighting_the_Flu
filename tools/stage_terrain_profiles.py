@@ -35,6 +35,8 @@ class StageTerrainProfile:
 
 _STAGE3_RECTS = ROOT / "tools" / "stage3_terrain_rects.json"
 _STAGE3_MASK_DIR = ROOT / "tools" / "stage3_terrain_alpha_masks"
+_STAGE4_RECTS = ROOT / "tools" / "stage4_terrain_rects.json"
+_STAGE4_MASK_DIR = ROOT / "tools" / "stage4_terrain_alpha_masks"
 
 STAGE_TERRAIN_PROFILES: Mapping[int, StageTerrainProfile] = MappingProxyType(
     {
@@ -71,6 +73,16 @@ STAGE_TERRAIN_PROFILES: Mapping[int, StageTerrainProfile] = MappingProxyType(
             terrain_kind="fortress_block",
             label="Stage3",
             preview_camera_xs=(0, 2200, 4400, 6600, 8800, 10800),
+        ),
+        4: StageTerrainProfile(
+            stage_id=4,
+            stage_json=ROOT / "data" / "stages" / "stage4.json",
+            rects=_STAGE4_RECTS,
+            mask_dir=_STAGE4_MASK_DIR,
+            background=ROOT / "docs" / "assets" / "stage_concepts" / "stage4_shogi_void_reference.png",
+            terrain_kind="shogi_void",
+            label="Stage4",
+            preview_camera_xs=(0, 2200, 4400, 6600, 8800, 11000, 12800),
         ),
     }
 )
