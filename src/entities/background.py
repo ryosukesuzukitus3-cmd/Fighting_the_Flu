@@ -209,7 +209,9 @@ class ScrollingBackground:
         for x in range(-offset, SCREEN_WIDTH, width):
             screen.blit(bg, (x, 0))
         veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        veil.fill((8, 0, 3, 42))
+        # The fever corridor intentionally uses vivid reds, so hold it back
+        # enough that red enemy shots retain a readable silhouette.
+        veil.fill((8, 0, 3, 68))
         screen.blit(veil, (0, 0))
 
     def _load_stage1_backdrop(self) -> pygame.Surface | None:
