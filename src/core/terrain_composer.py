@@ -121,6 +121,10 @@ TERRAIN_MATERIAL_CATALOGS: Mapping[str, TerrainMaterialCatalog] = {
         rects_path=_resolve_repo_path(DEFAULT_COMPOSER_RECTS_PATH),
         mask_dir=_resolve_repo_path(DEFAULT_COMPOSER_MASK_DIR),
     ),
+    "shogi_void": TerrainMaterialCatalog(
+        rects_path=_resolve_repo_path("tools/stage4_terrain_rects.json"),
+        mask_dir=_resolve_repo_path("tools/stage4_terrain_alpha_masks"),
+    ),
 }
 
 

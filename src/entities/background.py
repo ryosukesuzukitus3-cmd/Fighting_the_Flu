@@ -9,6 +9,8 @@ _STAGE1_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "
 _STAGE2_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage2_cyber_static_bg.png"
 _STAGE3_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage3_labor_fortress_bg.png"
 _STAGE3_BG_TILE_OVERLAP = 220
+_STAGE4_BG_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage4_shogi_void_bg.png"
+_STAGE4_MID_PATH = Path(__file__).parent.parent.parent / "assets" / "graphic" / "stage4_shogi_void_mid.png"
 
 
 class _StarLayer:
@@ -63,6 +65,8 @@ class ScrollingBackground:
         self._stage3_bg: pygame.Surface | None = None
         self._stage3_bg_blend_strip: pygame.Surface | None = None
         self._stage3_bg_blend_key: tuple[int, int] | None = None
+        self._stage4_bg: pygame.Surface | None = None
+        self._stage4_mid: pygame.Surface | None = None
         self._theme_init(stage_id)
 
     # ── テーマ要素の事前生成（ランダム配置を固定）────────────────
@@ -460,6 +464,22 @@ class ScrollingBackground:
 
     # ── Stage4 棋理深淵（将棋盤・駒）───────────────────────────
     def _draw_shogi(self, screen: pygame.Surface, camera_x: float) -> None:
+        self._draw_stage4_backdrop(screen, camera_x)
+        self._draw_stage4_midground(screen, camera_x)
+
+        # A gentle royal aurora gives the final board a living, ceremonial feel
+        # without competing with enemies, terrain, or boss effects.
+        t = self._time
+        aurora = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for index, phase in enumerate((0.0, 2.1, 4.25)):
+            x = int((SCREEN_WIDTH * (0.18 + index * 0.31) - camera_x * 0.14) % (SCREEN_WIDTH + 160)) - 80
+            y = int(126 + math.sin(t * 0.54 + phase) * 24)
+            pulse = 0.5 + 0.5 * math.sin(t * 1.2 + phase)
+            radius = int(28 + pulse * 15)
+            pygame.draw.circle(aurora, (102, 56, 188, int(14 + pulse * 18)), (x, y), radius)
+            pygame.draw.circle(aurora, (232, 190, 88, int(26 + pulse * 28)), (x, y), max(2, radius // 7))
+        screen.blit(aurora, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
         # 薄い将棋盤グリッド（視差スクロール）
         cell = 72
         off = int(camera_x * 0.25) % cell
@@ -476,3 +496,55 @@ class ScrollingBackground:
             surf = self._piece_font.render(ch, True, (70, 64, 100))
             surf.set_alpha(60)
             screen.blit(surf, (int(x), int(cy)))
+
+    def _draw_stage4_backdrop(self, screen: pygame.Surface, camera_x: float) -> None:
+        bg = self._load_stage4_backdrop()
+        if bg is None:
+            return
+        width = bg.get_width()
+        offset = int(camera_x * 0.055) % width
+        for x in range(-offset, SCREEN_WIDTH, width):
+            screen.blit(bg, (x, 0))
+        veil = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        veil.fill((5, 2, 14, 38))
+        screen.blit(veil, (0, 0))
+
+    def _draw_stage4_midground(self, screen: pygame.Surface, camera_x: float) -> None:
+        mid = self._load_stage4_midground()
+        if mid is None:
+            return
+        width, height = mid.get_size()
+        offset = int(camera_x * 0.18) % width
+        y = (SCREEN_HEIGHT - height) // 2
+        for x in range(-offset, SCREEN_WIDTH, width):
+            screen.blit(mid, (x, y))
+
+    def _load_stage4_backdrop(self) -> pygame.Surface | None:
+        if self._stage4_bg is not None:
+            return self._stage4_bg
+        try:
+            raw = pygame.image.load(_STAGE4_BG_PATH)
+        except (FileNotFoundError, pygame.error):
+            return None
+        if raw.get_height() != SCREEN_HEIGHT:
+            scale = SCREEN_HEIGHT / raw.get_height()
+            raw = pygame.transform.smoothscale(
+                raw,
+                (max(SCREEN_WIDTH, int(raw.get_width() * scale)), SCREEN_HEIGHT),
+            )
+        self._stage4_bg = raw
+        return self._stage4_bg
+
+    def _load_stage4_midground(self) -> pygame.Surface | None:
+        if self._stage4_mid is not None:
+            return self._stage4_mid
+        try:
+            raw = pygame.image.load(_STAGE4_MID_PATH)
+        except (FileNotFoundError, pygame.error):
+            return None
+        target_h = max(1, int(SCREEN_HEIGHT * 0.92))
+        if raw.get_height() != target_h:
+            scale = target_h / raw.get_height()
+            raw = pygame.transform.smoothscale(raw, (max(1, int(raw.get_width() * scale)), target_h))
+        self._stage4_mid = raw
+        return self._stage4_mid
