@@ -157,7 +157,7 @@ def test_stage_ids_match_stage_names_and_boss_config() -> None:
 def test_stage_json_required_fields() -> None:
     valid_formations = {"line", "v_shape", "random", "single"}
     valid_boss_terrain_modes = {"replace", "preplaced"}
-    valid_terrain_kinds = {"wall", "rock", "debris", "data_block", "fortress_block", "clot"}
+    valid_terrain_kinds = {"wall", "rock", "debris", "data_block", "fortress_block", "shogi_void", "clot"}
     valid_surface_anchors = {"floor", "ceiling"}
     rect_terrain_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
     strip_terrain_types = {"TerrainStrip", "cave_section", "corridor"}
@@ -823,8 +823,10 @@ def test_stage3_ceiling_attackers_keep_clearance_from_hud() -> None:
 
 
 def test_stage4_uses_authored_shogi_void_setpieces() -> None:
-    from src.core.constants import SCREEN_WIDTH
+    from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
+    from src.core.terrain_composer import load_composer_catalog, terrain_material_catalog_for_kind
     from src.entities.stage3_composer_terrain import build_stage3_piece_layout, load_stage3_composer_pieces
+    from src.entities.terrain import Terrain
     from src.stages.stage import Stage
 
     data = json.loads((ROOT / "data" / "stages" / "stage4.json").read_text(encoding="utf-8"))
@@ -843,7 +845,7 @@ def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     boss_gate = next(ev for ev in world_events if ev["type"] == "BossGate")
     boss_room_blocks = [
         ev for ev in world_events
-        if ev.get("kind") == "rock" and ev.get("x", 0) >= boss_gate["trigger_x"]
+        if ev.get("type") == "Terrain" and ev.get("x", 0) >= boss_gate["trigger_x"]
     ]
     first_boss_room_x = min(ev["x"] for ev in boss_room_blocks)
     stage = Stage(object(), 4)
@@ -854,6 +856,10 @@ def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     assert 0.0 < data["random_drop_scale"] < 1.0
     pieces = layout["pieces"]
     surface_pieces = [piece for piece in pieces if piece.get("collision") == "surface"]
+    breakables = [
+        event for event in world_events
+        if event.get("destructible") or event["type"] in {"breakable_gate", "weapon_gate"}
+    ]
     assert layout["type"] == "TerrainPieces"
     assert layout["theme"] == "shogi_void"
     assert layout["renderer"] == "terrain_composer"
@@ -864,17 +870,67 @@ def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     assert surface_pieces
     assert {piece.get("side") for piece in surface_pieces} == {"top", "bottom"}
     assert all({"asset", "x", "y", "role", "collision"} <= set(piece) for piece in pieces)
+    composer_pieces = load_stage3_composer_pieces(
+        ROOT / layout["composer_rects"],
+        mask_dir=ROOT / layout["composer_mask_dir"],
+    )
     composer_layout = build_stage3_piece_layout(
         layout,
-        load_stage3_composer_pieces(
-            ROOT / layout["composer_rects"],
-            mask_dir=ROOT / layout["composer_mask_dir"],
-        ),
+        composer_pieces,
         collision_step=int(layout["composer_collision_step"]),
         collision_tolerance=int(layout["composer_collision_tolerance"]),
     )
     assert len(composer_layout.placements) == len(pieces)
     assert {run.side for run in composer_layout.collision_runs} >= {"top", "bottom"}
+    material_catalog = terrain_material_catalog_for_kind("shogi_void")
+    assert material_catalog is not None
+    assert material_catalog.rects_path == ROOT / "tools" / "stage4_terrain_rects.json"
+    catalog = load_composer_catalog(material_catalog.rects_path)
+    assert len(breakables) == 4
+    assert all(event.get("kind") == "shogi_void" for event in breakables)
+    assert all(event.get("material_role") == "breakable_block" for event in breakables)
+    assert all(event.get("material_asset") in catalog.assets for event in breakables)
+    rect_event_types = {"Terrain", "solid", "platform", "gate", "breakable_gate", "weapon_gate", "turret_mount"}
+    rect_events = [
+        event
+        for event in [*data["boss_terrain"], *world_events]
+        if event.get("type") in rect_event_types
+    ]
+    assert len(rect_events) == 15
+    assert all(event.get("kind") == "shogi_void" for event in rect_events)
+    assert all(event.get("material_role") for event in rect_events)
+    assert all(event.get("material_asset") in catalog.assets for event in rect_events)
+    for event in rect_events:
+        group, index_text = str(event["material_asset"]).split(":", 1)
+        source = composer_pieces[group][int(index_text) - 1].image
+        assert (int(event["w"]), int(event["h"])) == source.get_size()
+        if not event.get("destructible") and event["type"] not in {"breakable_gate", "weapon_gate"}:
+            terrain = Terrain(
+                float(event.get("x", event.get("screen_x", 0))),
+                float(event["y"]),
+                int(event["w"]),
+                int(event["h"]),
+                "shogi_void",
+                surface_anchor=event.get("surface_anchor"),
+                material_role=str(event["material_role"]),
+                material_asset=str(event["material_asset"]),
+            )
+            assert pygame.image.tobytes(terrain.image, "RGBA") == pygame.image.tobytes(source, "RGBA")
+    for event in breakables:
+        block = Terrain(
+            float(event["x"]),
+            float(event["y"]),
+            int(event["w"]),
+            int(event["h"]),
+            "shogi_void",
+            destructible=True,
+            hp=int(event["hp"]),
+            material_role=str(event["material_role"]),
+            material_asset=str(event["material_asset"]),
+        )
+        assert block.image.get_size() == (int(event["w"]), int(event["h"]))
+        assert block.take_damage(1) is False
+        assert 0 <= block.rect.top <= SCREEN_HEIGHT
     assert len(world_events) >= 45
     assert sum(int(ev.get("count", 1)) for ev in turrets) >= 15
     assert len(mounts) >= 3
@@ -890,6 +946,21 @@ def test_stage4_uses_authored_shogi_void_setpieces() -> None:
     assert boss_gate["player_limit_x"] <= first_boss_room_x
     assert boss_x - SCREEN_WIDTH - boss_gate["lock_camera_x"] <= 500
     assert stage.boss_terrain_mode == "preplaced"
+
+
+def test_stage4_background_uses_far_and_mid_parallax_assets() -> None:
+    from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
+    from src.entities.background import ScrollingBackground
+
+    background = ScrollingBackground(4)
+    screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    background.draw(screen, 480.0)
+
+    assert background._stage4_bg is not None
+    assert background._stage4_mid is not None
+    assert background._stage4_bg.get_height() == SCREEN_HEIGHT
+    assert background._stage4_mid.get_height() == int(SCREEN_HEIGHT * 0.92)
+    assert background._stage4_mid.get_at((0, 0)).a == 0
 
 
 def test_world_event_boss_gate_does_not_spawn_boss_until_boss_event() -> None:
@@ -2310,6 +2381,7 @@ def test_stage_designer_stage_profiles_select_stage_defaults() -> None:
     assert stage4_profile.stage_json == ROOT / "data" / "stages" / "stage4.json"
     assert stage4_profile.rects == ROOT / "tools" / "stage4_terrain_rects.json"
     assert stage4_profile.mask_dir == ROOT / "tools" / "stage4_terrain_alpha_masks"
+    assert stage4_profile.background == ROOT / "assets" / "graphic" / "stage4_shogi_void_bg.png"
     assert stage4_profile.terrain_kind == "shogi_void"
 
 
@@ -2373,6 +2445,36 @@ def test_stage_designer_stage2_block_previews_use_rect_roles() -> None:
     assert added["material_role"] == "breakable_block"
     assert added["material_asset"] == _piece_asset_id(added_piece)
     assert (added["w"], added["h"]) == added_piece.image.get_size()
+    assert designer.selection == Selection("event", 0)
+
+
+def test_stage_designer_stage4_event_palette_preserves_alpha_rect_dimensions() -> None:
+    from tools.stage_designer import Selection, StageDesigner, _event_templates_for_kind
+
+    designer = StageDesigner.__new__(StageDesigner)
+    designer.data = {"terrain_layout": [{"type": "TerrainPieces", "length": 1000}], "world_events": []}
+    designer.rects_path = ROOT / "tools" / "stage4_terrain_rects.json"
+    designer.mask_dir = ROOT / "tools" / "stage4_terrain_alpha_masks"
+    designer.event_templates = _event_templates_for_kind("shogi_void")
+    designer.selection = None
+    designer.message = ""
+    designer.dirty = False
+    designer.undo_stack = []
+    designer._composer_piece_cache_key = None
+    designer._composer_piece_cache = None
+
+    index = next(i for i, (name, _event) in enumerate(designer.event_templates) if name == "turret mount")
+    designer._add_event_template_at(index, 420, 180)
+    added = designer.data["world_events"][0]
+    piece = designer._event_rect_piece(added, int(added["w"]), int(added["h"]))
+    image = designer._event_rect_image(added, int(added["w"]), int(added["h"]))
+
+    assert added["kind"] == "shogi_void"
+    assert added["material_role"] == "turret_mount"
+    assert added["material_asset"] == "turret_mount:1"
+    assert (added["w"], added["h"]) == piece.image.get_size()
+    assert image is not None
+    assert pygame.image.tobytes(image, "RGBA") == pygame.image.tobytes(piece.image, "RGBA")
     assert designer.selection == Selection("event", 0)
 
 

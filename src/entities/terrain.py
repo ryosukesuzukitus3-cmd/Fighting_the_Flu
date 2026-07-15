@@ -380,6 +380,16 @@ class Terrain(pygame.sprite.Sprite):
                 material_role=material_role,
                 material_asset=material_asset,
             )
+        if kind == "shogi_void":
+            return Terrain._make_shogi_void_surface(
+                w, h,
+                destructible=destructible,
+                damage_ratio=damage_ratio,
+                fixed_drop=fixed_drop,
+                surface_anchor=surface_anchor,
+                material_role=material_role,
+                material_asset=material_asset,
+            )
 
         base, edge = _KIND_COLORS.get(kind, _KIND_COLORS["wall"])
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -461,6 +471,60 @@ class Terrain(pygame.sprite.Sprite):
                 rng=rng,
                 damage_ratio=damage_ratio,
             )
+
+        Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
+        return surf
+
+    @staticmethod
+    def _make_shogi_void_surface(
+        w: int,
+        h: int,
+        *,
+        destructible: bool = False,
+        damage_ratio: float = 0.0,
+        fixed_drop: str | None = None,
+        surface_anchor: str = "floor",
+        material_role: str | None = None,
+        material_asset: str | None = None,
+    ) -> pygame.Surface:
+        """Render authored Stage4 blocks, including the breakable shogi stones."""
+
+        seed = (w * 61871) ^ (h * 130363) ^ (0x51A0 if destructible else 0x4A90)
+        rng = random.Random(seed)
+        preferred_role = material_role or (
+            "breakable_block" if destructible else (
+                "fixed_ceiling_block" if surface_anchor == "ceiling" else "fixed_floor_block"
+            )
+        )
+        surf = _stage3_rect_material_surface(
+            w,
+            h,
+            seed=seed,
+            require_top=surface_anchor != "ceiling",
+            kind="shogi_void",
+            preferred_role=preferred_role,
+            surface_anchor=surface_anchor,
+            material_asset=material_asset,
+            allow_asset_resize=True,
+        )
+        if surf is None:
+            surf = pygame.Surface((w, h), pygame.SRCALPHA)
+            surf.fill((20, 16, 34, 255))
+            pygame.draw.rect(surf, (156, 122, 68, 210), surf.get_rect(), 2)
+            pygame.draw.rect(surf, (78, 52, 112, 170), surf.get_rect().inflate(-12, -12), 1)
+
+        if destructible:
+            _stage3_draw_breakable_cracks(
+                surf,
+                w,
+                h,
+                rng=rng,
+                damage_ratio=damage_ratio,
+            )
+            for _ in range(max(1, (w * h) // 13000)):
+                sx = rng.randint(6, max(6, w - 7))
+                sy = rng.randint(8, max(8, h - 9))
+                pygame.draw.circle(surf, (174, 96, 242, 130), (sx, sy), 1)
 
         Terrain._draw_reward_core(surf, w, h, fixed_drop, damage_ratio=damage_ratio)
         return surf
