@@ -886,11 +886,15 @@ class StageDesigner:
         piece = self._event_rect_piece(event, w, h)
         if piece is None:
             return None
-        if event.get("kind") == "clot":
+        # ``clot`` and ``shogi_void`` add runtime-only overlays (damage
+        # cracks/reward cores).  Route them through Terrain so the canvas is a
+        # WYSIWYG preview.  When the event has its authored native dimensions,
+        # Terrain retains the alpha-processed rect without rescaling it.
+        if event.get("kind") in {"clot", "shogi_void"}:
             return Terrain._make_surface(
                 w,
                 h,
-                "clot",
+                str(event["kind"]),
                 destructible=bool(event.get("destructible") or event.get("type") in {"breakable_gate", "weapon_gate"}),
                 fixed_drop="WeaponItem" if event.get("type") == "weapon_gate" else None,
                 surface_anchor=str(event.get("surface_anchor", "floor")),
@@ -941,7 +945,7 @@ class StageDesigner:
 
     def _apply_event_rect_asset(self, event: dict[str, Any]) -> None:
         kind = event.get("kind")
-        if kind not in {"clot", "data_block"}:
+        if kind not in {"clot", "data_block", "shogi_void"}:
             return
         role = _event_material_role(event)
         if role is None:
@@ -951,7 +955,7 @@ class StageDesigner:
             return
         event["material_role"] = role
         event["material_asset"] = _piece_asset_id(piece)
-        if kind == "data_block":
+        if kind in {"data_block", "shogi_void"}:
             event["w"] = int(piece.image.get_width())
             event["h"] = int(piece.image.get_height())
 
