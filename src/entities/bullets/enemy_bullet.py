@@ -3,6 +3,10 @@ from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.core.balance import PLAYER_DMG_BULLET
 
 
+_OUTLINE_COLOR = (54, 12, 30)
+_CORE_COLOR = (255, 248, 218)
+
+
 class EnemyBullet(pygame.sprite.Sprite):
     """スクリーン座標で動作する敵の弾"""
 
@@ -41,7 +45,16 @@ class EnemyBullet(pygame.sprite.Sprite):
         if size is None:
             d = max(2, radius * 2)
             self.image = pygame.Surface((d, d), pygame.SRCALPHA)
-            pygame.draw.circle(self.image, color, (radius, radius), radius)
+            center = (radius, radius)
+            # Keep the existing collision size, but give ordinary round shots a
+            # dark silhouette and a light core so they remain legible over each
+            # stage's busy background.
+            if radius >= 3:
+                pygame.draw.circle(self.image, _OUTLINE_COLOR, center, radius)
+                pygame.draw.circle(self.image, color, center, radius - 1)
+                pygame.draw.circle(self.image, _CORE_COLOR, center, max(1, radius // 2))
+            else:
+                pygame.draw.circle(self.image, color, center, radius)
         else:
             w, h = size
             self.image = pygame.Surface((w, h), pygame.SRCALPHA)

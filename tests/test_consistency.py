@@ -1923,6 +1923,17 @@ def test_enemy_bullet_supports_boss_special_shapes() -> None:
     assert fading.image.get_alpha() is not None and fading.image.get_alpha() < 255
 
 
+def test_standard_enemy_bullet_has_contrast_core_without_expanding_hitbox() -> None:
+    from src.entities.bullets.enemy_bullet import EnemyBullet
+
+    bullet = EnemyBullet(100.0, 120.0, 0.0, 0.0, radius=5, color=(255, 60, 60))
+
+    assert bullet.rect.size == (10, 10)
+    assert bullet.image.get_at((0, 5))[:3] == (54, 12, 30)
+    assert bullet.image.get_at((2, 5))[:3] == (255, 60, 60)
+    assert bullet.image.get_at((5, 5))[:3] == (255, 248, 218)
+
+
 def test_broly_beam_has_charge_and_taper() -> None:
     src = (ROOT / "src" / "entities" / "enemies" / "broly.py").read_text(encoding="utf-8")
 
