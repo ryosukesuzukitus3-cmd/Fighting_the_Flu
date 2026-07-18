@@ -534,7 +534,7 @@ class GameScene(
                 if any(isinstance(b, HomingBullet) for b in new_bullets):
                     self.game.sound.play_se("music/se/ウェポン：missile_shot.mp3", volume=0.5)
                 if any(not isinstance(b, HomingBullet) for b in new_bullets):
-                    self.game.sound.play_se("music/se/ウェポン：normalshot_shot.mp3", volume=0.4)
+                    self.game.sound.play_se_alias("SE_NORMALSHOT", volume=0.4)
                 if self._heat is not None and self._heat.add(HEAT_PER_SHOT):
                     self._on_overheat_started()
 
