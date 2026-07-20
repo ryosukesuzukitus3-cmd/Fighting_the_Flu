@@ -2,6 +2,7 @@ import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.script import GAME_CLEAR
+from src.scenes.meta_ui import draw_meta_footer, draw_meta_panel
 
 
 class GameClearScene(Scene):
@@ -37,7 +38,7 @@ class GameClearScene(Scene):
 
     def update(self, dt: float) -> None:
         self._timer += dt
-        if self._timer >= 1.5 and self.game.input.is_just_pressed(pygame.K_RETURN):
+        if self._timer >= 1.5 and self.game.input.is_action_just_pressed("ui_accept"):
             self.game.sound.play_se("music/se/メニュー操作SE：決定.mp3", volume=0.6)
             self._go_credits()
 
@@ -64,21 +65,24 @@ class GameClearScene(Scene):
         cx = SCREEN_WIDTH // 2
 
         clear = self._title_font.render("治癒", True, (255, 220, 100))
-        screen.blit(clear, (cx - clear.get_width() // 2, 150))
+        screen.blit(clear, (cx - clear.get_width() // 2, 132))
+
+        card = pygame.Rect(70, 268, 660, 205)
+        draw_meta_panel(screen, card, accent=(255, 220, 100), fill=(8, 10, 18, 150))
 
         sub = self._sub_font.render(GAME_CLEAR["subtitle"], True, (235, 225, 200))
-        screen.blit(sub, (cx - sub.get_width() // 2, 270))
+        screen.blit(sub, (cx - sub.get_width() // 2, 292))
 
         score = self._info_font.render(f"SCORE : {self._score}", True, (200, 200, 200))
-        screen.blit(score, (cx - score.get_width() // 2, 320))
+        screen.blit(score, (cx - score.get_width() // 2, 336))
 
         if self._is_high:
             hi = self._info_font.render("★ NEW HIGH SCORE! ★", True, (255, 220, 60))
-            screen.blit(hi, (cx - hi.get_width() // 2, 360))
+            screen.blit(hi, (cx - hi.get_width() // 2, 376))
 
         nxt = self._next_font.render(GAME_CLEAR["next_preview"], True, (150, 150, 170))
-        screen.blit(nxt, (cx - nxt.get_width() // 2, 410))
+        screen.blit(nxt, (cx - nxt.get_width() // 2, 420))
 
         if self._timer >= 1.5:
-            hint = self._info_font.render("PRESS ENTER", True, (140, 140, 140))
-            screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 56))
+            accept = self.game.settings.key_display("ui_accept")
+            draw_meta_footer(screen, self._next_font, f"{accept}: スタッフロールへ")

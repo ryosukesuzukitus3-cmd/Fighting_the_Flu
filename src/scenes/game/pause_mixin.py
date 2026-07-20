@@ -1,6 +1,12 @@
 """ポーズUI ミックスイン — GameScene に多重継承で組み込まれる。"""
 from __future__ import annotations
 import pygame
+from src.scenes.meta_ui import (
+    ACCENT_GOLD,
+    draw_meta_footer,
+    draw_meta_panel,
+    draw_selection_marker,
+)
 
 
 class GameScenePauseMixin:
@@ -9,7 +15,6 @@ class GameScenePauseMixin:
     _PAUSE_ITEMS = ["ゲームに戻る", "設定", "タイトルへ戻る"]
 
     def _update_pause(self) -> None:
-        # UIナビゲーションキー（↑↓ / SPACE / ENTER）はカスタマイズ対象外として固定
         inp = self.game.input  # type: ignore[attr-defined]
         if inp.is_just_pressed(pygame.K_UP):
             self._pause_cursor = (self._pause_cursor - 1) % len(self._PAUSE_ITEMS)  # type: ignore[attr-defined]
@@ -17,11 +22,12 @@ class GameScenePauseMixin:
         if inp.is_just_pressed(pygame.K_DOWN):
             self._pause_cursor = (self._pause_cursor + 1) % len(self._PAUSE_ITEMS)  # type: ignore[attr-defined]
             self.game.sound.play_se("music/se/メニュー操作SE：カーソル移動.mp3", volume=0.5)  # type: ignore[attr-defined]
-        if inp.is_action_just_pressed("pause"):  # type: ignore[attr-defined]
+        if (inp.is_action_just_pressed("pause")
+                or inp.is_action_just_pressed("ui_back")):  # type: ignore[attr-defined]
             self.game.sound.play_se("music/se/メニュー操作SE：キャンセル.mp3", volume=0.5)  # type: ignore[attr-defined]
             self._paused = False  # type: ignore[attr-defined]
             return
-        if inp.is_just_pressed(pygame.K_SPACE) or inp.is_just_pressed(pygame.K_RETURN):
+        if inp.is_action_just_pressed("ui_accept"):
             self._pause_select()
 
     def _pause_select(self) -> None:
@@ -45,6 +51,8 @@ class GameScenePauseMixin:
         screen.blit(overlay, (0, 0))
 
         cx = screen.get_width() // 2
+        panel = pygame.Rect(cx - 205, 145, 410, 315)
+        draw_meta_panel(screen, panel, accent=(205, 210, 235), fill=(6, 9, 18, 225))
         title = self._pause_title_font.render("PAUSE", True, (255, 255, 255))  # type: ignore[attr-defined]
         screen.blit(title, (cx - title.get_width() // 2, 180))
 
@@ -52,4 +60,14 @@ class GameScenePauseMixin:
             color  = (255, 255, 100) if i == self._pause_cursor else (180, 180, 180)  # type: ignore[attr-defined]
             prefix = "> " if i == self._pause_cursor else "  "  # type: ignore[attr-defined]
             surf   = self._pause_font.render(prefix + label, True, color)  # type: ignore[attr-defined]
-            screen.blit(surf, (cx - surf.get_width() // 2, 280 + i * 56))
+            row = pygame.Rect(panel.x + 42, 270 + i * 54, panel.w - 84, 42)
+            draw_selection_marker(screen, row, selected=(i == self._pause_cursor), accent=ACCENT_GOLD)  # type: ignore[attr-defined]
+            screen.blit(surf, (cx - surf.get_width() // 2, row.y + 7))
+
+        accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
+        back = self.game.settings.key_display("ui_back")  # type: ignore[attr-defined]
+        draw_meta_footer(
+            screen,
+            self.game.resources.pixelfont(17),  # type: ignore[attr-defined]
+            f"↑↓: 選択   {accept}: 決定   {back}: 戻る",
+        )

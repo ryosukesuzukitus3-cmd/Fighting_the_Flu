@@ -151,9 +151,10 @@ class CutsceneScene(Scene):
             return
 
         inp = self.game.input
-        # ENTER/SPACE は長押しで連続送り（オートリピート）
-        advance = (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                   or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12))
+        # 決定アクションは長押しで連続送り（オートリピート）
+        advance = inp.is_action_held_with_repeat(
+            "ui_accept", initial_delay=0.25, repeat_interval=0.12,
+        )
         if advance:
             if not self._is_complete():
                 self._chars = float(self._total_chars() + 1)
@@ -162,7 +163,7 @@ class CutsceneScene(Scene):
                 self._enter_page()
             else:
                 self._begin_finish()
-        if inp.is_just_pressed(pygame.K_x):
+        if inp.is_action_just_pressed("ui_back"):
             self._begin_finish()
 
     # ── 背景テーマ ────────────────────────────────────────────────
@@ -280,6 +281,8 @@ class CutsceneScene(Scene):
         glitch = self._glitch_t > 0
         from src.scenes.dialogue_panel import story_sides
         left_sp, right_sp = story_sides(self._story_active, self._story_partner)
+        accept = self.game.settings.key_display("ui_accept")
+        back = self.game.settings.key_display("ui_back")
         draw_story_panel(
             screen,
             self.game.resources,
@@ -292,8 +295,8 @@ class CutsceneScene(Scene):
             total_pages=len(self._pages),
             complete=self._is_complete(),
             blink=self._blink,
-            hint_last="ENTER: 続ける   X: スキップ",
-            hint_next="ENTER: 次へ   X: スキップ",
+            hint_last=f"{accept}: 続ける   {back}: スキップ",
+            hint_next=f"{accept}: 次へ   {back}: スキップ",
             style=LIGHT_STYLE if is_light_bg else DARK_STYLE,
             text_transform=self._glitch_text if glitch else None,
             text_color=(210, 60, 60) if glitch else None,

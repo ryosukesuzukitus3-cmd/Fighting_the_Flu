@@ -3,6 +3,13 @@ import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.managers.playlog import PlayLogger
+from src.scenes.meta_ui import (
+    TEXT_DIM,
+    draw_meta_background,
+    draw_meta_footer,
+    draw_meta_panel,
+    draw_meta_title,
+)
 
 
 def _compute_stats(sessions: list[dict]) -> dict | None:
@@ -124,18 +131,20 @@ class StatsScene(Scene):
         elif inp.is_just_pressed(pygame.K_LEFT):
             self._page = max(self._page - 1, 0)
             self.game.sound.play_se("music/se/メニュー操作SE：カーソル移動.mp3", volume=0.5)
-        elif inp.is_just_pressed(pygame.K_x) or inp.is_just_pressed(pygame.K_SPACE):
+        elif (inp.is_action_just_pressed("ui_back")
+              or inp.is_action_just_pressed("ui_accept")
+              or inp.is_just_pressed(pygame.K_ESCAPE)):
             self.game.sound.play_se("music/se/メニュー操作SE：キャンセル.mp3", volume=0.5)
             from src.scenes.title import TitleScene
             self.game.change_scene(TitleScene(self.game))
 
     def draw(self, screen: pygame.Surface) -> None:
-        screen.fill((10, 10, 25))
+        accent = (255, 220, 80)
+        draw_meta_background(screen, accent=accent)
         cx = SCREEN_WIDTH // 2
 
-        # タイトル
-        title = self._font_title.render("PLAY STATISTICS", True, (255, 220, 60))
-        screen.blit(title, (cx - title.get_width() // 2, 36))
+        draw_meta_title(screen, self._font_title, "PLAY STATISTICS", accent=accent, y=24)
+        draw_meta_panel(screen, pygame.Rect(138, 95, 524, 420), accent=accent)
 
         if self._stats is None:
             msg = self._font_head.render("まだプレイデータがありません", True, (120, 120, 120))
@@ -151,11 +160,12 @@ class StatsScene(Scene):
         # ページインジケーター
         if self._stats is not None:
             dots = "  ".join("●" if i == self._page else "○" for i in range(self._n_pages))
-            dsurf = self._font_hint.render(dots, True, (90, 110, 150))
+            dsurf = self._font_hint.render(dots, True, (135, 158, 210))
             screen.blit(dsurf, (cx - dsurf.get_width() // 2, SCREEN_HEIGHT - 64))
 
-        hint = self._font_hint.render("←→: ページ切替    X / SPACE: タイトルへ戻る", True, (80, 80, 80))
-        screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 38))
+        back = self.game.settings.key_display("ui_back")
+        accept = self.game.settings.key_display("ui_accept")
+        draw_meta_footer(screen, self._font_hint, f"←→: ページ切替   {back} / {accept} / ESC: タイトルへ戻る")
 
     # ── 描画サブルーチン ──────────────────────────────────────────
 
@@ -224,7 +234,7 @@ class StatsScene(Scene):
             if avg_boss is not None:
                 boss_txt = self._font_row.render(f"avg {avg_boss:.0f}s", True, (180, 220, 180))
             else:
-                boss_txt = self._font_row.render("---", True, (80, 80, 80))
+                boss_txt = self._font_row.render("---", True, TEXT_DIM)
             screen.blit(boss_txt, (col_boss, y))
 
             y += 36

@@ -82,8 +82,8 @@ class FinalBattleDirector:
 
     def update_dialogue(self) -> None:
         inp = self.scene.game.input
-        if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+        if inp.is_action_held_with_repeat(
+                "ui_accept", initial_delay=0.25, repeat_interval=0.12):
             self._final_dialogue_idx += 1
             if self._final_dialogue_idx >= len(self._final_dialogue_pages):
                 self._final_dialogue_active = False
@@ -464,11 +464,12 @@ class FinalBattleDirector:
             return
         line  = pages[idx]
         total = len(pages)
+        accept = self.scene.game.settings.key_display("ui_accept")
 
         if idx < total - 1:
-            hint = f"{idx + 1}/{total}  ENTER: 次へ"
+            hint = f"{idx + 1}/{total}  {accept}: 次へ"
         else:
-            hint = "ENTER: OK"
+            hint = f"{accept}: OK"
         draw_combat_panel(
             screen,
             self.scene.game.resources,

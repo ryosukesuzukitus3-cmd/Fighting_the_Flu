@@ -170,7 +170,7 @@ class GameScene(
         self._boss_dialogue_font   = None
         self._boss_mid_dialogue_shown: bool = False
 
-        # 戦闘中カットイン（複数行の会話ビート用: 戦闘を停止して ENTER 送り。
+        # 戦闘中カットイン（複数行の会話ビート用: 戦闘を停止して決定アクション送り。
         # 実機FB「自動送りは忙しくて読めない」対応。単発バークは従来どおり）
         self._cutin_pages:  list = []
         self._cutin_idx:    int  = 0
@@ -441,7 +441,7 @@ class GameScene(
             self.particles.update(dt)
             return
 
-        # Freeze gameplay during combat cut-in dialogue (ENTER to advance).
+        # Freeze gameplay during combat cut-in dialogue (UI accept to advance).
         if self._cutin_active:
             self._update_combat_cutin()
             self.particles.update(dt)
@@ -743,8 +743,8 @@ class GameScene(
                     self._start_fight_banner()
 
         elif state == "boss_dialogue":
-            if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                    or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+            if inp.is_action_held_with_repeat(
+                    "ui_accept", initial_delay=0.25, repeat_interval=0.12):
                 self._boss_intro_page_idx += 1
                 if self._boss_intro_page_idx >= len(self._boss_intro_pages):
                     self._start_fight_banner()
@@ -1424,7 +1424,7 @@ class GameScene(
                 self._enqueue_boss_dialogue([random.choice(BILLY_SPAWN_BARKS)], BOSS_MID_LINE_DURATION)
 
     def _start_combat_cutin(self, lines: list) -> None:
-        """戦闘を停止して ENTER 送りで読ませる会話カットインを開始する。
+        """戦闘を停止して決定アクション送りで読ませる会話カットインを開始する。
 
         複数行の会話ビート（BOSS_MID 系）用。単発バークは
         _enqueue_boss_dialogue（自動タイムアウト・非停止）を使う。
@@ -1436,10 +1436,10 @@ class GameScene(
         self._cutin_active = True
 
     def _update_combat_cutin(self) -> None:
-        """カットインの ENTER/SPACE 送り。最終ページで閉じて戦闘再開。"""
+        """カットインを決定アクションで送り、最終ページで戦闘を再開する。"""
         inp = self.game.input
-        if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+        if inp.is_action_held_with_repeat(
+                "ui_accept", initial_delay=0.25, repeat_interval=0.12):
             self._cutin_idx += 1
             if self._cutin_idx >= len(self._cutin_pages):
                 self._cutin_active = False

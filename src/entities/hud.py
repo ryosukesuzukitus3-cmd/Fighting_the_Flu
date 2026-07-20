@@ -33,6 +33,25 @@ class HUD:
         heat=None,
         pieces: list[str] | None = None,
     ) -> None:
+        # The stage art intentionally changes from bright fever-red to dense
+        # cyber detail and purple effects.  A single translucent safe-area keeps
+        # the same HUD readable against every stage without flattening the art.
+        w = player.weapon
+        panel_h = 124
+        if w.weapon_stock > 0:
+            panel_h = 150
+        if laser is not None:
+            panel_h = max(panel_h, 174)
+        if heat is not None:
+            panel_h = max(panel_h, 198)
+        if pieces is not None:
+            panel_h = max(panel_h, 216)
+        panel = pygame.Surface((338, panel_h), pygame.SRCALPHA)
+        panel.fill((4, 7, 15, 172))
+        pygame.draw.rect(panel, (224, 224, 238, 64), panel.get_rect(), 1, border_radius=6)
+        pygame.draw.line(panel, (255, 220, 110, 95), (8, 3), (210, 3), 2)
+        screen.blit(panel, (4, 4))
+
         # スコア
         score_surf = self._font.render(f"SCORE: {score}", True, (255, 255, 255))
         screen.blit(score_surf, (10, 10))
@@ -54,11 +73,10 @@ class HUD:
 
         # 残機＝「有給」表記（HP バーの下）
         if lives > 0:
-            lives_surf = self._label_font.render(f"有給: {lives}日", True, (160, 100, 220))
+            lives_surf = self._label_font.render(f"有給: {lives}日", True, (210, 170, 255))
             screen.blit(lives_surf, (hp_x + _HP_BAR_W + 8, hp_y - 14))
 
         # 武器レベル
-        w = player.weapon
         weapon_names = ["SINGLE", "RAPID1", "RAPID2", "WIDE", "WIDE+", "MEDIC"]
         weapon_text  = weapon_names[min(w.main_level, len(weapon_names) - 1)]
         addons = []
@@ -150,6 +168,10 @@ class HUD:
             bar_w, bar_h = 400, 18
             bx = (screen.get_width() - bar_w) // 2
             by = screen.get_height() - 36
+            boss_back = pygame.Surface((bar_w + 122, 48), pygame.SRCALPHA)
+            boss_back.fill((4, 5, 12, 178))
+            pygame.draw.rect(boss_back, (255, 255, 255, 48), boss_back.get_rect(), 1, border_radius=6)
+            screen.blit(boss_back, (bx - 112, by - 19))
             ratio = max(0.0, boss.hp / boss.max_hp)
             pygame.draw.rect(screen, (80, 0, 0),   (bx, by, bar_w, bar_h), border_radius=4)
             pygame.draw.rect(screen, (220, 30, 30), (bx, by, int(bar_w * ratio), bar_h), border_radius=4)

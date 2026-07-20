@@ -106,7 +106,35 @@ def _wrap_line(font, text, max_w):
             cur += ch
     if cur:
         out.append(cur)
+    # Avoid an orphaned Japanese particle/punctuation fragment on its own line.
+    # When a line only barely exceeds the panel width, a balanced two-line break
+    # reads much better than leaving e.g. ``よ。`` at the start of line two.
+    if len(out) == 2 and len(out[-1]) <= 3 and len(text) >= 8:
+        split = len(text) // 2
+        while split < len(text) and text[split] in "。、！？!?）】」』":
+            split += 1
+        out = [text[:split], text[split:]]
     return out
+
+
+def _wrap_lines(font, lines, max_w):
+    """論理行を表示行へ折り返す。文字は削除・追加しない。"""
+    wrapped: list[str] = []
+    for line in lines:
+        wrapped.extend(_wrap_line(font, line, max_w))
+    return wrapped or [""]
+
+
+def _footer_text(page_index, total_pages, hint_text):
+    """ページ表記と操作ヒントを分離し、旧呼び出しの重複表記を除く。"""
+    page = ""
+    if page_index is not None and total_pages is not None and total_pages > 0:
+        page = f"{page_index + 1}/{total_pages}"
+
+    hint = (hint_text or "").strip()
+    if page and hint.startswith(page):
+        hint = hint[len(page):].lstrip(" 　:：")
+    return page, hint
 
 
 def _arrow_visible(arrow_on):
@@ -145,14 +173,14 @@ def _draw_name_tab(screen, resources, rect, speaker, style, alpha):
 
 def _draw_text(screen, resources, rect, lines, style, *, chars, center, valign,
                body_size, min_body_size, text_x, text_w, alpha,
-               text_transform, text_color, text_jitter):
+               text_transform, text_color, text_jitter, reserved_bottom=0):
     visible = _visible_lines(lines, chars)
     body = _fit_font(resources, visible or lines, text_w, body_size, min_body_size)
     line_h = body.get_height() + 5
     total_h = len(lines) * line_h
     pad_top = 18
     content_top = rect.y + pad_top
-    content_h = rect.h - pad_top - 14
+    content_h = rect.h - pad_top - 14 - reserved_bottom
     start_y = content_top + max(0, (content_h - total_h) // 2) if valign == "center" else content_top
     for i, ln in enumerate(visible):
         draw = text_transform(ln) if text_transform else ln
@@ -164,6 +192,26 @@ def _draw_text(screen, resources, rect, lines, style, *, chars, center, valign,
             j = random.randint(-text_jitter, text_jitter) if text_jitter > 0 else 0
             x = text_x + j
         screen.blit(surf, (x, start_y + i * line_h))
+
+
+def _draw_footer(screen, resources, rect, style, *, page_index, total_pages,
+                 hint_text, alpha, text_x, font_size):
+    page, hint = _footer_text(page_index, total_pages, hint_text)
+    if not page and not hint:
+        return
+
+    font = resources.pixelfont(font_size)
+    y = rect.bottom - font.get_height() - 8
+    if page:
+        surf = font.render(page, True, style.hint)
+        surf.set_alpha(alpha)
+        screen.blit(surf, (text_x, y))
+    if hint:
+        surf = font.render(hint, True, style.hint)
+        surf.set_alpha(alpha)
+        # 右下の送りマークと干渉させない。
+        right = rect.right - 46
+        screen.blit(surf, (right - surf.get_width(), y))
 
 
 def _draw_arrow(screen, rect, alpha, arrow_on, complete):
@@ -201,10 +249,8 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
         text_x = rect.x + 14 + _COMBAT_PORTRAIT_SIZE + 20
         text_w = rect.right - 22 - text_x
     # 想定外に長い行だけ横幅で折り返す安全網（通常は 1 行に収まる）。
-    wrapped: list[str] = []
-    for ln in lines:
-        wrapped.extend(_wrap_line(body, ln, text_w))
-    wrapped = wrapped or [""]
+    wrapped = _wrap_lines(body, lines, text_w)
+    footer_visible = bool(_footer_text(page_index, total_pages, hint_text)[0] or hint_text)
 
     _draw_window(screen, rect, style, alpha)
     if portrait:
@@ -220,7 +266,11 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
     _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
                valign="center", body_size=_COMBAT_BODY_SIZE, min_body_size=_COMBAT_BODY_SIZE,
                text_x=text_x, text_w=text_w, alpha=alpha, text_transform=text_transform,
-               text_color=None, text_jitter=text_jitter)
+               text_color=None, text_jitter=text_jitter,
+               reserved_bottom=18 if footer_visible else 0)
+    _draw_footer(screen, resources, rect, style, page_index=page_index,
+                 total_pages=total_pages, hint_text=hint_text, alpha=alpha,
+                 text_x=text_x, font_size=14)
     if complete is None:
         complete = hint_text is not None
     _draw_arrow(screen, rect, alpha, arrow_on, complete=complete)
@@ -267,8 +317,18 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, page_inde
 
     _draw_window(screen, rect, style, 255)
     _draw_name_tab(screen, resources, rect, speaker, style, 255)
-    _draw_text(screen, resources, rect, lines, style, chars=chars, center=center,
+    text_x = rect.x + 26
+    text_w = rect.w - 52
+    body = resources.pixelfont(27)
+    # 台本の論理行は維持したまま表示時だけ折り返すため、文字送りの総文字数は変わらない。
+    wrapped = _wrap_lines(body, lines, text_w)
+    hint = hint_next if page_index < total_pages - 1 else hint_last
+    _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
                valign="center" if center else "top", body_size=27, min_body_size=21,
-               text_x=rect.x + 26, text_w=rect.w - 52, alpha=255,
-               text_transform=text_transform, text_color=text_color, text_jitter=text_jitter)
+               text_x=text_x, text_w=text_w, alpha=255,
+               text_transform=text_transform, text_color=text_color, text_jitter=text_jitter,
+               reserved_bottom=22)
+    _draw_footer(screen, resources, rect, style, page_index=page_index,
+                 total_pages=total_pages, hint_text=hint, alpha=255,
+                 text_x=text_x, font_size=16)
     _draw_arrow(screen, rect, 255, arrow_on, complete=complete)

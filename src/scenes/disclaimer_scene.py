@@ -28,8 +28,8 @@ class DisclaimerScene(Scene):
     def update(self, dt: float) -> None:
         self._timer += dt
         inp = self.game.input
-        skip = (inp.is_just_pressed(pygame.K_RETURN)
-                or inp.is_just_pressed(pygame.K_SPACE)
+        skip = (inp.is_action_just_pressed("ui_accept")
+                or inp.is_action_just_pressed("ui_back")
                 or inp.is_just_pressed(pygame.K_ESCAPE))
         if self._leave_t < 0 and (self._timer >= _FADE_IN + _HOLD or skip):
             self._leave_t = 0.0
