@@ -60,11 +60,11 @@ class GameScenePostBossMixin:
                 self._defeat_dialogue_active = True  # type: ignore[attr-defined]
             return  # 遅延中は遷移しない
 
-        # ── 撃破後セリフ表示中（ENTERで送る、プレイヤーはフリーズ）──────
+        # ── 撃破後セリフ表示中（決定アクションで送る、プレイヤーはフリーズ）
         if self._defeat_dialogue_active:  # type: ignore[attr-defined]
             inp = self.game.input  # type: ignore[attr-defined]
-            if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                    or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+            if inp.is_action_held_with_repeat(
+                    "ui_accept", initial_delay=0.25, repeat_interval=0.12):
                 self._defeat_dialogue_index += 1  # type: ignore[attr-defined]
                 if self._defeat_dialogue_index >= len(self._defeat_dialogue_pages):  # type: ignore[attr-defined]
                     self._defeat_dialogue_active = False  # type: ignore[attr-defined]

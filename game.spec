@@ -25,6 +25,8 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
+    # 配布版では __debug__ を False にし、開発専用HUD・ホットキーを除去する。
+    optimize=1,
 )
 
 pyz = PYZ(a.pure)

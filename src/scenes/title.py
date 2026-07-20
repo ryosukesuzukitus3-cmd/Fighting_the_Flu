@@ -71,7 +71,7 @@ class TitleScene(Scene):
             self._cursor = (self._cursor + 1) % len(_MENU)
             self.game.sound.play_se("music/se/メニュー操作SE：カーソル移動.mp3", volume=0.5)
             moved = True
-        if inp.is_just_pressed(pygame.K_SPACE) or inp.is_just_pressed(pygame.K_RETURN):
+        if inp.is_action_just_pressed("ui_accept"):
             self._select()
             moved = True
 
@@ -181,7 +181,8 @@ class TitleScene(Scene):
             idle = self._idle_font.render(TITLE_IDLE[self._idle_index], True, (150, 146, 150))
             idle.set_alpha(a)
             screen.blit(idle, (cx - idle.get_width() // 2, SCREEN_HEIGHT - 72))
-        hint = self._small_font.render("↑↓  SPACE / ENTER", True, (110, 106, 112))
+        accept = self.game.settings.key_display("ui_accept")
+        hint = self._small_font.render(f"↑↓  {accept}: 決定", True, (150, 146, 158))
         hint.set_alpha(150)
         screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 40))
         if __debug__:

@@ -65,7 +65,7 @@ class CreditsRollScene(Scene):
             return
 
         inp = self.game.input
-        if inp.is_just_pressed(pygame.K_x):
+        if inp.is_action_just_pressed("ui_back"):
             self._finish(fadeout=False)
             return
 
@@ -75,13 +75,12 @@ class CreditsRollScene(Scene):
         if self._scroll_y + self._final_prefix_h < -80:
             self._hold_timer += dt
             if (self._hold_timer >= _FINAL_HOLD_SEC
-                    or inp.is_just_pressed(pygame.K_RETURN)
-                    or inp.is_just_pressed(pygame.K_SPACE)):
+                    or inp.is_action_just_pressed("ui_accept")):
                 self._finish(fadeout=True)
             return
 
         speed = _SCROLL_SPEED
-        if inp.is_pressed(pygame.K_RETURN) or inp.is_pressed(pygame.K_SPACE):
+        if inp.is_action_pressed("ui_accept"):
             speed *= _FAST_MULT
         self._scroll_y -= speed * dt
 
@@ -104,7 +103,11 @@ class CreditsRollScene(Scene):
             y += h
 
         self._draw_vignette(screen)
-        hint = self._hint_font.render("ENTER: FAST   X: TITLE", True, (130, 125, 110))
+        accept = self.game.settings.key_display("ui_accept")
+        back = self.game.settings.key_display("ui_back")
+        hint = self._hint_font.render(
+            f"{accept}: FAST   {back}: TITLE", True, (175, 170, 155),
+        )
         screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 18, SCREEN_HEIGHT - 28))
 
     def _last_text_index(self) -> int | None:
