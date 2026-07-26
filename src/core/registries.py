@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+_STAGES_DIR = Path(__file__).parent.parent.parent / "data" / "stages"
+
+
 # ── 敵定義 ──────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -88,11 +91,20 @@ ITEM_BY_NAME: dict[str, ItemDef]  = {d.name: d for d in ITEM_DEFS}
 
 def stage_ids() -> list[int]:
     """data/stages/stage*.json を走査してステージ番号を昇順で返す。"""
-    stages_dir = Path(__file__).parent.parent.parent / "data" / "stages"
     ids: list[int] = []
-    for p in sorted(stages_dir.glob("stage*.json")):
+    for p in sorted(_STAGES_DIR.glob("stage*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         if data.get("debug"):
             continue
         ids.append(int(data["stage_id"]))
     return sorted(ids)
+
+
+def next_stage_id(stage_id: int) -> int | None:
+    """Return the next authored stage, or ``None`` for the final stage."""
+    ids = stage_ids()
+    try:
+        index = ids.index(stage_id)
+    except ValueError as exc:
+        raise ValueError(f"unknown stage_id: {stage_id}") from exc
+    return ids[index + 1] if index + 1 < len(ids) else None

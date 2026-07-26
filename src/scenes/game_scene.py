@@ -2,12 +2,12 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass
-from pathlib import Path as _Path
 import pygame
 
 from src.core.scene import Scene
 from src.core.camera import Camera
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.registries import next_stage_id
 from src.entities.background import ScrollingBackground
 from src.entities.player import Player
 from src.entities.hud import HUD
@@ -278,8 +278,9 @@ class GameScene(
             # 先輩不在ステージ（S4）でも、最終決戦の復帰時に引き継げるよう保持する
             self.game.shared.stage_start_companion = comp_carry
 
-        _next_stage_path = _Path("data") / "stages" / f"stage{self._stage_id + 1}.json"
-        _is_final_stage  = not _next_stage_path.exists()
+        _is_final_stage = (
+            not self._is_debug_stage and next_stage_id(self._stage_id) is None
+        )
         if _is_final_stage:
             se_name = "music/rounds/final.wav"
         else:
@@ -1071,6 +1072,8 @@ class GameScene(
                     self._combo_timer = COMBO_WINDOW
                 if enemy.take_damage(bullet.damage):
                     self._on_enemy_killed(enemy)
+                if not getattr(bullet, "piercing", False):
+                    break
             if blocked_by_shield or not getattr(bullet, "piercing", False):
                 bullet.kill()
 
@@ -1145,6 +1148,8 @@ class GameScene(
                 break
         if hit_bullet is not None:
             self._damage_player(getattr(hit_bullet, "damage", PLAYER_DMG_BULLET))
+            if not getattr(hit_bullet, "persistent", False):
+                hit_bullet.kill()
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True
 
