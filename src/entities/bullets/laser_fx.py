@@ -46,10 +46,10 @@ def load_laser_frames(resources, subdir: str) -> list[pygame.Surface]:
     return _FRAME_CACHE[subdir]
 
 
-# ZUNDA粒子砲フレーム(zunda_00..23)の相の切れ目:
+# ZUNDA粒子砲フレーム(zunda_00..47)の相の切れ目:
 #   [0.._CHARGE_SPLIT) = チャージ相（細いビーム収束→発光核）
 #   [_CHARGE_SPLIT..]  = 本体ビーム→放電（発射本体）
-_CHARGE_SPLIT = 7
+_CHARGE_SPLIT = 14
 
 
 def zunda_charge_frames(resources) -> list[pygame.Surface]:
