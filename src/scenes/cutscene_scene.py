@@ -15,6 +15,7 @@ from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.scenes.dialogue_panel import DARK_STYLE, LIGHT_STYLE, draw_story_panel
 from src.story.lines import Page
+from src.entities.video_effect import VideoEffectLayer
 
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
 _TYPE_SE_INTERVAL = 0.045
@@ -61,6 +62,7 @@ class CutsceneScene(Scene):
         self._finished   = False    # on_complete 多重呼び防止
         self._story_active  = None   # 直近に話した登場人物（立ち絵ハイライト用）
         self._story_partner = None   # その前に話した登場人物（会話相手）
+        self._video_fx = VideoEffectLayer(self.game.resources)
         self._window_bg: pygame.Surface | None = None
         if self._theme == "window":
             raw = self.game.resources.image(_EPILOGUE_MORNING_BG)
@@ -97,6 +99,8 @@ class CutsceneScene(Scene):
             self._shake_t = 0.4
         if any(f in pg.fx for f in ("fade_white", "white_particle", "light")):
             self._flash_t = 0.35
+        if "white_particle" in pg.fx:
+            self._video_fx.play("warp_flash", size=(SCREEN_WIDTH, 450), opacity=210)
         if "glitch" in pg.fx:
             self._glitch_t = 0.6
         self._redglow = ("red_noise" in pg.fx)
@@ -129,6 +133,7 @@ class CutsceneScene(Scene):
     def update(self, dt: float) -> None:
         self._blink   += dt
         self._fx_time += dt
+        self._video_fx.update(dt)
         if self._shake_t  > 0: self._shake_t  -= dt
         if self._flash_t  > 0: self._flash_t  -= dt
         if self._glitch_t > 0: self._glitch_t -= dt
@@ -256,6 +261,7 @@ class CutsceneScene(Scene):
     # ── 描画 ──────────────────────────────────────────────────────
     def draw(self, screen: pygame.Surface) -> None:
         self._draw_bg(screen)
+        self._video_fx.draw(screen)
 
         # シェイクオフセット
         ox = oy = 0

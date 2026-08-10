@@ -102,6 +102,7 @@ _TOKIN_SIZE = (26, 20)   # ゲーム内弾サイズ（画像が横長270×207の
 
 class HomingBullet(Bullet):
     _base_image: pygame.Surface | None = None  # クラス共有キャッシュ
+    _missile_frames: tuple[pygame.Surface, ...] | None = None
 
     def __init__(
         self,
@@ -111,6 +112,7 @@ class HomingBullet(Bullet):
         game=None,
         boss=None,
         init_angle: float = 0.0,   # 初期発射角度（度、上方向が正）
+        missile_skin: bool = False,
     ) -> None:
         rad = math.radians(init_angle)
         vx  = _HOMING_SPEED * math.cos(rad)
@@ -119,13 +121,30 @@ class HomingBullet(Bullet):
         self._enemies     = enemies
         self._boss        = boss
         self._homing_left = _HOMING_TIME
+        self._anim_elapsed = 0.0
+        self._using_missile_skin = missile_skin and game is not None
 
         # と金画像をロード（初回のみ）
+        if self._using_missile_skin and HomingBullet._missile_frames is None:
+            from src.entities.video_effect import load_video_effect_frames
+            raw_frames = load_video_effect_frames(game.resources, "missile_loop")
+            missile_frames = []
+            for frame in raw_frames:
+                # Keep the historical 26x20 HomingBullet collision rectangle.
+                # The long missile is letterboxed inside that canvas so this
+                # visual skin cannot make the weapon easier to hit with.
+                scaled = pygame.transform.smoothscale(frame, (26, 11))
+                canvas = pygame.Surface(_TOKIN_SIZE, pygame.SRCALPHA)
+                canvas.blit(scaled, scaled.get_rect(center=canvas.get_rect().center))
+                missile_frames.append(canvas)
+            HomingBullet._missile_frames = tuple(missile_frames)
         if game is not None and HomingBullet._base_image is None:
             raw = game.resources.image("graphic/bullet_tokin_nobg.png")
             HomingBullet._base_image = pygame.transform.smoothscale(raw, _TOKIN_SIZE)
 
-        if HomingBullet._base_image is not None:
+        if self._using_missile_skin and HomingBullet._missile_frames:
+            self._orig_image = HomingBullet._missile_frames[0]
+        elif HomingBullet._base_image is not None:
             self._orig_image = HomingBullet._base_image
         else:
             # フォールバック: 従来のオレンジ円
@@ -137,6 +156,7 @@ class HomingBullet(Bullet):
         self.rect  = self.image.get_rect(center=(int(world_x), int(world_y)))
 
     def update(self, dt: float, camera: "Camera") -> None:
+        self._anim_elapsed += dt
         if self._homing_left > 0:
             self._homing_left -= dt
 
@@ -172,6 +192,9 @@ class HomingBullet(Bullet):
             self.vy = (self.vy / current_speed) * _HOMING_SPEED
 
         # 進行方向に合わせて画像を回転
+        if self._using_missile_skin and HomingBullet._missile_frames:
+            index = int(self._anim_elapsed * 12.0) % len(HomingBullet._missile_frames)
+            self._orig_image = HomingBullet._missile_frames[index]
         angle = math.degrees(math.atan2(-self.vy, self.vx))
         self.image = pygame.transform.rotate(self._orig_image, angle)
         old_center = self.rect.center

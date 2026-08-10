@@ -16,6 +16,7 @@ from src.entities.terrain_query import iter_collidable_terrain, terrain_collidea
 from src.stages.stage import Stage
 from src.stages.spawner import EnemySpawner
 from src.entities.particle import ParticleSystem
+from src.entities.video_effect import VideoEffectLayer
 
 # ミックスイン（各責務を分割管理）
 from src.scenes.game.pause_mixin    import GameScenePauseMixin
@@ -103,6 +104,7 @@ class GameScene(
         self.game.sound.stop_bgm()
         from src.entities.bullets.player_bullet import HomingBullet, PierceBullet
         HomingBullet._base_image = None
+        HomingBullet._missile_frames = None
         PierceBullet._base_image = None
 
         self.camera  = Camera()
@@ -118,6 +120,7 @@ class GameScene(
         self.enemy_bullets:  pygame.sprite.Group = pygame.sprite.Group()
         self.enemies:        pygame.sprite.Group = pygame.sprite.Group()
         self.items:          pygame.sprite.Group = pygame.sprite.Group()
+        self._video_fx = VideoEffectLayer(self.game.resources)
         self.terrain:        pygame.sprite.Group = pygame.sprite.Group()
         self.spawner = EnemySpawner(
             self.game, self.enemies, self.enemy_bullets,
@@ -373,6 +376,7 @@ class GameScene(
         if self._boss_kill_flash_timer > 0: self._boss_kill_flash_timer -= dt
         if self._boss_break_flash_timer > 0: self._boss_break_flash_timer -= dt
         if self._laser_flash_timer     > 0: self._laser_flash_timer     -= dt
+        self._video_fx.update(dt)
         if self._stage_banner_timer    > 0: self._stage_banner_timer    -= dt
         self._final.update_timers(dt)
         self._tick_boss_dialogue(dt)
@@ -728,6 +732,7 @@ class GameScene(
                 self._boss.summon_turret_fn = self._summon_boss_turrets
                 # 巨大レーザー発射時の画面シェイク用にカメラを注入
                 self._boss.camera = self.camera
+                self._boss.video_effect_fn = self._play_video_effect
                 self._boss_intro_state = "entering"
 
         elif state == "boss_name":
@@ -812,6 +817,7 @@ class GameScene(
 
         ox, oy = self.camera.shake_offset
         screen.blit(buf, (ox, oy))
+        self._video_fx.draw(screen)
 
         self.hud.draw(
             screen,
@@ -1392,6 +1398,9 @@ class GameScene(
         px, py = int(self.player.sx), int(self.player.sy)
         self._spawn_popup("熱暴走！！", px + 20, py - 26, color=(255, 90, 50), life=1.6)
         self.particles.spawn_glow(px + 24, py, color=(255, 120, 80), count=10, speed=60.0)
+        self._play_video_effect(
+            "electrical_hit", center=self.player.rect.center, size=(420, 236), opacity=205,
+        )
         self.game.sound.play_se_alias("SE_ALERT", volume=0.3)
         if not self._overheat_barked and self._boss_dialogue_timer <= 0:
             self._overheat_barked = True
@@ -1408,6 +1417,7 @@ class GameScene(
         self.particles.spawn_big_explosion(bx, by)
         self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=28, speed=340.0)
         self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=20, speed=160.0)
+        self._play_video_effect("anime_impact", center=(bx, by), size=(360, 360))
         self.camera.shake(18.0)
         self._hitstop_timer = max(self._hitstop_timer, 0.16)
         self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.34)
@@ -1502,6 +1512,9 @@ class GameScene(
             return
         self.player.take_damage(amount)
         self.particles.spawn_player_hit(self.player.sx, self.player.sy)
+        self._play_video_effect(
+            "electrical_hit", center=self.player.rect.center, size=(420, 236), opacity=210,
+        )
         self.camera.shake(10.0)
         # Regenerate the final boss when the player is hit during act 1.
         if (self._boss is not None and self._final.phase == 1
@@ -1516,6 +1529,13 @@ class GameScene(
             self._go_gameover()
         else:
             self.game.sound.play_se("music/se/shout.wav", volume=0.6)
+
+    def _play_video_effect(self, key: str, **kwargs) -> None:
+        """Battle/debug entry point shared with boss pattern callbacks."""
+        self._video_fx.play(key, **kwargs)
+
+    def _play_debug_effect(self, key: str) -> None:
+        self._video_fx.play_debug(key)
 
     def _pickup_weapon_item(self) -> None:
         """Apply a weapon stock pickup."""

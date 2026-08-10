@@ -780,6 +780,10 @@ CREDITS: list[Page] = [
     page(SYS, "■ 素材協力"),
     page(SYS, "ZUNDA粒子砲final（nc226126）"),
     page(SYS, "レーザー・ビームの発射音1（nc104240）"),
+    page(SYS, "動画FX: nc114420 / nc156896 / nc172648"),
+    page(SYS, "動画FX: nc186236 / nc224911 / nc234645"),
+    page(SYS, "動画FX: nc243927 / nc268435 / nc338669"),
+    page(SYS, "動画FX: nc68226 / nc95306 / nc97528"),
     page(SYS, "/ 提供", "ニコニ・コモンズ"),
 
     page(SYS, "■ SPECIAL THANKS"),

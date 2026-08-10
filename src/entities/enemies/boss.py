@@ -230,6 +230,8 @@ class Boss(pygame.sprite.Sprite):
         self._shoot_delay_override: float | None = None
         # game_scene が注入。巨大レーザー発射時の画面シェイク用（None 可）。
         self.camera: "Camera | None" = None
+        # game_scene が注入。攻撃判定とは独立した動画エフェクトの再生口。
+        self.video_effect_fn = None
         # 超サイヤ人レーザーのチャージ中、game_scene が自機を吸い込むためのフラグ。
         self.suction_active: bool  = False
         self.suction_x:      float = 0.0
@@ -943,6 +945,8 @@ class Boss(pygame.sprite.Sprite):
                 self._shoot_delay_override = 0.62
             else:
                 enemy_bullets.add(self._mega_beam(by))
+                if self.video_effect_fn is not None:
+                    self.video_effect_fn("angel_flash", center=(bx - 120.0, by), size=(520, 293))
                 # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク＋発射音。
                 enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.28, by,
                                                    ZUNDA_PALETTE, max_radius=104, spikes=10))
@@ -966,6 +970,9 @@ class Boss(pygame.sprite.Sprite):
                 self.suction_active = True
                 self._suction_timer = charge_t
                 enemy_bullets.add(self._charge_beam(by, charge_t, 320))
+                if self.video_effect_fn is not None:
+                    self.video_effect_fn("electric_arcs", center=(SCREEN_WIDTH / 2, by),
+                                         size=(620, 349), opacity=175)
                 if self.camera is not None:
                     self.camera.shake(2.5)
                 self._shoot_delay_override = charge_t
@@ -988,6 +995,9 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage3: 砲台/子機の射線と交差する狙撃。
         elif pattern == "drone_cross":
+            if self.video_effect_fn is not None:
+                self.video_effect_fn("retro_lasers", center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),
+                                     size=(SCREEN_WIDTH, 450), opacity=210)
             for origin_y in (by - 70.0, by + 70.0):
                 dx = player.sx - bx
                 dy = player.sy - origin_y
@@ -1108,6 +1118,9 @@ class Boss(pygame.sprite.Sprite):
                 self._shoot_delay_override = 0.85
             else:
                 enemy_bullets.add(self._laser_bullet(by, height=128, damage=24))
+                if self.video_effect_fn is not None:
+                    self.video_effect_fn("magenta_cleave", center=(SCREEN_WIDTH / 2, by),
+                                         size=(SCREEN_WIDTH, 210))
                 for off in (-120, -60, 60, 120):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -360.0, off * 0.1, 14,
                                                   radius=6, color=(255, 90, 70)))
@@ -1116,6 +1129,9 @@ class Boss(pygame.sprite.Sprite):
         # ── Form3: 時空破壊。外周から収縮する弾＋中心から拡散する弾。
         elif pattern == "void_break":
             cx, cy = SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5
+            if self.video_effect_fn is not None:
+                self.video_effect_fn("rupture_laser", center=(cx, cy),
+                                     size=(SCREEN_WIDTH, 450), opacity=210)
             for i in range(16):
                 a = math.radians(i * 22.5 + self._spiral_angle)
                 rx = cx + math.cos(a) * 360.0
@@ -1132,6 +1148,9 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage4 Form2: ダッシュと同時に刺し込む細い高速弾。
         elif pattern == "dash_knives":
+            if self.video_effect_fn is not None:
+                self.video_effect_fn("blue_slash", center=(bx - 145.0, by),
+                                     size=(560, 315), opacity=210)
             for deg in (-16, -6, 6, 16):
                 vx, vy = self._rotated(nx, ny, deg, 455.0)
                 enemy_bullets.add(EnemyBullet(bx, by, vx, vy, radius=4, color=(255, 70, 130)))
