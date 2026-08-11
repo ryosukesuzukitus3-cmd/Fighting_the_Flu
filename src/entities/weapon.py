@@ -162,7 +162,7 @@ class Weapon:
             for angle in angles:
                 bullets.append(HomingBullet(
                     wx, wy, enemies, game=game, boss=boss, init_angle=angle,
-                    missile_skin=self.homing_level >= 7,
+                    missile_skin=self.homing_level < 7,
                 ))
             self._homing_timer = cooldown
 

@@ -97,7 +97,8 @@ class KaronaruMaxBullet(Bullet):
         self.rect = self.image.get_rect(center=(int(world_x), int(world_y)))
 
 
-_TOKIN_SIZE = (26, 20)   # ゲーム内弾サイズ（画像が横長270×207のため横基準）
+_TOKIN_SIZE = (26, 20)   # 最終強化「と金」のサイズ
+_MISSILE_SIZE = (34, 20)  # 通常ホーミング。テポドンを従来より少し大きく見せる
 
 
 class HomingBullet(Bullet):
@@ -130,11 +131,8 @@ class HomingBullet(Bullet):
             raw_frames = load_video_effect_frames(game.resources, "missile_loop")
             missile_frames = []
             for frame in raw_frames:
-                # Keep the historical 26x20 HomingBullet collision rectangle.
-                # The long missile is letterboxed inside that canvas so this
-                # visual skin cannot make the weapon easier to hit with.
-                scaled = pygame.transform.smoothscale(frame, (26, 11))
-                canvas = pygame.Surface(_TOKIN_SIZE, pygame.SRCALPHA)
+                scaled = pygame.transform.smoothscale(frame, (34, 15))
+                canvas = pygame.Surface(_MISSILE_SIZE, pygame.SRCALPHA)
                 canvas.blit(scaled, scaled.get_rect(center=canvas.get_rect().center))
                 missile_frames.append(canvas)
             HomingBullet._missile_frames = tuple(missile_frames)

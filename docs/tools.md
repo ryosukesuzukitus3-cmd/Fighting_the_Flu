@@ -141,6 +141,7 @@ python tools/capture.py [オプション]
 | `--stage N` | ステージID（既定1） |
 | `--boss` | ボス戦へ即移行（演出を自動スキップして戦闘状態に） |
 | `--form {1,2,3}` | ボスのフォーム（ステージ4＝頑固王サワグチで有効） |
+| `--pattern NAME` | 指定したボス攻撃だけを固定再生（`--boss` と併用） |
 | `--main / --laser / --homing / --speed / --magnet N` | 武器強化レベル |
 | `--barrier` | バリア付与 |
 | `--frames N` | 最初の撮影までに進めるフレーム数（既定60） |
@@ -155,6 +156,9 @@ python tools/capture.py [オプション]
 ```bash
 # ステージ4 ボス第3形態を武器フル強化で撮影
 python tools/capture.py --stage 4 --boss --form 3 --main 5 --laser 6 --homing 7
+
+# 藤井の巨大破壊光線だけを固定し、4フレーム間隔で連番撮影
+python tools/capture.py --stage 4 --boss --form 3 --pattern mega_beam --shots 30 --interval 4
 
 # 弾幕の連番（8フレームおきに5枚）
 python tools/capture.py --stage 2 --shots 5 --interval 8 --out captures/seq

@@ -42,6 +42,7 @@ from src.scenes.game.config import (
 from src.story.script import (
     BOSS_INTRO, BOSS_MID, STAGE_BG_TEXT,
     BILLY_SPAWN_BARKS, BILLY_KILL_BARKS, SAKURA_LAST_WORDS, OVERHEAT_BARKS,
+    BOSS_BREAK_TUTORIAL,
 )
 # 被ダメージ／反撃ダメージ定数
 from src.core.balance import (
@@ -258,6 +259,7 @@ class GameScene(
             self.game.shared.carry_weapon = None
             self.game.shared.carry_companion       = None
             self.game.shared.stage_start_companion = None
+            self.game.shared.boss_break_tutorial_shown = False
             self.game.playlog.begin_run()
 
         if not self._is_debug_stage:
@@ -654,6 +656,7 @@ class GameScene(
         if (self._in_boss_fight
                 and self._final.phase == 0
                 and not self._boss_mid_dialogue_shown
+                and self._boss_dialogue_timer <= 0
                 and self._boss.hp / self._boss.max_hp <= 0.5):
             boss_stage_id = self._boss_stage_id()
             in_form2 = getattr(self._boss, "_form2", False)
@@ -1398,9 +1401,6 @@ class GameScene(
         px, py = int(self.player.sx), int(self.player.sy)
         self._spawn_popup("熱暴走！！", px + 20, py - 26, color=(255, 90, 50), life=1.6)
         self.particles.spawn_glow(px + 24, py, color=(255, 120, 80), count=10, speed=60.0)
-        self._play_video_effect(
-            "electrical_hit", center=self.player.rect.center, size=(420, 236), opacity=205,
-        )
         self.game.sound.play_se_alias("SE_ALERT", volume=0.3)
         if not self._overheat_barked and self._boss_dialogue_timer <= 0:
             self._overheat_barked = True
@@ -1414,13 +1414,16 @@ class GameScene(
         bx, by = b.rect.center
         text = "王手！！" if self._boss_stage_id() == 4 else "BREAK!!"
         self._spawn_popup(text, bx, by - 46, color=(255, 215, 70), life=1.6)
-        self.particles.spawn_big_explosion(bx, by)
-        self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=28, speed=340.0)
-        self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=20, speed=160.0)
-        self._play_video_effect("anime_impact", center=(bx, by), size=(360, 360))
-        self.camera.shake(18.0)
-        self._hitstop_timer = max(self._hitstop_timer, 0.16)
-        self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.34)
+        self.particles.spawn_hit(bx, by, color=(255, 225, 130), count=10)
+        self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=14, speed=220.0)
+        self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=8, speed=100.0)
+        self._play_video_effect("anime_impact", center=(bx, by), size=(180, 180), opacity=145)
+        self.camera.shake(10.0)
+        self._hitstop_timer = max(self._hitstop_timer, 0.10)
+        self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.16)
+        if not self.game.shared.boss_break_tutorial_shown:
+            self.game.shared.boss_break_tutorial_shown = True
+            self._enqueue_boss_dialogue(BOSS_BREAK_TUTORIAL, BOSS_MID_LINE_DURATION)
         if self._boss_stage_id() == 4:
             self._play_shogi_snap(bx, by)
         else:
@@ -1511,10 +1514,7 @@ class GameScene(
             self.player._invincible_timer = 0.8
             return
         self.player.take_damage(amount)
-        self.particles.spawn_player_hit(self.player.sx, self.player.sy)
-        self._play_video_effect(
-            "electrical_hit", center=self.player.rect.center, size=(420, 236), opacity=210,
-        )
+        self.particles.spawn_player_hit(*self.player.rect.center)
         self.camera.shake(10.0)
         # Regenerate the final boss when the player is hit during act 1.
         if (self._boss is not None and self._final.phase == 1

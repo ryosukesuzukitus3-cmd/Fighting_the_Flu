@@ -27,21 +27,26 @@ class VideoEffectSpec:
 
 
 VIDEO_EFFECT_SPECS: tuple[VideoEffectSpec, ...] = (
-    VideoEffectSpec("electrical_hit", "nc114420", "電流走る / 被弾", 14, 18.0, (420, 236)),
-    VideoEffectSpec("electric_arcs", "nc156896", "激うねり電撃 / 超レーザー", 24, 18.0, (620, 349)),
+    VideoEffectSpec("electrical_hit", "nc114420", "電流走る / 素材確認（本編不採用）", 14, 18.0, (420, 236)),
+    VideoEffectSpec("electric_arcs", "nc156896", "激うねり電撃 / 素材確認（本編不採用）", 24, 18.0, (620, 349)),
     VideoEffectSpec("anime_impact", "nc172648", "アニメ衝撃・斬撃 / BREAK", 18, 18.0, (360, 360)),
-    VideoEffectSpec("blue_slash", "nc186236", "斬撃エフェクト3 / ダッシュ斬り", 18, 18.0, (560, 315)),
+    VideoEffectSpec("blue_slash", "nc186236", "斬撃エフェクト3 / 素材確認（本編不採用）", 18, 18.0, (560, 315)),
     VideoEffectSpec("radiant_flash", "nc224911", "透過閃光 / 薬効最大", 32, 16.0, (800, 450), "alpha"),
     VideoEffectSpec("light_arrow_tunnel", "nc234645", "光の矢 / ブラックホール脱出", 20, 16.0, (800, 450), "alpha"),
-    VideoEffectSpec("missile_loop", "nc243927", "ミサイル / 最大ホーミング", 18, 12.0, (78, 34), "alpha"),
+    VideoEffectSpec("missile_loop", "nc243927", "ミサイル / ホーミングLv1〜6", 18, 12.0, (78, 34), "alpha"),
     VideoEffectSpec("angel_flash", "nc268435", "円環レーザー閃光 / Stage2銃口", 32, 16.0, (520, 293)),
     VideoEffectSpec("rupture_laser", "nc338669", "破裂レーザー / 時空破壊", 30, 12.0, (800, 450)),
     VideoEffectSpec("warp_flash", "nc68226", "閃光・ワープ / 先輩登場", 28, 16.0, (800, 450)),
-    VideoEffectSpec("magenta_cleave", "nc95306", "一刀両断 / 巨大破壊光線", 28, 16.0, (800, 210)),
+    VideoEffectSpec("magenta_cleave", "nc95306", "一刀両断 / 素材確認（本編不採用）", 28, 16.0, (800, 210)),
     VideoEffectSpec("retro_lasers", "nc97528", "SFレーザー / 交差砲火", 36, 16.0, (800, 450)),
 )
 
 VIDEO_EFFECTS: dict[str, VideoEffectSpec] = {spec.key: spec for spec in VIDEO_EFFECT_SPECS}
+
+# 素材比較のためデバッグFX一覧には残すが、通常プレイでは使わないもの。
+DEBUG_ONLY_VIDEO_EFFECT_KEYS = frozenset({
+    "electrical_hit", "electric_arcs", "blue_slash", "magenta_cleave",
+})
 
 
 def video_effect_spec(key: str) -> VideoEffectSpec:
