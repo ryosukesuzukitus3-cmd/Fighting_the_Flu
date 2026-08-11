@@ -11,6 +11,7 @@ from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.entities.background import ScrollingBackground
 from src.entities.companion import Karonaru
 from src.entities.player import Player
+from src.entities.video_effect import VideoEffectLayer
 from src.story.aliases import bgm_path
 from src.story.lines import Page
 from src.story.speakers import (
@@ -69,6 +70,7 @@ class BlackholeScene(Scene):
         self._fade_out = False
         self._finished = False
         self._buf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self._video_fx = VideoEffectLayer(self.game.resources)
         # 承認欲求ブラックホールはインターステラー系の重い空気で包む（仮配線）。
         self.game.sound.play_bgm(bgm_path("BGM_BLACKHOLE"), volume=0.55)
         self._enter_page()
@@ -79,6 +81,7 @@ class BlackholeScene(Scene):
     def update(self, dt: float) -> None:
         self._time += dt
         self._phase_time += dt
+        self._video_fx.update(dt)
         previous_chars = min(int(self._chars), self._total_chars())
         self._chars += _TYPEWRITER_SPEED * dt
         self._tick_type_sound(dt, previous_chars)
@@ -89,7 +92,7 @@ class BlackholeScene(Scene):
 
         if self._fade_out:
             self._fade_out_t += dt
-            if self._fade_out_t >= 0.5 and not self._finished:
+            if self._fade_out_t >= 1.25 and not self._finished:
                 self._finished = True
                 self._on_complete()
             return
@@ -154,6 +157,9 @@ class BlackholeScene(Scene):
         if not self._fade_out:
             self._fade_out = True
             self._fade_out_t = 0.0
+            self._video_fx.play(
+                "light_arrow_tunnel", size=(SCREEN_WIDTH, 450), opacity=235,
+            )
 
     def _event_ratio(self) -> float:
         if not self._pages:
@@ -245,6 +251,7 @@ class BlackholeScene(Scene):
         ox, oy = self._shake_offset()
         screen.fill((0, 0, 0))
         screen.blit(buf, (ox, oy))
+        self._video_fx.draw(screen)
 
         self._draw_dialogue(screen)
 
@@ -258,7 +265,7 @@ class BlackholeScene(Scene):
         if self._fade_in_t > 0:
             fade_a = int(255 * self._fade_in_t / 0.45)
         elif self._fade_out:
-            fade_a = int(255 * min(1.0, self._fade_out_t / 0.5))
+            fade_a = int(255 * min(1.0, max(0.0, self._fade_out_t - 0.70) / 0.55))
         if fade_a:
             fade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
             fade.set_alpha(fade_a)

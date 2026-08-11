@@ -1201,7 +1201,8 @@ def test_story_speakers_are_registered() -> None:
                 + [script.BOSS_FORM3_INTRO] + list(script.FINAL_SEQ.values())
                 + list(script.TUTORIAL.values())
                 + [script.BILLY_SPAWN_BARKS, script.BILLY_KILL_BARKS,
-                   script.SAKURA_LAST_WORDS, script.OVERHEAT_BARKS]):
+                   script.SAKURA_LAST_WORDS, script.OVERHEAT_BARKS,
+                   script.BOSS_BREAK_TUTORIAL]):
         used.update(ln.speaker for ln in grp)
     # 全画面会話の話者は STORY_BEATS のページから収集する。
     for beat in script.STORY_BEATS:
@@ -2016,6 +2017,20 @@ def test_broly_beam_has_charge_and_taper() -> None:
     assert "zunda_beam_frames" in src        # 本体ビーム→放電フレーム
     assert "LaserBeamSprite" in src          # 動画フレーム対応の本体ビーム
     assert "taper_time=" in src              # 発射終了後に徐々に細くなる
+
+
+def test_zunda_particle_cannon_frames_are_dense_and_padded() -> None:
+    frame_dir = ROOT / "assets" / "graphic" / "laser" / "zunda"
+    frames = sorted(frame_dir.glob("zunda_*.png"))
+
+    assert [path.name for path in frames] == [f"zunda_{i:02d}.png" for i in range(48)]
+    for path in frames:
+        image = pygame.image.load(path)
+        assert image.get_size() == (640, 400)
+        bounds = image.get_bounding_rect(min_alpha=1)
+        assert bounds.height > 0
+        assert bounds.top >= 20
+        assert image.get_height() - bounds.bottom >= 20
 
 
 def test_laser_beam_is_persistent_and_not_cancelled_on_contact() -> None:
