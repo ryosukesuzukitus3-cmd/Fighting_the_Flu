@@ -4,6 +4,7 @@ Examples:
   python tools/run.py check
   python tools/run.py test
   python tools/run.py game
+  python tools/run.py playtest
   python tools/run.py capture --stage 4 --boss --form 3
   python tools/run.py preview-boss --stage 4 --pattern all
   python tools/run.py stage-rect-preview
@@ -50,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage-terrain-composer|stage-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
+            "{check|test|docs|docs-check|balance|game|playtest|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage-terrain-composer|stage-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -64,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         "docs-check": ([py, "tools/gen_docs.py", "--check", *argv], True),
         "balance":    ([py, "tools/balance_sheet.py", *argv], True),
         "game":       ([py, "main.py", *argv], False),
+        "playtest":   ([py, "-u", "tools/playtest.py", *argv], False),
         "capture":    ([py, "tools/capture.py", *argv], True),
         "clip":       ([py, "tools/gameplay_clip.py", *argv], True),
         "visual-regress": ([py, "tools/visual_regression.py", *argv], True),
