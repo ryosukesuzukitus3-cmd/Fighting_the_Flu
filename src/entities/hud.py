@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import pygame
+from src.scenes.meta_ui import ACCENT_CORAL, ACCENT_MINT, BG, TEXT, TEXT_MUTED, draw_pixel_cursor
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -29,18 +30,18 @@ class HUD:
             while text and font.size(text + "…")[0] > width:
                 text = text[:-1]
             text += "…"
-        screen.blit(font.render(text, True, color), (x, y))
+        screen.blit(font.render(text, False, BG), (x + 1, y + 1))
+        screen.blit(font.render(text, False, color), (x, y))
 
     @staticmethod
-    def _meter(screen, rect, ratio, color, empty=(30, 30, 42)) -> None:
+    def _meter(screen, rect, ratio, color, empty=BG) -> None:
         rect = pygame.Rect(rect)
         ratio = max(0.0, min(1.0, ratio))
-        pygame.draw.rect(screen, empty, rect, border_radius=3)
+        pygame.draw.rect(screen, empty, rect)
         fill = rect.copy()
         fill.width = int(rect.width * ratio)
         if fill.width:
-            pygame.draw.rect(screen, color, fill, border_radius=3)
-        pygame.draw.rect(screen, (135, 145, 158), rect, 1, border_radius=3)
+            pygame.draw.rect(screen, color, fill)
 
     def draw(
         self,
@@ -57,23 +58,17 @@ class HUD:
         companion_stock: int | None = None,
     ) -> None:
         w = player.weapon
-        panel = pygame.Surface((screen.get_width() - 8, HUD_BOTTOM - 4), pygame.SRCALPHA)
-        panel.fill((8, 15, 29, 230))
-        pygame.draw.rect(panel, (224, 224, 238, 74), panel.get_rect(), 1, border_radius=6)
-        screen.blit(panel, (4, 4))
         gap, pad = 14, 10
-        col_w = (panel.get_width() - pad * 2 - gap * 2) // 3
+        col_w = (screen.get_width() - 8 - pad * 2 - gap * 2) // 3
         x1 = 4 + pad
         x2, x3 = x1 + col_w + gap, x1 + 2 * (col_w + gap)
-        for x in (x2 - gap // 2, x3 - gap // 2):
-            pygame.draw.line(screen, (55, 63, 78), (x, 14), (x, 76))
-        white, gold, muted = (240, 243, 250), (255, 220, 100), (170, 184, 200)
+        white, gold, muted = TEXT, (217, 192, 119), TEXT_MUTED
 
         # Survival leads; score and retry allowance remain secondary.
         hp = max(0, player.hp)
         ratio = player.hp / player.max_hp if player.max_hp else 0.0
-        hp_color = (118, 230, 186) if ratio > 0.3 else (255, 118, 118)
-        self._text(screen, f"HP {hp}/{player.max_hp}", x1, 7, col_w - 64, hp_color, 22)
+        hp_color = ACCENT_MINT if ratio > 0.3 else ACCENT_CORAL
+        self._text(screen, f"HP {hp}/{player.max_hp}", x1, 7, col_w - 64, white, 22)
         self._text(screen, "危険" if ratio <= 0.3 else "", x1 + col_w - 54, 12, 54, hp_color)
         self._meter(screen, (x1, 36, col_w, 12), ratio, hp_color)
         self._text(screen, f"得点 {score:,}", x1, 59, col_w - 85, muted, 14)
@@ -94,11 +89,10 @@ class HUD:
             addons.append("防壁")
         self._text(screen, " / ".join(addons), x2, 34, col_w, muted, 14)
         has_stock = w.weapon_stock > 0 or (companion_stock or 0) > 0
-        stock_color = gold if has_stock else muted
+        stock_color = ACCENT_CORAL if has_stock else muted
         upgrade_key = self._settings.key_display("weapon_select")
         if has_stock:
-            pygame.draw.rect(screen, (68, 55, 30), (x2 - 3, 55, col_w + 6, 26), border_radius=4)
-            pygame.draw.polygon(screen, gold, [(x2, 64), (x2 + 7, 68), (x2, 72)])
+            draw_pixel_cursor(screen, x2, 68, color=ACCENT_CORAL, scale=1)
             stock = f"強化 [{upgrade_key}] ×{w.weapon_stock}"
             if companion_stock is not None:
                 stock = f"強化 [{upgrade_key}] 自機{w.weapon_stock}・先輩{companion_stock}"
@@ -110,20 +104,20 @@ class HUD:
         # Heat, held pieces, and laser readiness share the right column.
         if heat is not None:
             hot = heat.overheated
-            heat_color = (255, 118, 118) if hot or heat.ratio >= 0.85 else gold if heat.ratio >= 0.6 else (118, 230, 186)
+            heat_color = ACCENT_CORAL if hot or heat.ratio >= 0.85 else gold if heat.ratio >= 0.6 else ACCENT_MINT
             temp = "熱暴走・冷却中" if hot else f"体温 {heat.display_temp:.1f}℃"
-            self._text(screen, temp, x3, 8, col_w, heat_color, 18)
+            self._text(screen, temp, x3, 8, col_w, ACCENT_CORAL if hot else white, 18)
             self._meter(screen, (x3, 36, col_w, 8), heat.ratio, heat_color)
         if laser is not None:
             state = laser.state
             if heat is not None and heat.overheated and state in ("ready", "charging"):
-                label, color = "熱で停止", (255, 118, 118)
+                label, color = "熱で停止", ACCENT_CORAL
             elif state in ("firing", "starting"):
-                label, color = "発射中", (118, 230, 186)
+                label, color = "発射中", ACCENT_MINT
             elif state == "charging":
                 label, color = "充填中", gold
             elif state == "ready":
-                label, color = "発射可", (118, 230, 186)
+                label, color = "発射可", ACCENT_MINT
             else:
                 label, color = "冷却", muted
             laser_key = self._settings.key_display("laser")
@@ -132,35 +126,24 @@ class HUD:
         if pieces:
             held = "・".join(pieces)
             bomb_key = self._settings.key_display("bomb")
-            self._text(screen, f"持駒 [{bomb_key}] {held}", x3, 65 if laser else 59, col_w, gold, 14)
+            self._text(screen, f"持駒 [{bomb_key}] {held}", x3, 65 if laser else 59, col_w, white, 14)
 
         # ボスHPバー
         if boss is not None:
             bar_w, bar_h = 400, 18
             bx = (screen.get_width() - bar_w) // 2
             by = screen.get_height() - 36
-            boss_back = pygame.Surface((bar_w + 122, 48), pygame.SRCALPHA)
-            boss_back.fill((4, 5, 12, 178))
-            pygame.draw.rect(boss_back, (255, 255, 255, 48), boss_back.get_rect(), 1, border_radius=6)
-            screen.blit(boss_back, (bx - 112, by - 19))
             ratio = max(0.0, min(1.0, boss.hp / boss.max_hp)) if boss.max_hp else 0.0
-            pygame.draw.rect(screen, (80, 0, 0),   (bx, by, bar_w, bar_h), border_radius=4)
-            pygame.draw.rect(screen, (220, 30, 30), (bx, by, int(bar_w * ratio), bar_h), border_radius=4)
-            pygame.draw.rect(screen, (255, 255, 255), (bx, by, bar_w, bar_h), 2, border_radius=4)
-            label = self._font.render("ボスHP", True, (255, 255, 255))
-            screen.blit(label, (bx - label.get_width() - 8, by))
+            self._meter(screen, (bx, by, bar_w, bar_h), ratio, ACCENT_CORAL)
+            self._text(screen, "ボスHP", bx - 84, by - 4, 76, TEXT, 18)
 
             # 体幹ゲージ（バトルv2）: HPバー直上。ダウン中は点滅表示に切替
             if getattr(boss, "is_stance_down", False):
                 blink = (pygame.time.get_ticks() // 150) % 2 == 0
                 if blink:
-                    dl = self._label_font.render("ダウン中・ダメージ増", True, (255, 215, 70))
-                    screen.blit(dl, (bx + bar_w // 2 - dl.get_width() // 2, by - 13))
+                    self._text(screen, "ダウン中・ダメージ増", bx + 118, by - 19, 282, ACCENT_MINT, 14)
             else:
                 sr = boss.stance_ratio() if hasattr(boss, "stance_ratio") else None
                 if sr is not None:
-                    sy_ = by - 9
-                    pygame.draw.rect(screen, (35, 30, 12), (bx, sy_, bar_w, 6), border_radius=3)
-                    scol = (255, 205, 80) if sr > 0.35 else (255, 120, 70)
-                    pygame.draw.rect(screen, scol, (bx, sy_, int(bar_w * sr), 6), border_radius=3)
-                    pygame.draw.rect(screen, (150, 130, 70), (bx, sy_, bar_w, 6), 1, border_radius=3)
+                    self._text(screen, "体幹", bx - 40, by - 23, 38, TEXT_MUTED, 12)
+                    self._meter(screen, (bx, by - 9, bar_w, 6), sr, gold)

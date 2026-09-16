@@ -35,18 +35,16 @@ def _story(screen, res, speaker, line, style, *, center=False):
     lines = line if isinstance(line, tuple) else (line,)
     draw_story_panel(
         screen, res, speaker, lines,
-        chars=None, page_index=0, total_pages=1, complete=True, blink=0.0,
-        hint_last="ENTER: 続ける", hint_next="ENTER: 次へ", style=style,
+        chars=None, complete=True, hint_text="ENTER: 次へ", style=style,
         center=center, arrow_on=True,
     )
 
 
-def _combat(screen, res, speaker, line, style, *, page_index=None, total_pages=None,
-            hint=None, center=False):
+def _combat(screen, res, speaker, line, style, *, hint=None, center=False):
     lines = line if isinstance(line, tuple) else (line,)
     draw_combat_panel(
         screen, res, speaker, lines,
-        page_index=page_index, total_pages=total_pages, hint_text=hint, style=style,
+        hint_text=hint, style=style,
         center=center, arrow_on=True,
     )
 
@@ -74,15 +72,15 @@ def main() -> int:
         ("06_story_system",      "story", spk.SYSTEM,       "SAVE COMPLETE.",                              DARK_STYLE,  dark_bg),
         ("07_story_sawaguchi_light","story", spk.SAWAGUCHI, "朝だった。熱は、いつのまにか引いていた。",    LIGHT_STYLE, light_bg),
         # ── 戦闘中（combat） ──
-        ("08_combat_boss1_red",  "combat", spk.BOSS1,         "クシャミひとつで貴様を吹き飛ばす！",        COMBAT_RED_STYLE,  combat_bg, dict(page_index=0, total_pages=3, hint="1/3  ENTER: 次へ")),
-        ("09_combat_boss2_red",  "combat", spk.BOSS2,         "情報の濁流に飲まれて消えろ！",              COMBAT_RED_STYLE,  combat_bg, dict(page_index=0, total_pages=3, hint="1/3  ENTER: 次へ")),
-        ("10_combat_boss3_red",  "combat", spk.BOSS3,         "条件に一致する相手は……いません。",          COMBAT_RED_STYLE,  combat_bg, dict(page_index=0, total_pages=3, hint="1/3  ENTER: 次へ")),
-        ("11_combat_boss4_red",  "combat", spk.BOSS4,         "盤上に、逃げ場はない。",                    COMBAT_RED_STYLE,  combat_bg, dict(page_index=0, total_pages=3, hint="1/3  ENTER: 次へ")),
-        ("12_combat_boss4f2_red","combat", spk.BOSS4_FORM2,   "……まだだ。まだ詰んでいない。",              COMBAT_RED_STYLE,  combat_bg, dict(page_index=0, total_pages=3, hint="1/3  ENTER: 次へ")),
-        ("13_combat_sawaguchi_red","combat", spk.BOSS_SAWAGUCHI,"投了は、しない。",                        COMBAT_RED_STYLE,  combat_bg, dict(page_index=0, total_pages=3, hint="1/3  ENTER: 戦闘開始")),
+        ("08_combat_boss1_red",  "combat", spk.BOSS1,         "クシャミひとつで貴様を吹き飛ばす！",        COMBAT_RED_STYLE,  combat_bg, dict(hint="ENTER: 次へ")),
+        ("09_combat_boss2_red",  "combat", spk.BOSS2,         "情報の濁流に飲まれて消えろ！",              COMBAT_RED_STYLE,  combat_bg, dict(hint="ENTER: 次へ")),
+        ("10_combat_boss3_red",  "combat", spk.BOSS3,         "条件に一致する相手は……いません。",          COMBAT_RED_STYLE,  combat_bg, dict(hint="ENTER: 次へ")),
+        ("11_combat_boss4_red",  "combat", spk.BOSS4,         "盤上に、逃げ場はない。",                    COMBAT_RED_STYLE,  combat_bg, dict(hint="ENTER: 次へ")),
+        ("12_combat_boss4f2_red","combat", spk.BOSS4_FORM2,   "……まだだ。まだ詰んでいない。",              COMBAT_RED_STYLE,  combat_bg, dict(hint="ENTER: 次へ")),
+        ("13_combat_sawaguchi_red","combat", spk.BOSS_SAWAGUCHI,"投了は、しない。",                        COMBAT_RED_STYLE,  combat_bg, dict(hint="ENTER: 次へ")),
         ("14_combat_boss2_purple","combat", spk.BOSS2,         "まだ笑える余裕があるのか？",                COMBAT_PURPLE_STYLE, combat_bg, dict()),
-        ("15_combat_sawaguchi_blue","combat", spk.SAWAGUCHI,   "……効いてる。この調子だ。",                  COMBAT_BLUE_STYLE, combat_bg, dict(page_index=0, total_pages=2, hint="1/2  ENTER: 次へ")),
-        ("16_combat_karonaru_blue","combat", spk.KARONARU,     "よくやったね、澤口くん。",                  COMBAT_BLUE_STYLE, combat_bg, dict(page_index=1, total_pages=2, hint="ENTER: 続ける")),
+        ("15_combat_sawaguchi_blue","combat", spk.SAWAGUCHI,   "……効いてる。この調子だ。",                  COMBAT_BLUE_STYLE, combat_bg, dict(hint="ENTER: 次へ")),
+        ("16_combat_karonaru_blue","combat", spk.KARONARU,     "よくやったね、澤口くん。",                  COMBAT_BLUE_STYLE, combat_bg, dict(hint="ENTER: 次へ")),
     ]
 
     OUT.mkdir(parents=True, exist_ok=True)

@@ -3,14 +3,14 @@ import pygame
 from src.core.scene import Scene
 from src.managers.playlog import PlayLogger
 from src.scenes.meta_ui import (
-    ACCENT_GOLD,
+    ACCENT_CORAL,
+    ACCENT_MINT,
     TEXT,
     TEXT_MUTED,
     draw_meta_background,
     draw_meta_footer,
-    draw_meta_panel,
     draw_meta_title,
-    draw_selection_marker,
+    draw_pixel_cursor,
     fit_text,
 )
 
@@ -143,28 +143,28 @@ class StatsScene(Scene):
 
     def _text(self, screen, text, x, y, width, *, color=TEXT, font=None, right=False):
         font = font or self._font_row
-        surface = font.render(fit_text(font, text, width), True, color)
+        surface = font.render(fit_text(font, text, width), False, color)
         screen.blit(surface, (x + width - surface.get_width() if right else x, y))
 
     def draw(self, screen: pygame.Surface) -> None:
         draw_meta_background(screen)
-        draw_meta_title(screen, self._font_title, "プレイ記録", y=22)
+        draw_meta_title(screen, self._font_title, "プレイ記録", accent=TEXT, y=22)
         if self._stats is None:
-            draw_meta_panel(screen, pygame.Rect(70, 116, 660, 400))
             for text, font, y, color in (
                 ("まだプレイ記録がありません", self._font_head, 254, TEXT),
                 ("プレイを終えると、到達した章や装備を振り返れます。", self._font_hint, 300, TEXT_MUTED),
             ):
-                surface = font.render(text, True, color)
+                surface = font.render(text, False, color)
                 screen.blit(surface, surface.get_rect(centerx=400, y=y))
         else:
             for i, label in enumerate(self._PAGE_LABELS):
                 rect = pygame.Rect(70 + i * 224, 92, 212, 36)
                 selected = i == self._page
-                draw_selection_marker(screen, rect, selected=selected)
-                text = self._font_hint.render(label, True, ACCENT_GOLD if selected else TEXT_MUTED)
-                screen.blit(text, text.get_rect(centerx=rect.centerx, y=rect.y + 6))
-            draw_meta_panel(screen, pygame.Rect(70, 138, 660, 378))
+                text = self._font_hint.render(label, False, ACCENT_CORAL if selected else TEXT_MUTED)
+                text_rect = text.get_rect(centerx=rect.centerx, y=rect.y + 6)
+                screen.blit(text, text_rect)
+                if selected:
+                    draw_pixel_cursor(screen, text_rect.left - 22, text_rect.centery)
             if self._page == 0:
                 self._draw_summary(screen)
                 self._draw_stage_table(screen)
@@ -191,24 +191,22 @@ class StatsScene(Scene):
             y = 154 + i * 32
             self._text(screen, label, 98, y, 220, color=TEXT_MUTED)
             self._text(screen, value, 350, y, 352, right=True,
-                       color=ACCENT_GOLD if i == 3 else TEXT)
+                       color=ACCENT_MINT if i == 3 else TEXT)
 
     def _draw_stage_table(self, screen: pygame.Surface) -> None:
         st = self._stats
-        pygame.draw.line(screen, (53, 66, 85), (98, 290), (702, 290))
         for x, width, label in ((98, 140, "章"), (262, 218, "到達率"), (494, 208, "ボス平均撃破時間")):
             self._text(screen, label, x, 300, width, font=self._font_hint, color=TEXT_MUTED)
         for i, stage in enumerate(st["stages"]):
             y = 334 + i * 35
             rate = st["survival"][stage] / st["n"]
             self._text(screen, f"第{stage}章", 98, y, 140)
-            pygame.draw.rect(screen, (34, 49, 66), (262, y + 8, 130, 10), border_radius=3)
             if rate:
-                pygame.draw.rect(screen, (132, 225, 194), (262, y + 8, round(130 * rate), 10), border_radius=3)
+                pygame.draw.rect(screen, ACCENT_MINT, (262, y + 8, round(130 * rate), 8))
             self._text(screen, f"{rate * 100:.0f}%", 402, y, 70, right=True)
             avg_boss = st["avg_boss"][stage]
             self._text(screen, "—" if avg_boss is None else f"{avg_boss:,.0f} 秒",
-                       494, y, 208, right=True, color=(132, 225, 194) if avg_boss is not None else TEXT_MUTED)
+                       494, y, 208, right=True, color=ACCENT_MINT if avg_boss is not None else TEXT_MUTED)
         self._text(screen, "到達率：その章に進んだプレイの割合", 98, 484, 604,
                    font=self._font_hint, color=TEXT_MUTED)
 
@@ -232,8 +230,7 @@ class StatsScene(Scene):
             zone, count, total = hotspot[stage]
             self._text(screen, f"{zone:,}–{zone + 10:,} 秒", 250, y, 212)
             self._text(screen, f"{count:,} / {total:,}", 480, y, 222, right=True)
-            pygame.draw.rect(screen, (34, 49, 66), (250, y + 31, 452, 6), border_radius=3)
-            pygame.draw.rect(screen, (241, 145, 139), (250, y + 31, round(452 * count / total), 6), border_radius=3)
+            pygame.draw.rect(screen, ACCENT_CORAL, (250, y + 31, round(452 * count / total), 4))
 
     def _draw_death_weapons(self, screen: pygame.Surface) -> None:
         st = self._stats
@@ -261,4 +258,4 @@ class StatsScene(Scene):
             self._text(screen, formatted, 400, y, 302, right=True)
         low = st.get("low_main", 0)
         self._text(screen, f"メイン未強化で倒れた回数  {low:,} / {total:,}", 98, 470, 604,
-                   font=self._font_hint, color=(241, 145, 139) if low / total >= 0.5 else TEXT_MUTED)
+                   font=self._font_hint, color=ACCENT_CORAL if low / total >= 0.5 else TEXT_MUTED)

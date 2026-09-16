@@ -1671,12 +1671,12 @@ class GameScene(
         bar_x   = cx - bar_w // 2
         bar_y   = cy + surf.get_height() // 2 + 4
         # 背景
-        pygame.draw.rect(screen, (60, 60, 60), (bar_x, bar_y, bar_w, bar_h), border_radius=2)
+        pygame.draw.rect(screen, (60, 60, 60), (bar_x, bar_y, bar_w, bar_h))
         # 残り
         fill_w = int(bar_w * ratio)
         if fill_w > 0:
             bar_color = (int(255 * (1 - ratio)), int(220 * ratio), 40)
-            pygame.draw.rect(screen, bar_color, (bar_x, bar_y, fill_w, bar_h), border_radius=2)
+            pygame.draw.rect(screen, bar_color, (bar_x, bar_y, fill_w, bar_h))
 
     def _go_gameover(self) -> None:
         if self._is_debug_stage:

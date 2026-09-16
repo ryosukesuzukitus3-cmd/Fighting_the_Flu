@@ -8,7 +8,10 @@ from __future__ import annotations
 import pygame
 
 from src.scenes.game.config import UPGRADE_SLOTS, COMPANION_SLOTS, MAIN_NEXT_NAMES
-from src.scenes.meta_ui import ACCENT_GOLD, draw_meta_panel, draw_meta_footer, fit_text
+from src.scenes.meta_ui import (
+    ACCENT_CORAL, ACCENT_MINT, BG, TEXT, TEXT_MUTED,
+    draw_meta_footer, draw_pixel_cursor, fit_text,
+)
 
 _KT_MAX_LEVEL = 3   # 先輩系統の最大Lv（companion._KT_MAX_LEVEL と一致）
 
@@ -180,46 +183,43 @@ class GameSceneUpgradeMixin:
         self._upgrade_slot_font = self.game.resources.pixelfont(19)
         small = self.game.resources.pixelfont(16)
         title_font = self.game.resources.pixelfont(32)
-        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        overlay.fill((2, 5, 12, 185))
-        screen.blit(overlay, (0, 0))
+        screen.fill(BG)
         cx = screen.get_width() // 2
-        panel = pygame.Rect(36, 96, screen.get_width() - 72, 418)
-        draw_meta_panel(screen, panel, accent=ACCENT_GOLD, fill=(8, 15, 29, 245))
-        title = title_font.render("ふたりの強化", True, (240, 243, 250))
-        screen.blit(title, (panel.x + 26, 110))
-        stopped = small.render("戦闘停止中  /  在庫は決定時に消費", True, (175, 188, 205))
-        screen.blit(stopped, (panel.right - stopped.get_width() - 24, 124))
+        title = title_font.render("ふたりの強化", False, TEXT)
+        screen.blit(title, (48, 62))
+        stopped = small.render("戦闘停止中", False, TEXT_MUTED)
+        screen.blit(stopped, (screen.get_width() - stopped.get_width() - 48, 77))
 
-        steps = {"top": "1  自機を選ぶ" if self._top_available_indices() else "1  自機の選択なし",
-                 "bottom": "2  先輩を選ぶ" if self._bottom_available_indices() else "2  先輩の選択なし",
-                 "confirm": "3  内容を確認"}
+        steps = {"top": "自機" if self._top_available_indices() else "自機（選択なし）",
+                 "bottom": "先輩" if self._bottom_available_indices() else "先輩（選択なし）",
+                 "confirm": "確認"}
+        x = 48
         for index, (zone, label) in enumerate(steps.items()):
-            x = panel.x + 26 + index * 232
             active = self._upg_zone == zone
-            if active:
-                pygame.draw.rect(screen, (68, 55, 30), (x - 5, 158, 212, 27), border_radius=4)
-                pygame.draw.polygon(screen, ACCENT_GOLD, [(x + 2, 168), (x + 8, 172), (x + 2, 176)])
-            rendered = small.render(label, True,
-                                    ACCENT_GOLD if active else (154, 172, 191))
-            screen.blit(rendered, (x + 17, 160))
+            rendered = small.render(label, False, ACCENT_CORAL if active else TEXT_MUTED)
+            screen.blit(rendered, (x, 112))
+            x += rendered.get_width() + 16
+            if index < len(steps) - 1:
+                arrow = small.render("→", False, TEXT_MUTED)
+                screen.blit(arrow, (x, 112))
+                x += arrow.get_width() + 16
 
         ws = self.player.weapon.weapon_stock
         c = self._companion
         cs = c.stock if c is not None else 0
         top_avail = lambda i: ws > 0 and self._is_upgrade_available(UPGRADE_SLOTS[i][0])
         bot_avail = lambda i: c is not None and cs > 0 and c.is_upgrade_available(COMPANION_SLOTS[i][0])
-        top_label = f"自機  在庫 {ws}" + ("  /  選択済み" if self._upg_top_choice is not None else "")
-        bottom_label = (f"カロナール先輩  在庫 {cs}" if c is not None else
+        top_label = f"自機  ストック {ws}" + ("  /  選択済み" if self._upg_top_choice is not None else "")
+        bottom_label = (f"カロナール先輩  ストック {cs}" if c is not None else
                         "カロナール先輩  離脱中" if self.game.story.karonaru_lost else "カロナール先輩  未参戦")
         if self._upg_bottom_choice is not None:
             bottom_label += "  /  選択済み"
-        screen.blit(small.render(top_label, True, (210, 222, 235)), (panel.x + 26, 192))
-        screen.blit(small.render(bottom_label, True, (178, 213, 198)), (panel.x + 26, 294))
-        self._draw_slot_row(screen, UPGRADE_SLOTS, 216, self._upg_top_cursor,
+        screen.blit(self._upgrade_font.render(top_label, False, TEXT), (48, 170))
+        screen.blit(self._upgrade_font.render(bottom_label, False, TEXT), (48, 298))
+        self._draw_slot_row(screen, UPGRADE_SLOTS, 211, self._upg_top_cursor,
                             self._upg_top_choice, self._upg_zone == "top",
                             self._slot_display_label, top_avail)
-        self._draw_slot_row(screen, COMPANION_SLOTS, 318, self._upg_bottom_cursor,
+        self._draw_slot_row(screen, COMPANION_SLOTS, 339, self._upg_bottom_cursor,
                             self._upg_bottom_choice, self._upg_zone == "bottom",
                             self._companion_slot_label, bot_avail, dim=c is None)
 
@@ -251,23 +251,18 @@ class GameSceneUpgradeMixin:
                 else "現在、強化できる項目はありません。在庫は残ります。")
         else:
             explanation = descriptions[key]
-        detail = small.render(fit_text(small, explanation, panel.w - 52), True, (175, 220, 205))
-        screen.blit(detail, (cx - detail.get_width() // 2, 401))
+        detail = small.render(fit_text(small, explanation, screen.get_width() - 96), False, TEXT_MUTED)
+        screen.blit(detail, (cx - detail.get_width() // 2, 423))
         complete = ((not self._top_available_indices() or self._upg_top_choice is not None)
                     and (not self._bottom_available_indices() or self._upg_bottom_choice is not None))
         has_choice = self._upg_top_choice is not None or self._upg_bottom_choice is not None
         label = "強化して再開" if has_choice and complete else "未選択の項目へ" if not complete else "ゲームに戻る"
-        button = pygame.Rect(cx - 150, 451, 300, 42)
         focused = self._upg_zone == "confirm"
-        pygame.draw.rect(screen, ACCENT_GOLD if focused else (26, 42, 61), button, border_radius=6)
-        pygame.draw.rect(screen, ACCENT_GOLD if focused else (105, 135, 158), button, 2, border_radius=6)
+        rendered = self._upgrade_font.render(label, False, ACCENT_CORAL if focused else ACCENT_MINT)
+        target = rendered.get_rect(center=(cx, 486))
+        screen.blit(rendered, target)
         if focused:
-            pygame.draw.polygon(screen, (18, 23, 31), [(button.x + 17, button.centery - 5),
-                                                    (button.x + 24, button.centery),
-                                                    (button.x + 17, button.centery + 5)])
-        rendered = self._upgrade_font.render(label, True,
-                                             (18, 23, 31) if focused else (224, 232, 244))
-        screen.blit(rendered, rendered.get_rect(center=button.center))
+            draw_pixel_cursor(screen, target.x - 26, target.centery)
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
         action = label if focused else "選ぶ・次へ"
@@ -275,7 +270,7 @@ class GameSceneUpgradeMixin:
 
     def _draw_slot_row(self, screen, slots, y, cursor, choice, zone_active,
                        label_fn, avail_fn, dim: bool = False) -> None:
-        box_w, box_h, gap = 156, 64, 12
+        box_w, gap = 156, 12
         total = len(slots) * box_w + (len(slots) - 1) * gap
         sx0 = screen.get_width() // 2 - total // 2
         for i, (key, _) in enumerate(slots):
@@ -284,23 +279,21 @@ class GameSceneUpgradeMixin:
             chosen  = choice == i
             bx = sx0 + i * (box_w + gap)
             if dim:
-                bg, bd, tx = (14, 22, 33), (47, 60, 74), (128, 143, 158)
+                tx = TEXT_MUTED
             elif focused and avail:
-                bg, bd, tx = ACCENT_GOLD, ACCENT_GOLD, (18, 23, 31)
+                tx = ACCENT_CORAL
             elif chosen:
-                bg, bd, tx = (22, 63, 55), (118, 230, 186), (225, 255, 240)
+                tx = ACCENT_MINT
             elif avail:
-                bg, bd, tx = (26, 42, 61), (105, 135, 158), (224, 232, 244)
+                tx = TEXT
             else:
-                bg, bd, tx = (14, 22, 33), (47, 60, 74), (128, 143, 158)
-            pygame.draw.rect(screen, bg, (bx, y, box_w, box_h), border_radius=7)
-            pygame.draw.rect(screen, bd, (bx, y, box_w, box_h), 2, border_radius=7)
+                tx = TEXT_MUTED
             names = {"weapon_main": "主砲", "homing": "追尾弾", "laser": "レーザー", "speed": "移動速度",
                      "kt_hp": "先輩の耐久", "kt_shot": "解熱弾", "kt_supply": "回復補給", "kt_magnet": "引き寄せ"}
             label = names[key]
             if focused and avail:
-                pygame.draw.polygon(screen, tx, [(bx + 9, y + 17), (bx + 16, y + 22), (bx + 9, y + 27)])
-            surf = self._upgrade_slot_font.render(fit_text(self._upgrade_slot_font, label, box_w - 12), True, tx)
+                draw_pixel_cursor(screen, bx, y + 23)
+            surf = self._upgrade_slot_font.render(fit_text(self._upgrade_slot_font, label, box_w - 20), False, tx)
             screen.blit(surf, (bx + box_w // 2 - surf.get_width() // 2,
                                y + 8))
             if chosen:
@@ -314,5 +307,6 @@ class GameSceneUpgradeMixin:
             else:
                 status = "次: " + label_fn(key)
             font = self.game.resources.pixelfont(14)
-            detail = font.render(fit_text(font, status, box_w - 12), True, tx)
+            detail_color = ACCENT_MINT if chosen else ACCENT_CORAL if focused and avail else TEXT_MUTED
+            detail = font.render(fit_text(font, status, box_w - 12), False, detail_color)
             screen.blit(detail, (bx + box_w // 2 - detail.get_width() // 2, y + 38))

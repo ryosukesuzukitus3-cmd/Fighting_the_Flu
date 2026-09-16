@@ -96,9 +96,8 @@ class GameSceneBossFxMixin:
         w, h = 80, 6
         ratio = max(0.0, min(1.0, getattr(b, "_armor", 0) / _ARMOR_MAX))
         x = cx - w // 2
-        pygame.draw.rect(buf, (40, 44, 54), (x, y, w, h), border_radius=2)
-        pygame.draw.rect(buf, (150, 170, 200), (x, y, int(w * ratio), h), border_radius=2)
-        pygame.draw.rect(buf, (90, 100, 120), (x, y, w, h), 1, border_radius=2)
+        pygame.draw.rect(buf, (40, 44, 54), (x, y, w, h))
+        pygame.draw.rect(buf, (150, 170, 200), (x, y, int(w * ratio), h))
 
     def _draw_boss_concept_fx(self, buf: pygame.Surface, b, cx: int, cy: int, r: int) -> None:
         """Draw form-specific readable boss silhouettes and danger cues."""

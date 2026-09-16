@@ -5,13 +5,12 @@ from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from src.core.scene import Scene
 from src.managers.settings import KEY_BINDING_DISPLAY_NAMES
 from src.scenes.meta_ui import (
-    ACCENT_GOLD, TEXT, TEXT_MUTED, draw_meta_background, draw_meta_footer,
-    draw_meta_panel, draw_meta_title, draw_selection_marker, fit_text, wrap_text,
+    BG, ACCENT_CORAL, ACCENT_MINT, TEXT, TEXT_MUTED, draw_meta_background,
+    draw_meta_footer, draw_pixel_cursor, fit_text, wrap_text,
 )
 
 _STEP = 0.05
 _CATEGORIES = ("音量", "ゲーム操作", "メニュー操作")
-_ACCENT = (166, 189, 245)
 
 
 class SettingsScene(Scene):
@@ -22,7 +21,7 @@ class SettingsScene(Scene):
         self._back_scene = back_scene
 
     def on_enter(self) -> None:
-        self._font_title = self.game.resources.pixelfont(42)
+        self._font_title = self.game.resources.pixelfont(48)
         self._font_item = self.game.resources.pixelfont(22)
         self._font_small = self.game.resources.pixelfont(18)
         self._items = [
@@ -155,50 +154,45 @@ class SettingsScene(Scene):
         self.game.sound.play_se("music/se/メニュー操作SE：カーソル移動.mp3", volume=0.5)
 
     def draw(self, screen: pygame.Surface) -> None:
-        draw_meta_background(screen, accent=_ACCENT)
-        draw_meta_title(screen, self._font_title, "設定", accent=_ACCENT, y=30)
+        draw_meta_background(screen)
+        screen.blit(self._font_title.render("設定", False, TEXT), (56, 40))
         for index, name in enumerate(_CATEGORIES):
-            tab = pygame.Rect(56 + index * 232, 113, 224, 46)
+            x = 80 + index * 224
             active = index == self._category
-            draw_meta_panel(screen, tab, accent=_ACCENT, fill=(25, 34, 54, 235) if active else (10, 17, 30, 210))
-            draw_selection_marker(screen, tab, selected=active and self._category_focus)
-            text = self._font_item.render(name, True, ACCENT_GOLD if active else TEXT_MUTED)
-            screen.blit(text, (tab.centerx - text.get_width() // 2, tab.centery - text.get_height() // 2))
-            if active:
-                pygame.draw.line(screen, ACCENT_GOLD, (tab.x + 18, tab.bottom - 1), (tab.right - 18, tab.bottom - 1), 2)
-        panel = pygame.Rect(56, 174, 688, 346)
-        draw_meta_panel(screen, panel, accent=_ACCENT)
+            text = self._font_item.render(name, False, ACCENT_CORAL if active else TEXT_MUTED)
+            screen.blit(text, (x, 132))
+            if active and self._category_focus:
+                draw_pixel_cursor(screen, x - 20, 132 + text.get_height() // 2)
+
         for position, index in enumerate(self._groups[self._category]):
             kind, action, label = self._items[index]
             selected = index == self._cursor and not self._category_focus
-            row_h, step = (90, 112) if kind == "volume" else (36, 38)
-            row = pygame.Rect(panel.x + 18, panel.y + 18 + position * step, panel.w - 36, row_h)
-            draw_selection_marker(screen, row, selected=selected)
-            color = ACCENT_GOLD if selected else TEXT
-            text = self._font_item.render(label, True, color)
-            screen.blit(text, (row.x + 18, row.y + 10 if kind == "volume" else row.centery - text.get_height() // 2))
-            if kind == "volume":
-                value = float(self.game.settings.get(action, 0.8))
-                value_text = self._font_item.render(f"{round(value * 100)}%", True, color)
-                screen.blit(value_text, (row.right - 18 - value_text.get_width(), row.y + 10))
-                bar = pygame.Rect(row.x + 18, row.y + 55, row.w - 36, 12)
-                pygame.draw.rect(screen, (44, 55, 76), bar, border_radius=4)
+            is_volume = kind == "volume"
+            y = 218 + position * 112 if is_volume else 202 + position * 38
+            color = ACCENT_CORAL if selected else TEXT
+            text = self._font_item.render(label, False, color)
+            screen.blit(text, (80, y))
+            if selected:
+                draw_pixel_cursor(screen, 58, y + text.get_height() // 2)
+            if is_volume:
+                value = max(0.0, min(1.0, float(self.game.settings.get(action, 0.8))))
+                value_text = self._font_item.render(f"{round(value * 100)}%", False, color)
+                screen.blit(value_text, (744 - value_text.get_width(), y))
+                bar = pygame.Rect(80, y + 42, 664, 12)
+                pygame.draw.rect(screen, (48, 48, 50), bar)
                 if value > 0:
-                    pygame.draw.rect(screen, (109, 220, 174), (bar.x, bar.y, round(bar.w * value), bar.h), border_radius=4)
+                    pygame.draw.rect(screen, ACCENT_MINT, (bar.x, bar.y, round(bar.w * value), bar.h))
             elif kind == "key":
-                key_box = pygame.Rect(row.right - 182, row.y + 3, 164, 30)
-                pygame.draw.rect(screen, (26, 37, 57), key_box, border_radius=4)
-                pygame.draw.rect(screen, (81, 102, 136), key_box, 1, border_radius=4)
-                value = fit_text(self._font_small, self.game.settings.key_display(action), key_box.w - 12)
-                rendered = self._font_small.render(value, True, color)
-                screen.blit(rendered, rendered.get_rect(center=key_box.center))
+                value = fit_text(self._font_small, self.game.settings.key_display(action), 230)
+                rendered = self._font_small.render(value, False, color)
+                screen.blit(rendered, (744 - rendered.get_width(), y + 2))
         if self._category != 1:
             note = "←→で5%ずつ調整できます。" if self._category == 0 else "ゲーム中の移動キーとは別に、メニューは矢印キーで選択します。"
-            for i, line in enumerate(wrap_text(self._font_small, note, panel.w - 72)):
-                rendered = self._font_small.render(line, True, TEXT_MUTED)
-                screen.blit(rendered, (panel.x + 36, 442 + i * 24))
-            saved = self._font_small.render("戻ると変更が保存されます。", True, TEXT_MUTED)
-            screen.blit(saved, (panel.x + 36, 486))
+            for i, line in enumerate(wrap_text(self._font_small, note, 664)):
+                rendered = self._font_small.render(line, False, TEXT_MUTED)
+                screen.blit(rendered, (80, 450 + i * 24))
+            saved = self._font_small.render("戻ると変更が保存されます。", False, TEXT_MUTED)
+            screen.blit(saved, (80, 494))
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
         if self._category_focus:
@@ -215,31 +209,31 @@ class SettingsScene(Scene):
             self._draw_modal(screen, accept, back)
 
     def _draw_modal(self, screen: pygame.Surface, accept: str, back: str) -> None:
-        shade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        shade.fill((2, 5, 12, 210))
-        screen.blit(shade, (0, 0))
-        modal = pygame.Rect(116, 195, 568, 222)
-        draw_meta_panel(screen, modal, accent=ACCENT_GOLD, fill=(15, 23, 41, 255))
+        # The dialog replaces the menu, keeping the current operation unambiguous.
+        screen.fill(BG)
+        modal = pygame.Rect(80, 195, 640, 222)
         if self._rebinding is not None:
             name = self.game.settings.action_display_name(self._rebinding)
             current = self.game.settings.key_display(self._rebinding)
-            label = self._font_item.render(f"{name}のキー変更", True, ACCENT_GOLD)
+            label = self._font_item.render(f"{name}のキー変更", False, ACCENT_CORAL)
             screen.blit(label, (modal.centerx - label.get_width() // 2, modal.y + 24))
             instructions = [f"現在のキー: {current}", "新しく割り当てるキーを押してください。"]
             if self._rebind_error:
                 instructions = ["このキーは設定できません。", "ESC・矢印キーや、決定・戻るとの重複を避けてください。"]
             for i, text in enumerate(instructions):
-                rendered = self._font_small.render(fit_text(self._font_small, text, modal.w - 40), True, (255, 163, 151) if self._rebind_error else TEXT)
+                rendered = self._font_small.render(fit_text(self._font_small, text, modal.w - 24), False, ACCENT_CORAL if self._rebind_error else TEXT)
                 screen.blit(rendered, (modal.centerx - rendered.get_width() // 2, modal.y + 90 + i * 36))
             draw_meta_footer(screen, self._font_small, "ESC: 変更せずに戻る")
         else:
-            label = self._font_item.render("操作キーを初期設定に戻しますか？", True, ACCENT_GOLD)
+            label = self._font_item.render("操作キーを初期設定に戻しますか？", False, TEXT)
             screen.blit(label, (modal.centerx - label.get_width() // 2, modal.y + 26))
-            detail = self._font_small.render("すべての操作キーが初期化されます。音量は変わりません。", True, TEXT_MUTED)
+            detail = self._font_small.render("すべての操作キーが初期化されます。音量は変わりません。", False, TEXT_MUTED)
             screen.blit(detail, (modal.centerx - detail.get_width() // 2, modal.y + 76))
             for i, option in enumerate(("初期化する", "やめる")):
-                rect = pygame.Rect(modal.x + 30 + i * 258, modal.y + 134, 250, 52)
-                draw_selection_marker(screen, rect, selected=i == self._reset_cursor)
-                rendered = self._font_item.render(option, True, ACCENT_GOLD if i == self._reset_cursor else TEXT)
-                screen.blit(rendered, rendered.get_rect(center=rect.center))
+                selected = i == self._reset_cursor
+                rendered = self._font_item.render(option, False, ACCENT_CORAL if selected else TEXT)
+                rect = rendered.get_rect(center=(245 + i * 300, modal.y + 160))
+                screen.blit(rendered, rect)
+                if selected:
+                    draw_pixel_cursor(screen, rect.x - 22, rect.centery)
             draw_meta_footer(screen, self._font_small, f"←→: 選択   {accept}: 決定   {back} / ESC: やめる")

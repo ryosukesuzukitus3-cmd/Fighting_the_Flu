@@ -11,7 +11,7 @@ from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.script import BOOT_DISCLAIMER
 from src.scenes.meta_ui import (
-    TEXT, draw_meta_background, draw_meta_footer, draw_meta_panel, draw_meta_title, wrap_text,
+    BG, TEXT, draw_meta_background, draw_meta_footer, draw_meta_title, wrap_text,
 )
 
 _FADE_IN  = 0.7   # 秒
@@ -45,17 +45,15 @@ class DisclaimerScene(Scene):
                 self.game.change_scene(TitleScene(self.game))
 
     def draw(self, screen: pygame.Surface) -> None:
-        screen.fill((8, 8, 12))
+        screen.fill(BG)
         if self._leave_t >= 0:
             alpha = max(0, int(255 * (1.0 - self._leave_t / _FADE_OUT)))
         else:
             alpha = min(255, int(255 * (self._timer / _FADE_IN)))
 
         layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        accent = (132, 225, 194)
-        draw_meta_background(layer, accent=accent)
-        draw_meta_title(layer, self._font_title, "この作品について", accent=accent, y=124)
-        draw_meta_panel(layer, pygame.Rect(60, 204, 680, 226), accent=accent)
+        draw_meta_background(layer)
+        draw_meta_title(layer, self._font_title, "この作品について", accent=TEXT, y=124)
         lines = []
         for line in BOOT_DISCLAIMER:
             lines.extend(wrap_text(self._font_body, line, 624))
@@ -64,7 +62,7 @@ class DisclaimerScene(Scene):
         line_h = self._font_body.get_linesize() + 6
         y = 316 - line_h * len(lines) // 2
         for line in lines:
-            surf = self._font_body.render(line, True, TEXT)
+            surf = self._font_body.render(line, False, TEXT)
             layer.blit(surf, surf.get_rect(centerx=SCREEN_WIDTH // 2, y=y))
             y += line_h
         accept = self.game.settings.key_display("ui_accept")
