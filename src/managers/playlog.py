@@ -1,6 +1,7 @@
 """
 プレイデータ収集ロガー。
-ゲームバランス改善のためのローカルセッションログを data/playlogs/ に JSONL 形式で記録する。
+ゲームバランス改善のためのローカルセッションログを、ユーザーデータ領域の
+playlogs/ に JSONL 形式で記録する（開発時は data/playlogs/）。
 
 収集データ（すべてローカルファイルのみ、外部送信なし）:
   - セッション開始・終了時刻
@@ -11,18 +12,22 @@
 """
 from __future__ import annotations
 import json
-import time
 from datetime import datetime
 from pathlib import Path
 
-_LOG_DIR = Path(__file__).parent.parent.parent / "data" / "playlogs"
+from src.core.user_data import user_data_dir
+
+
+def _log_dir() -> Path:
+    return user_data_dir() / "playlogs"
 
 
 class PlayLogger:
     def __init__(self) -> None:
-        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_dir = _log_dir()
+        log_dir.mkdir(parents=True, exist_ok=True)
         today = datetime.now().strftime("%Y%m%d")
-        self._path = _LOG_DIR / f"session_{today}.jsonl"
+        self._path = log_dir / f"session_{today}.jsonl"
         self._run: dict = {}
 
     # ── セッション管理 ───────────────────────────────────────────
@@ -102,9 +107,10 @@ class PlayLogger:
     def load_all_sessions() -> list[dict]:
         """全 JSONL ファイルを読み込んでセッション一覧を返す。読み込み失敗行は無視。"""
         sessions: list[dict] = []
-        if not _LOG_DIR.exists():
+        log_dir = _log_dir()
+        if not log_dir.exists():
             return sessions
-        for path in sorted(_LOG_DIR.glob("session_*.jsonl")):
+        for path in sorted(log_dir.glob("session_*.jsonl")):
             try:
                 for line in path.read_text(encoding="utf-8").splitlines():
                     line = line.strip()

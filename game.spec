@@ -10,21 +10,28 @@
 #   src/ 以下は Path(__file__) からプロジェクトルート相対で assets/ と data/stages/ を
 #   参照する。PyInstaller は凍結モジュールの __file__ を sys._MEIPASS 配下に設定するため、
 #   datas で同じ相対位置に配置すればコード変更なしで解決される。
+#   地形JSONが参照する tools/ の定義・マスクもmanifestから収集する。
+#   未採用画像候補を除外し、SE候補はaliasesから参照される音だけを同梱する。
 #   ユーザーデータ（ハイスコア等）は src/core/user_data.py が書き込み先を実行時に判定する。
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, SPECPATH)
+from src.core.runtime_assets import pyinstaller_datas
 
 a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
-    datas=[
-        ("assets", "assets"),
-        ("data/stages", "data/stages"),
-    ],
+    datas=pyinstaller_datas(Path(SPECPATH)),
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
+    # 配布版では __debug__ を False にし、開発専用HUD・ホットキーを除去する。
+    optimize=1,
 )
 
 pyz = PYZ(a.pure)

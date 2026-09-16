@@ -29,23 +29,26 @@ SE: dict[str, str | None] = {
     "SE_ITEM_WEAPON":  "music/se/item_weapon_pickup.wav",
     "SE_ITEM_HEAL":    "music/se/item_heal_pickup.wav",
     "SE_ALERT":        "music/se/boss_alert.wav",
-    "SE_BOSS_TRANSFORM": "music/se/boss_alert.wav",     # 仮：形態変化スティンガー（後で差し替え）
+    # ── 以下の dummy/仮 スロットは candidates/ の候補1番を仮配線（採用未定）。
+    #    各スロットの別案とライセンスは assets/music/se/candidates/README.md 参照。
+    "SE_BOSS_TRANSFORM": "music/se/candidates/boss_transform/01_soundeffectlab_doon1.mp3",  # dummy候補（形態変化スティンガー）
     "SE_FIGHT":        "music/se/fight.wav",
     "SE_EXPLOSION":    "music/se/game_explosion9.mp3",
     "SE_HIT":          "music/se/hit.wav",
     "SE_PLAYER_HIT":   "music/se/shout.wav",
-    "SE_ENEMY_SHOT":   "music/se/dummy_enemy_shot.wav",      # dummy（雑魚/砲台の発射）
-    "SE_BOSS_SHOT":    "music/se/dummy_boss_shot.wav",       # dummy（ボスの発射）
+    "SE_NORMALSHOT":   "music/se/candidates/normalshot/01_soundeffectlab_shot1.mp3",  # dummy候補（通常弾。旧: ウェポン：normalshot_shot.mp3）
+    "SE_ENEMY_SHOT":   "music/se/candidates/enemy_shot/01_soundeffectlab_handgun-firing1.mp3",  # dummy候補（雑魚/砲台の発射）
+    "SE_BOSS_SHOT":    "music/se/candidates/boss_shot/01_soundeffectlab_cannon1.mp3",  # dummy候補（ボスの発射）
     "SE_LASER_FIRE":   "music/se/laser_fire.mp3",            # ブロリー粒子砲の発射音
 
-    "SE_KARONARU_HIT": "music/se/dummy_karonaru_hit.wav",    # dummy（先輩 被弾）
-    "SE_KARONARU_RETIRE": "music/se/dummy_karonaru_retire.wav",  # dummy（先輩 退場）
-    "SE_KARONARU_ARRIVE": "music/se/dummy_karonaru_arrive.wav",  # dummy（先輩 移動出現）
-    "SE_LIGHT":        None,                           # TODO(Phase4)
-    "SE_BLACKHOLE":    "music/bgm/ノイズ_重低音.mp3",   # 仮：ブラックホールのズゴゴ（重低音・後で差し替え）
+    "SE_KARONARU_HIT": "music/se/candidates/karonaru_hit/01_soundeffectlab_boyoyon1.mp3",  # dummy候補（先輩 被弾・コミカル）
+    "SE_KARONARU_RETIRE": "music/se/candidates/karonaru_retire/01_soundeffectlab_flee1.mp3",  # dummy候補（先輩 退場）
+    "SE_KARONARU_ARRIVE": "music/se/candidates/karonaru_arrive/01_soundeffectlab_shakin1.mp3",  # dummy候補（先輩 登場・シャキーン）
+    "SE_LIGHT":        "music/se/candidates/light/01_soundeffectlab_eye-shine1.mp3",  # dummy候補（白閃光のキラーン）
+    "SE_BLACKHOLE":    "music/se/candidates/blackhole_rumble/01_soundeffectlab_earth-tremor1.mp3",  # dummy候補（ズゴゴ重低音）
     "SE_HEAL":         "music/se/item_heal_pickup.wav",
-    "SE_ERROR":        None,                           # TODO(Phase4)
-    "SE_SHOGI_PLACE":  "music/se/dummy_shogi_place.wav",     # dummy（持ち駒を置く「ピシッ」。要差し替え）
+    "SE_ERROR":        "music/se/candidates/error/01_soundeffectlab_beep4.mp3",  # dummy候補（エラー音）
+    "SE_SHOGI_PLACE":  "music/se/candidates/shogi_place/01_tairakomori_Shogi1.mp3",  # dummy候補（駒を打つ「ピシッ」）
 }
 
 

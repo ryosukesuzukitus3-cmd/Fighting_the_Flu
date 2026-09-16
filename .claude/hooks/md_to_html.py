@@ -1,216 +1,61 @@
-"""Claude Code PostToolUse hook: dialog → optional HTML render of .md.
+"""Explicit Markdown-to-HTML rendering; no stdin hook or dialog is launched.
 
-Two modes:
-1. Hook mode (no args, reads stdin):
-   - Receives PostToolUse JSON
-   - Filters .md files in project / plans / memory
-   - Spawns a Windows dialog asking the user to choose:
-       [プレーン] [ファンシー] [スキップ]
-   - On Plain/Fancy, the dialog launches this same script in CLI mode.
-2. CLI mode (--file <path> --mode plain|fancy):
-   - plain: Notion-style template + TOC (no API call, no token consumption)
-   - fancy: Claude API generates SVG-enhanced HTML (consumes tokens)
-   - Opens the resulting HTML in the default browser
+--file PATH writes a local plain HTML review without an API call.
+--open opens that result in the default browser only when requested.
+--mode fancy opts into an API call and requires FLU_HTML_MODEL to be set.
 """
 from __future__ import annotations
-import sys
-import os
-import json
-import re
-import html as html_lib
-import subprocess
+
 import argparse
 import datetime
+import html as html_lib
+import os
 from pathlib import Path
+import re
+import sys
+import webbrowser
 
-HOOK_DIR    = Path(__file__).resolve().parent
+HOOK_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = HOOK_DIR.parent.parent
-OUTPUT_DIR  = PROJECT_DIR / ".html"
-TEMPLATE    = HOOK_DIR / "template.html"
-
-# ── モデル設定（新モデル追加時はここだけ更新） ──────────────────────────────
-FANCY_MODELS = {
-    "light":  "claude-haiku-4-5-20251001",
-    "medium": "claude-sonnet-5",
-    "heavy":  "claude-opus-4-8",
-}
+OUTPUT_DIR = PROJECT_DIR / ".html"
+TEMPLATE = HOOK_DIR / "template.html"
 
 
-# ── ENTRY ────────────────────────────────────────────────────────────────────
-
-def main() -> None:
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--file", default=None)
+def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--file", required=True, help="Markdown file to render")
     parser.add_argument("--mode", choices=["plain", "fancy"], default="plain")
-    args, _ = parser.parse_known_args()
-
-    if args.file:
-        cli_render(Path(args.file), args.mode)
-    else:
-        hook_handler()
-
-
-# ── HOOK MODE ────────────────────────────────────────────────────────────────
-
-def hook_handler() -> None:
-    raw = sys.stdin.read()
+    parser.add_argument("--open", action="store_true", help="Open the rendered HTML in a browser")
+    args = parser.parse_args(argv)
     try:
-        data = json.loads(raw)
-    except Exception:
-        return
-
-    if data.get("tool_name", "") not in ("Write", "Edit", "MultiEdit"):
-        return
-
-    tool_input = data.get("tool_input", {}) or {}
-    file_path = (tool_input.get("file_path")
-                 or tool_input.get("path")
-                 or tool_input.get("notebook_path", ""))
-    if not file_path or not file_path.lower().endswith(".md"):
-        return
-
-    src = Path(file_path).resolve()
-    if not src.exists():
-        return
-
-    if determine_output(src) is None:
-        return
-
-    show_choice_dialog(src)
+        out_path = cli_render(Path(args.file), args.mode)
+        if args.open and not webbrowser.open(out_path.as_uri()):
+            raise RuntimeError(f"Could not open browser: {out_path}")
+    except Exception as exc:
+        print(f"[md_to_html] {exc}", file=sys.stderr)
+        return 2
+    print(out_path)
+    return 0
 
 
-def show_choice_dialog(src: Path) -> None:
-    """Spawn a non-blocking PowerShell dialog with 3 buttons."""
-    script_path = str(Path(__file__).resolve())
-    py_exe = sys.executable or "python"
-
-    ps = r'''
-$ErrorActionPreference = 'SilentlyContinue'
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
-$form = New-Object System.Windows.Forms.Form
-$form.Text = 'Claude Code — HTML レビュー版'
-$form.Size = New-Object System.Drawing.Size(460, 220)
-$form.StartPosition = 'CenterScreen'
-$form.TopMost = $true
-$form.FormBorderStyle = 'FixedDialog'
-$form.MaximizeBox = $false
-$form.MinimizeBox = $false
-$form.Font = New-Object System.Drawing.Font('Yu Gothic UI', 9)
-$form.BackColor = [System.Drawing.Color]::White
-
-$labelTitle = New-Object System.Windows.Forms.Label
-$labelTitle.Text = $env:MD_NAME
-$labelTitle.Location = New-Object System.Drawing.Point(24, 24)
-$labelTitle.Size = New-Object System.Drawing.Size(400, 24)
-$labelTitle.Font = New-Object System.Drawing.Font('Yu Gothic UI', 11, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($labelTitle)
-
-$labelMsg = New-Object System.Windows.Forms.Label
-$labelMsg.Text = 'この markdown を HTML レビュー版で出力しますか？'
-$labelMsg.Location = New-Object System.Drawing.Point(24, 56)
-$labelMsg.Size = New-Object System.Drawing.Size(400, 22)
-$labelMsg.ForeColor = [System.Drawing.Color]::FromArgb(80,80,80)
-$form.Controls.Add($labelMsg)
-
-$labelPath = New-Object System.Windows.Forms.Label
-$labelPath.Text = $env:MD_PATH
-$labelPath.Location = New-Object System.Drawing.Point(24, 80)
-$labelPath.Size = New-Object System.Drawing.Size(400, 22)
-$labelPath.ForeColor = [System.Drawing.Color]::FromArgb(140,140,140)
-$labelPath.Font = New-Object System.Drawing.Font('Consolas', 8)
-$form.Controls.Add($labelPath)
-
-$btnPlain = New-Object System.Windows.Forms.Button
-$btnPlain.Text = 'プレーン'
-$btnPlain.Location = New-Object System.Drawing.Point(24, 124)
-$btnPlain.Size = New-Object System.Drawing.Size(130, 38)
-$btnPlain.DialogResult = 'OK'
-$btnPlain.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
-$btnPlain.ForeColor = [System.Drawing.Color]::White
-$btnPlain.FlatStyle = 'Flat'
-$btnPlain.FlatAppearance.BorderSize = 0
-$form.Controls.Add($btnPlain)
-$form.AcceptButton = $btnPlain
-
-$btnFancy = New-Object System.Windows.Forms.Button
-$btnFancy.Text = 'ファンシー'
-$btnFancy.Location = New-Object System.Drawing.Point(164, 124)
-$btnFancy.Size = New-Object System.Drawing.Size(130, 38)
-$btnFancy.DialogResult = 'Yes'
-$btnFancy.BackColor = [System.Drawing.Color]::FromArgb(124, 58, 237)
-$btnFancy.ForeColor = [System.Drawing.Color]::White
-$btnFancy.FlatStyle = 'Flat'
-$btnFancy.FlatAppearance.BorderSize = 0
-$form.Controls.Add($btnFancy)
-
-$btnSkip = New-Object System.Windows.Forms.Button
-$btnSkip.Text = 'スキップ'
-$btnSkip.Location = New-Object System.Drawing.Point(304, 124)
-$btnSkip.Size = New-Object System.Drawing.Size(130, 38)
-$btnSkip.DialogResult = 'Cancel'
-$btnSkip.FlatStyle = 'Flat'
-$btnSkip.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(220,220,220)
-$btnSkip.ForeColor = [System.Drawing.Color]::FromArgb(120,120,120)
-$form.Controls.Add($btnSkip)
-$form.CancelButton = $btnSkip
-
-$result = $form.ShowDialog()
-$mode = $null
-if ($result -eq 'OK')   { $mode = 'plain' }
-if ($result -eq 'Yes')  { $mode = 'fancy' }
-if ($mode) {
-    Start-Process -FilePath $env:PY_EXE `
-        -ArgumentList @('"' + $env:HOOK_SCRIPT + '"', '--file', '"' + $env:MD_PATH + '"', '--mode', $mode) `
-        -WindowStyle Hidden
-}
-'''
-
-    env = os.environ.copy()
-    env["PY_EXE"] = py_exe
-    env["HOOK_SCRIPT"] = script_path
-    env["MD_PATH"] = str(src)
-    env["MD_NAME"] = src.name
-
-    try:
-        subprocess.Popen(
-            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=env,
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-        )
-    except Exception:
-        pass
-
-
-# ── CLI MODE ─────────────────────────────────────────────────────────────────
-
-def cli_render(src: Path, mode: str) -> None:
+def cli_render(src: Path, mode: str) -> Path:
     src = src.resolve()
-    if not src.exists():
-        return
-
+    if not src.is_file():
+        raise FileNotFoundError(f"Markdown file not found: {src}")
     out_path = determine_output(src)
     if out_path is None:
-        return
-
+        raise ValueError(f"File is outside this worktree, plans, or memory: {src}")
     md = src.read_text(encoding="utf-8")
-
     if mode == "fancy":
         html = render_fancy(md, src)
     else:
-        body = convert_markdown(md)
-        html = render_plain(body, md, src)
-
+        html = render_plain(convert_markdown(md), md, src)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
-
-    try:
-        os.startfile(str(out_path))
-    except Exception:
-        pass
+    return out_path
 
 
 # ── OUTPUT PATH ──────────────────────────────────────────────────────────────
@@ -264,39 +109,18 @@ def render_plain(body: str, md: str, src: Path) -> str:
 
 # ── FANCY RENDER (Claude API — consumes tokens) ───────────────────────────────
 
-def select_model(md: str) -> str:
-    """Pick a model tier based on document complexity signals."""
-    chars = len(md)
-    headings    = len(re.findall(r"^#{1,6} ", md, re.MULTILINE))
-    code_blocks = len(re.findall(r"^```",     md, re.MULTILINE)) // 2
-    table_rows  = len(re.findall(r"^\|",      md, re.MULTILINE))
-
-    score = 0
-    if chars > 4000:       score += 2
-    elif chars > 1500:     score += 1
-    if code_blocks >= 4:   score += 2
-    elif code_blocks >= 2: score += 1
-    if headings >= 6:      score += 2
-    elif headings >= 3:    score += 1
-    if table_rows >= 8:    score += 1
-
-    if score >= 4:
-        return FANCY_MODELS["heavy"]
-    if score >= 2:
-        return FANCY_MODELS["medium"]
-    return FANCY_MODELS["light"]
-
-
 def render_fancy(md: str, src: Path) -> str:
+    model = os.environ.get("FLU_HTML_MODEL", "").strip()
+    if not model:
+        raise RuntimeError("Set FLU_HTML_MODEL before explicitly requesting fancy rendering")
     try:
         import anthropic
-    except ImportError:
-        return render_plain(convert_markdown(md), md, src)
+    except ImportError as exc:
+        raise RuntimeError("Fancy rendering requires the optional anthropic package") from exc
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
-    model = select_model(md)
     title = derive_title(md, src)
     today = datetime.date.today().strftime("%Y.%m.%d")
 
@@ -319,18 +143,10 @@ def render_fancy(md: str, src: Path) -> str:
 
 HTMLコードのみを出力してください（```html ... ``` で囲んでも構いません）。"""
 
-    kwargs = {}
-    if model == "claude-sonnet-5":
-        # Sonnet 5 defaults to adaptive thinking when `thinking` is omitted,
-        # which would burn max_tokens on reasoning for this purely mechanical
-        # markdown→HTML conversion. Disable it explicitly (haiku/opus untouched).
-        kwargs["thinking"] = {"type": "disabled"}
-
     message = client.messages.create(
         model=model,
         max_tokens=16384,
         messages=[{"role": "user", "content": prompt}],
-        **kwargs,
     )
 
     content = next(
@@ -459,14 +275,16 @@ def simple_md(md: str) -> str:
                 flush_list()
                 out.append("<ul>")
                 in_list = "ul"
-            out.append(f"<li>{_inline(re.sub(r'^\\s*[-*]\\s+', '', line))}</li>")
+            item_text = re.sub(r"^\s*[-*]\s+", "", line)
+            out.append(f"<li>{_inline(item_text)}</li>")
             continue
         if re.match(r"^\s*\d+\.\s+", line):
             if in_list != "ol":
                 flush_list()
                 out.append("<ol>")
                 in_list = "ol"
-            out.append(f"<li>{_inline(re.sub(r'^\\s*\\d+\\.\\s+', '', line))}</li>")
+            item_text = re.sub(r"^\s*\d+\.\s+", "", line)
+            out.append(f"<li>{_inline(item_text)}</li>")
             continue
 
         flush_list()
@@ -520,7 +338,4 @@ def _table_to_html(rows: list[str]) -> str:
 # ── MAIN ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        sys.exit(0)
+    raise SystemExit(main())

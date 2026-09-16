@@ -29,27 +29,27 @@ import pygame  # noqa: E402
 from src.core.game import Game  # noqa: E402
 from src.scenes.game_scene import GameScene  # noqa: E402
 
-# 保持キー名 → pygame キー定数
-HOLD_KEYS = {
-    "fire":  pygame.K_z,
-    "laser": pygame.K_SPACE,
-    "up":    pygame.K_UP,
-    "down":  pygame.K_DOWN,
-    "left":  pygame.K_LEFT,
-    "right": pygame.K_RIGHT,
+# CLIの操作名 → 設定アクション。実キーはそのGameのSettingsManagerから解決する。
+HOLD_ACTIONS = {
+    "fire": "fire",
+    "laser": "laser",
+    "up": "move_up",
+    "down": "move_down",
+    "left": "move_left",
+    "right": "move_right",
 }
 
 DEFAULT_DT = 1.0 / 60.0
 MAX_INTRO_FRAMES = 3000   # ボス演出スキップの安全上限
 
 
-def hold_keys_from_names(names: str) -> list[int]:
-    """カンマ区切りのキー名（"fire,up"）を pygame キー定数のリストへ。"""
+def hold_keys_from_names(names: str, settings) -> list[int]:
+    """カンマ区切りの操作名（"fire,up"）を設定済みの実キーへ解決する。"""
     keys: list[int] = []
     for name in (n.strip() for n in names.split(",") if n.strip()):
-        if name not in HOLD_KEYS:
-            raise SystemExit(f"unknown hold key: {name!r} (choices: {', '.join(HOLD_KEYS)})")
-        keys.append(HOLD_KEYS[name])
+        if name not in HOLD_ACTIONS:
+            raise SystemExit(f"unknown hold key: {name!r} (choices: {', '.join(HOLD_ACTIONS)})")
+        keys.append(settings.get_key(HOLD_ACTIONS[name]))
     return keys
 
 
@@ -93,13 +93,18 @@ def step_frame(
     """Game.run() の1フレーム分（入力→update→draw）を最小構成で再現する。"""
     inp = scene.game.input
     inp.pre_update()
-    for key in hold:
-        inp._pressed.add(key)
-    # ボス会話は RETURN 待ちなので毎フレーム送って読み飛ばす。
-    # is_held_with_repeat は _pressed も参照するため両方に入れる。
-    if advance_dialogue and getattr(scene, "_boss_intro_state", "") == "boss_dialogue":
-        inp._pressed.add(pygame.K_RETURN)
-        inp._just_pressed.add(pygame.K_RETURN)
+    pressed = set(hold)
+    advance = advance_dialogue and getattr(scene, "_boss_intro_state", "") == "boss_dialogue"
+    if advance:
+        accept = scene.game.settings.get_key("ui_accept")
+        pressed.add(accept)
+    for key in inp._pressed - pressed:
+        inp.handle_event(pygame.event.Event(pygame.KEYUP, key=key))
+    for key in pressed - inp._pressed:
+        inp.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key))
+    if advance:
+        # Explicit headless fast-forward: deliver configured confirm each frame.
+        inp._just_pressed.add(accept)
     inp.update(dt)
 
     if invincible:

@@ -82,7 +82,7 @@ class GameSceneUpgradeMixin:
         top = self._top_available_indices()
         bot = self._bottom_available_indices()
 
-        if inp.is_just_pressed(pygame.K_x):
+        if inp.is_action_just_pressed("ui_back"):
             self.game.sound.play_se("music/se/メニュー操作SE：キャンセル.mp3", volume=0.5)  # type: ignore[attr-defined]
             self._upgrading = False  # type: ignore[attr-defined]
             return
@@ -95,7 +95,7 @@ class GameSceneUpgradeMixin:
             self._move_zone(-1, top, bot)
         if inp.is_just_pressed(pygame.K_DOWN):
             self._move_zone(1, top, bot)
-        if inp.is_just_pressed(pygame.K_RETURN):
+        if inp.is_action_just_pressed("ui_accept"):
             self._confirm_zone(top, bot)
 
     def _move_cursor(self, delta: int, top: list[int], bot: list[int]) -> None:
@@ -182,6 +182,9 @@ class GameSceneUpgradeMixin:
 
         title = self._upgrade_title_font.render("POWER UP!", True, (255, 220, 80))  # type: ignore[attr-defined]
         screen.blit(title, (cx - title.get_width() // 2, cy - 168))
+        guide = small.render("Wひとつで、自機と先輩をそれぞれ1回強化。戦闘は停止中です。",
+                             True, (210, 225, 240))
+        screen.blit(guide, (cx - guide.get_width() // 2, cy - 195))
 
         ws = self.player.weapon.weapon_stock  # type: ignore[attr-defined]
         c  = self._companion                  # type: ignore[attr-defined]
@@ -229,9 +232,32 @@ class GameSceneUpgradeMixin:
         screen.blit(dlabel, (bx + btn_w // 2 - dlabel.get_width() // 2,
                              by + btn_h // 2 - dlabel.get_height() // 2))
 
+        accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
+        back = self.game.settings.key_display("ui_back")  # type: ignore[attr-defined]
         hint = small.render(
-            "↑↓:行移動   ←→:選択   ENTER:決定/送り   X:閉じる", True, (130, 130, 150))
+            f"↑↓:行移動   ←→:選択   {accept}:決定/送り   {back}:閉じる",
+            True, (175, 175, 195),
+        )
         screen.blit(hint, (cx - hint.get_width() // 2, cy + 140))
+        descriptions = {
+            "weapon_main": "連射・弾の広がりを強化。MAIN 2からレーザーと追尾弾を選べます。",
+            "speed": "移動を速くして弾や地形を避けやすくします。",
+            "laser": "専用キーを押し続けて強力なビーム。体温の上昇に注意。",
+            "homing": "敵を追う弾を通常射撃に追加します。",
+            "kt_hp": "先輩の耐久力を上げ、その場で回復します。",
+            "kt_shot": "先輩の解熱弾を強化し、自機の体温も下がりやすくします。",
+            "kt_supply": "先輩が回復アイテムを届けます。",
+            "kt_magnet": "近くのアイテムを自機へ引き寄せます。",
+        }
+        if self._upg_zone == "top":
+            key = UPGRADE_SLOTS[self._upg_top_cursor][0]
+        elif self._upg_zone == "bottom":
+            key = COMPANION_SLOTS[self._upg_bottom_cursor][0]
+        else:
+            key = None
+        explanation = descriptions.get(key, "選んだ強化を適用して戦闘へ戻ります。")
+        detail = small.render(explanation, True, (175, 220, 205))
+        screen.blit(detail, (cx - detail.get_width() // 2, cy + 175))
 
     def _draw_slot_row(self, screen, slots, y, cursor, choice, zone_active,
                        label_fn, avail_fn, dim: bool = False) -> None:

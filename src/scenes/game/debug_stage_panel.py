@@ -6,12 +6,12 @@ import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.core.factories import make_enemy, make_item
 
-_PANEL_W  = 250
+_PANEL_W  = 330
 _PANEL_H  = SCREEN_HEIGHT - 40
 _PANEL_X  = 8
 _PANEL_Y  = 20
 
-_TABS = ["WEAPON", "BGM", "ITEM", "ENEMY", "BOSS"]
+_TABS = ["WEAPON", "BGM", "ITEM", "ENEMY", "BOSS", "FX"]
 
 _BGM_LIST = [
     "MEGALOVANIA.mp3",
@@ -42,8 +42,11 @@ _WEAPON_ITEMS = [
 ]
 
 from src.core.registries import ENEMY_DEFS, ITEM_NAMES
+from src.core.video_effects import VIDEO_EFFECT_SPECS
 _ENEMY_ENTRIES: list[str] = [d.name for d in ENEMY_DEFS if d.debug_spawnable]
 _ITEM_ENTRIES:  list[str] = ITEM_NAMES
+_FX_KEYS: list[str] = [spec.key for spec in VIDEO_EFFECT_SPECS]
+_FX_ENTRIES: list[str] = [f"{spec.source_id}  {spec.label}" for spec in VIDEO_EFFECT_SPECS]
 
 _BOSS_ENTRIES = ["Stage 1 Boss", "Stage 2 Boss", "Stage 3 Boss", "Stage 4 Boss"]
 
@@ -93,6 +96,8 @@ class DebugStagePanel:
             self._update_list(len(_ENEMY_ENTRIES), self._spawn_enemy)
         elif tab == "BOSS":
             self._update_list(len(_BOSS_ENTRIES), self._spawn_boss)
+        elif tab == "FX":
+            self._update_list(len(_FX_ENTRIES), self._preview_fx)
 
     def _update_list(self, count: int, on_enter) -> None:
         inp = self._game.input
@@ -157,6 +162,9 @@ class DebugStagePanel:
             return
         self._gs._queue_boss_spawn(stage_for_boss)
 
+    def _preview_fx(self, idx: int) -> None:
+        self._gs._play_debug_effect(_FX_KEYS[idx])
+
     # ── draw ──────────────────────────────────────────────────────
 
     def draw(self, screen: pygame.Surface) -> None:
@@ -202,6 +210,8 @@ class DebugStagePanel:
             self._draw_list(screen, px, py, _ENEMY_ENTRIES)
         elif tab == "BOSS":
             self._draw_list(screen, px, py, _BOSS_ENTRIES, note="ENTER: スポーン")
+        elif tab == "FX":
+            self._draw_list(screen, px, py, _FX_ENTRIES, note="ENTER: エフェクト再生")
 
         # 下部ヒント
         hy = _PANEL_Y + _PANEL_H - 20

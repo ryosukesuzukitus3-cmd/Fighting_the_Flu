@@ -1,7 +1,7 @@
 name: CI
 
 # PR と main への push で、SSOT 整合性チェックとテストを必ず回す。
-# ローカルの Stop フックをすり抜けた変更（Codex 由来・直接 push 等）への最後の砦。
+# ローカルの任意チェックに加え、統合するコミットをここで検証する。
 on:
   pull_request:
   push:

@@ -47,6 +47,7 @@ def game_stub(inp):
     scenes = []
     game = SimpleNamespace(
         input=inp,
+        settings=inp._settings,
         resources=SimpleNamespace(
             image=lambda name: sprite,
             pixelfont=lambda size: pygame.font.Font(None, size),
@@ -73,6 +74,25 @@ def test_confirm_key_starts_game_through_real_title_input(bridge, key):
     frame(0.2)
     assert not inp.is_pressed(pygame.K_RETURN)
     assert not inp.is_pressed(pygame.K_SPACE)
+
+
+@pytest.mark.parametrize("key", ["f", "d", "c", "v"])
+def test_custom_title_confirm_uses_only_configured_key(bridge, key):
+    controller, inp, _, _, frame = bridge
+    game, scenes = game_stub(inp)
+    assert game.settings.set_key_binding("ui_accept", pygame.key.key_code(key))
+    title = TitleScene(game)
+    title.on_enter()
+    controller.submit('{"press":["enter","space"],"seconds":0.15}')
+    frame(0.0)
+    title.update(0.1)
+    assert scenes == []
+    frame(0.2)
+
+    controller.submit(json.dumps({"press": [key], "seconds": 0.15}))
+    frame(0.3)
+    title.update(0.1)
+    assert [type(scene).__name__ for scene in scenes] == ["PrologueScene"]
 
 
 def test_movement_and_shooting_hold_and_release_independently(bridge):

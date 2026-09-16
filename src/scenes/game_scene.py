@@ -2,20 +2,21 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass
-from pathlib import Path as _Path
 import pygame
 
 from src.core.scene import Scene
 from src.core.camera import Camera
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.registries import next_stage_id
 from src.entities.background import ScrollingBackground
 from src.entities.player import Player
-from src.entities.hud import HUD
+from src.entities.hud import HUD, HUD_BOTTOM
 from src.entities.laser_beam import LaserBeam
 from src.entities.terrain_query import iter_collidable_terrain, terrain_collideany
 from src.stages.stage import Stage
 from src.stages.spawner import EnemySpawner
 from src.entities.particle import ParticleSystem
+from src.entities.video_effect import VideoEffectLayer
 
 # ミックスイン（各責務を分割管理）
 from src.scenes.game.pause_mixin    import GameScenePauseMixin
@@ -41,6 +42,7 @@ from src.scenes.game.config import (
 from src.story.script import (
     BOSS_INTRO, BOSS_MID, STAGE_BG_TEXT,
     BILLY_SPAWN_BARKS, BILLY_KILL_BARKS, SAKURA_LAST_WORDS, OVERHEAT_BARKS,
+    BOSS_BREAK_TUTORIAL,
 )
 # 被ダメージ／反撃ダメージ定数
 from src.core.balance import (
@@ -103,6 +105,7 @@ class GameScene(
         self.game.sound.stop_bgm()
         from src.entities.bullets.player_bullet import HomingBullet, PierceBullet
         HomingBullet._base_image = None
+        HomingBullet._missile_frames = None
         PierceBullet._base_image = None
 
         self.camera  = Camera()
@@ -113,11 +116,13 @@ class GameScene(
         self.stage   = Stage(self.game, stage_id=self._stage_id)
         self.laser   = LaserBeam()
         self.game.shared.stage = self._stage_id
+        self.game.shared.stage_start_story = self.game.story.snapshot()
 
         self.player_bullets: pygame.sprite.Group = pygame.sprite.Group()
         self.enemy_bullets:  pygame.sprite.Group = pygame.sprite.Group()
         self.enemies:        pygame.sprite.Group = pygame.sprite.Group()
         self.items:          pygame.sprite.Group = pygame.sprite.Group()
+        self._video_fx = VideoEffectLayer(self.game.resources)
         self.terrain:        pygame.sprite.Group = pygame.sprite.Group()
         self.spawner = EnemySpawner(
             self.game, self.enemies, self.enemy_bullets,
@@ -170,7 +175,7 @@ class GameScene(
         self._boss_dialogue_font   = None
         self._boss_mid_dialogue_shown: bool = False
 
-        # 戦闘中カットイン（複数行の会話ビート用: 戦闘を停止して ENTER 送り。
+        # 戦闘中カットイン（複数行の会話ビート用: 戦闘を停止して決定アクション送り。
         # 実機FB「自動送りは忙しくて読めない」対応。単発バークは従来どおり）
         self._cutin_pages:  list = []
         self._cutin_idx:    int  = 0
@@ -247,16 +252,6 @@ class GameScene(
             from src.scenes.game.debug_stage_panel import DebugStagePanel
             self._debug_panel = DebugStagePanel(self.game, self)
 
-        if self._stage_id == 1:
-            self.game.shared.score      = 0
-            self.game.shared.kill_count = 0
-            self.game.shared.lives      = 3
-            self.game.shared.carry_hp     = None
-            self.game.shared.carry_weapon = None
-            self.game.shared.carry_companion       = None
-            self.game.shared.stage_start_companion = None
-            self.game.playlog.begin_run()
-
         if not self._is_debug_stage:
             self.game.playlog.log_stage_start(self._stage_id)
         self._stage_elapsed: float = 0.0
@@ -278,8 +273,9 @@ class GameScene(
             # 先輩不在ステージ（S4）でも、最終決戦の復帰時に引き継げるよう保持する
             self.game.shared.stage_start_companion = comp_carry
 
-        _next_stage_path = _Path("data") / "stages" / f"stage{self._stage_id + 1}.json"
-        _is_final_stage  = not _next_stage_path.exists()
+        _is_final_stage = (
+            not self._is_debug_stage and next_stage_id(self._stage_id) is None
+        )
         if _is_final_stage:
             se_name = "music/rounds/final.wav"
         else:
@@ -306,6 +302,15 @@ class GameScene(
     def _combat_active(self) -> bool:
         """自機・先輩・レーザーが射撃できる状態（通常プレイ or ボス戦闘中）。"""
         return self._intro_behavior.combat
+
+    @property
+    def _accepts_combat_input(self) -> bool:
+        """Combat actions and opportunity cues share the same playable-state gate."""
+        return (self._combat_active and not self._paused and not self._upgrading
+                and not self._post_boss and not self._cutin_active
+                and not self._final.dialogue_active
+                and not self._final.input_gate_active
+                and self._final.seq != "return_join")
 
     @property
     def _gameplay_frozen(self) -> bool:
@@ -354,6 +359,26 @@ class GameScene(
 
     # ── update ────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
+        inp = self.game.input
+        # Handle suspension before any gameplay timer or action consumes this frame.
+        if (not self._upgrading and not self._paused
+                and inp.is_action_just_pressed("pause")):
+            self._paused = True
+            self._pause_cursor = 0
+            return
+        if self._paused:
+            self._update_pause()
+            return
+        if self._upgrading:
+            self._update_upgrade_ui()
+            return
+        comp_stock = self._companion.stock if self._companion is not None else 0
+        if (self._accepts_combat_input
+                and inp.is_action_just_pressed("weapon_select")
+                and (self.player.weapon.weapon_stock > 0 or comp_stock > 0)):
+            self._open_upgrade_ui()
+            return
+
         if __debug__:
             dt = self._debug_apply_time_scale(dt)
 
@@ -373,53 +398,13 @@ class GameScene(
         if self._boss_kill_flash_timer > 0: self._boss_kill_flash_timer -= dt
         if self._boss_break_flash_timer > 0: self._boss_break_flash_timer -= dt
         if self._laser_flash_timer     > 0: self._laser_flash_timer     -= dt
+        self._video_fx.update(dt)
         if self._stage_banner_timer    > 0: self._stage_banner_timer    -= dt
         self._final.update_timers(dt)
         self._tick_boss_dialogue(dt)
         if self._combo_pulse           > 0: self._combo_pulse           -= dt * 4.0
         if self._combo_break_timer     > 0: self._combo_break_timer     -= dt
         self._update_popups(dt)
-
-        # Combo timeout.
-        if self._combo_count > 0 and self._combo_timer > 0:
-            self._combo_timer -= dt
-            if self._combo_timer <= 0:
-                if self._combo_count >= COMBO_MIN:
-                    self._combo_break_timer = 0.9
-                self._combo_count = 0
-                self._combo_timer = 0.0
-
-        inp = self.game.input
-
-        # Pause toggle (open only). Closing is handled in _update_pause(), so we
-        # return here to keep the same keypress from being consumed twice in one
-        # frame (open then immediately close), which left pause unusable.
-        if (not self._upgrading and not self._paused
-                and inp.is_action_just_pressed("pause")):
-            self._paused = True
-            self._pause_cursor = 0
-            return
-
-        # バトルv2: 持ち駒ボム（「打つ」。熱暴走中でも使える緊急手段）
-        if (BATTLE_V2_ENABLED and self._pieces and self._combat_active
-                and not self._upgrading and not self._paused
-                and inp.is_action_just_pressed("bomb")):
-            self._fire_bomb()
-
-        # Open weapon upgrade when stock is available (自機 or 先輩).
-        comp_stock = self._companion.stock if self._companion is not None else 0
-        if (not self._upgrading and not self._paused
-                and inp.is_action_just_pressed("weapon_select")
-                and (self.player.weapon.weapon_stock > 0 or comp_stock > 0)):
-            self._open_upgrade_ui()
-
-        if self._paused:
-            self._update_pause()
-            return
-
-        if self._upgrading:
-            self._update_upgrade_ui()
-            return
 
         # ボス撃破後フェーズ
         if self._post_boss:
@@ -431,7 +416,6 @@ class GameScene(
             self._update_boss_intro(dt)
 
         # ── 常時更新 ───────────────────────────────────────
-        self.camera.update(dt)
         self._update_bg_text(dt)
         if self._matrix_rain is not None:
             self._matrix_rain.update(dt)
@@ -441,7 +425,7 @@ class GameScene(
             self.particles.update(dt)
             return
 
-        # Freeze gameplay during combat cut-in dialogue (ENTER to advance).
+        # Freeze gameplay during combat cut-in dialogue (UI accept to advance).
         if self._cutin_active:
             self._update_combat_cutin()
             self.particles.update(dt)
@@ -457,7 +441,25 @@ class GameScene(
             self.particles.update(dt)
             return
 
+        if self._final.input_gate_active:
+            self._final.update_input_gate()
+            self.particles.update(dt)
+            return
+
+        if self._combo_count > 0 and self._combo_timer > 0:
+            self._combo_timer = max(0.0, self._combo_timer - dt)
+            if self._combo_timer == 0:
+                if self._combo_count >= COMBO_MIN:
+                    self._combo_break_timer = 0.9
+                self._combo_count = 0
+
+        if (BATTLE_V2_ENABLED and self._pieces and self._accepts_combat_input
+                and not self._final.final_strike_active
+                and inp.is_action_just_pressed("bomb")):
+            self._fire_bomb()
+
         # ── 通常 / alert / entering 共通更新 ─────────────────
+        self.camera.update(dt)
         self._stage_elapsed += dt
         self.stage.update(dt)
         _panel_open = self._is_debug_stage and self._debug_panel is not None and self._debug_panel._open
@@ -468,7 +470,7 @@ class GameScene(
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera,
                                    self.enemies, self.enemy_bullets, self.terrain,
-                                   can_fire=self._combat_active)
+                                   can_fire=self._combat_active and not self._final.final_strike_active)
 
         if self._stage_banner_timer <= 0 and self._is_normal_play:
             self.spawner.update(dt, self.camera)
@@ -498,7 +500,7 @@ class GameScene(
                 self._boss.update(dt, pygame.sprite.Group(), self.player)
                 if self._boss._state == "fight":
                     self._start_boss_name()
-            elif self._boss_intro_state == "fighting":
+            elif self._boss_intro_state == "fighting" and not self._final.final_strike_active:
                 self._boss.update(dt, self.enemy_bullets, self.player)
 
         # バトルv2: 体幹ブレイク/症状悪化の演出（boss が旗を立て scene が消費）
@@ -512,7 +514,7 @@ class GameScene(
                 self._spawn_popup("症状悪化", ebx, eby - 62, color=(255, 80, 60), life=1.8)
 
         # バトルv2: 体温の冷却と熱暴走ロック（ボスダウン中は冷却2倍＝放出推奨）
-        if self._heat is not None:
+        if self._heat is not None and not self._final.final_strike_active:
             if self._heat.overheated:
                 self.player.shoot_requested = False
                 self.player.laser_fire_held = False
@@ -522,6 +524,10 @@ class GameScene(
                     if self._companion is not None and self._companion.is_active else 0)
             self._heat.update(dt, karonaru_lv=k_lv, boss_down=boss_down)
 
+        # The final cue accepts a fresh fire press even during cooldown/overheat.
+        if self._final.consume_final_shot_request():
+            self.player.shoot_requested = True
+
         # 通常射撃
         if self._combat_active:
             if self.player.shoot_requested:
@@ -529,17 +535,19 @@ class GameScene(
                 wx, wy = self.player.muzzle_world(self.camera)
                 new_bullets = list(self.player.weapon.get_bullets(
                         wx, wy, self.enemies, game=self.game, boss=self._boss))
+                self._final.mark_final_shot(new_bullets)
                 for bullet in new_bullets:
                     self.player_bullets.add(bullet)
                 if any(isinstance(b, HomingBullet) for b in new_bullets):
                     self.game.sound.play_se("music/se/ウェポン：missile_shot.mp3", volume=0.5)
                 if any(not isinstance(b, HomingBullet) for b in new_bullets):
-                    self.game.sound.play_se("music/se/ウェポン：normalshot_shot.mp3", volume=0.4)
-                if self._heat is not None and self._heat.add(HEAT_PER_SHOT):
+                    self.game.sound.play_se_alias("SE_NORMALSHOT", volume=0.4)
+                if (self._heat is not None and not self._final.final_strike_active
+                        and self._heat.add(HEAT_PER_SHOT)):
                     self._on_overheat_started()
 
             # レーザー
-            if self.player.weapon.has_laser:
+            if self.player.weapon.has_laser and not self._final.final_strike_active:
                 msx, msy = self.player.muzzle_screen()
                 self.laser.laser_level = self.player.weapon.laser_level
                 _laser_was_ready = self.laser.state == "ready"
@@ -650,6 +658,7 @@ class GameScene(
         if (self._in_boss_fight
                 and self._final.phase == 0
                 and not self._boss_mid_dialogue_shown
+                and self._boss_dialogue_timer <= 0
                 and self._boss.hp / self._boss.max_hp <= 0.5):
             boss_stage_id = self._boss_stage_id()
             in_form2 = getattr(self._boss, "_form2", False)
@@ -662,6 +671,10 @@ class GameScene(
         if (self._in_boss_fight
                 and self._final.phase > 0 and self._final.seq == ""):
             self._final.update_combat(dt)
+
+        # A narrative transition can begin above; its first visible frame is frozen too.
+        if self._cutin_active or self._final.dialogue_active or self._final.input_gate_active:
+            return
 
         if self._process_collisions():
             return
@@ -728,6 +741,7 @@ class GameScene(
                 self._boss.summon_turret_fn = self._summon_boss_turrets
                 # 巨大レーザー発射時の画面シェイク用にカメラを注入
                 self._boss.camera = self.camera
+                self._boss.video_effect_fn = self._play_video_effect
                 self._boss_intro_state = "entering"
 
         elif state == "boss_name":
@@ -743,8 +757,8 @@ class GameScene(
                     self._start_fight_banner()
 
         elif state == "boss_dialogue":
-            if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                    or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+            if inp.is_action_held_with_repeat(
+                    "ui_accept", initial_delay=0.25, repeat_interval=0.12):
                 self._boss_intro_page_idx += 1
                 if self._boss_intro_page_idx >= len(self._boss_intro_pages):
                     self._start_fight_banner()
@@ -812,6 +826,7 @@ class GameScene(
 
         ox, oy = self.camera.shake_offset
         screen.blit(buf, (ox, oy))
+        self._video_fx.draw(screen)
 
         self.hud.draw(
             screen,
@@ -859,12 +874,10 @@ class GameScene(
             flash.fill((255, 218, 70, alpha))
             screen.blit(flash, (0, 0))
 
-        if self._paused:   self._draw_pause(screen)
-        if self._upgrading: self._draw_upgrade_ui(screen)
         if self._post_boss: self._draw_post_boss_hint(screen)
         if self._defeat_dialogue_active: self._draw_defeat_dialogue(screen)
 
-        if self._stage_banner_timer > 0:
+        if self._stage_banner_timer > 0 and not self._paused and not self._upgrading:
             self._draw_stage_banner(screen)
 
         s = self._boss_intro_state
@@ -881,11 +894,17 @@ class GameScene(
 
         self._final.draw_overlays(screen)
 
-        if __debug__:
+        if __debug__ and getattr(self, "_debug_overlay_visible", self._is_debug_stage):
             self._debug_draw_overlay(screen)
 
         if self._is_debug_stage and self._debug_panel is not None:
             self._debug_panel.draw(screen)
+
+        # Menus stay above banners/dialogue, including an immediate stage-start pause.
+        if self._paused:
+            self._draw_pause(screen)
+        if self._upgrading:
+            self._draw_upgrade_ui(screen)
 
     def _resolve_player_terrain_collision(self) -> bool:
         """Push the player out of terrain and report whether contact happened."""
@@ -1071,6 +1090,8 @@ class GameScene(
                     self._combo_timer = COMBO_WINDOW
                 if enemy.take_damage(bullet.damage):
                     self._on_enemy_killed(enemy)
+                if not getattr(bullet, "piercing", False):
+                    break
             if blocked_by_shield or not getattr(bullet, "piercing", False):
                 bullet.kill()
 
@@ -1098,6 +1119,8 @@ class GameScene(
 
         if self._in_boss_fight:
             for bullet in list(self.player_bullets):
+                if not self._final.allows_final_hit(bullet):
+                    continue
                 if getattr(bullet, "_terrain_bounced", False):
                     continue
                 if bullet.rect.colliderect(self._boss.rect):
@@ -1145,6 +1168,8 @@ class GameScene(
                 break
         if hit_bullet is not None:
             self._damage_player(getattr(hit_bullet, "damage", PLAYER_DMG_BULLET))
+            if not getattr(hit_bullet, "persistent", False):
+                hit_bullet.kill()
             if self.player.hp <= 0 and not self._is_debug_stage:
                 return True
 
@@ -1405,12 +1430,16 @@ class GameScene(
         bx, by = b.rect.center
         text = "王手！！" if self._boss_stage_id() == 4 else "BREAK!!"
         self._spawn_popup(text, bx, by - 46, color=(255, 215, 70), life=1.6)
-        self.particles.spawn_big_explosion(bx, by)
-        self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=28, speed=340.0)
-        self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=20, speed=160.0)
-        self.camera.shake(18.0)
-        self._hitstop_timer = max(self._hitstop_timer, 0.16)
-        self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.34)
+        self.particles.spawn_hit(bx, by, color=(255, 225, 130), count=10)
+        self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=14, speed=220.0)
+        self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=8, speed=100.0)
+        self._play_video_effect("anime_impact", center=(bx, by), size=(180, 180), opacity=145)
+        self.camera.shake(10.0)
+        self._hitstop_timer = max(self._hitstop_timer, 0.10)
+        self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.16)
+        if not self.game.shared.boss_break_tutorial_shown:
+            self.game.shared.boss_break_tutorial_shown = True
+            self._enqueue_boss_dialogue(BOSS_BREAK_TUTORIAL, BOSS_MID_LINE_DURATION)
         if self._boss_stage_id() == 4:
             self._play_shogi_snap(bx, by)
         else:
@@ -1424,7 +1453,7 @@ class GameScene(
                 self._enqueue_boss_dialogue([random.choice(BILLY_SPAWN_BARKS)], BOSS_MID_LINE_DURATION)
 
     def _start_combat_cutin(self, lines: list) -> None:
-        """戦闘を停止して ENTER 送りで読ませる会話カットインを開始する。
+        """戦闘を停止して決定アクション送りで読ませる会話カットインを開始する。
 
         複数行の会話ビート（BOSS_MID 系）用。単発バークは
         _enqueue_boss_dialogue（自動タイムアウト・非停止）を使う。
@@ -1436,10 +1465,10 @@ class GameScene(
         self._cutin_active = True
 
     def _update_combat_cutin(self) -> None:
-        """カットインの ENTER/SPACE 送り。最終ページで閉じて戦闘再開。"""
+        """カットインを決定アクションで送り、最終ページで戦闘を再開する。"""
         inp = self.game.input
-        if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+        if inp.is_action_held_with_repeat(
+                "ui_accept", initial_delay=0.25, repeat_interval=0.12):
             self._cutin_idx += 1
             if self._cutin_idx >= len(self._cutin_pages):
                 self._cutin_active = False
@@ -1492,6 +1521,8 @@ class GameScene(
         self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))
 
     def _damage_player(self, amount: int = PLAYER_DMG_BULLET) -> None:
+        if self._final.final_strike_active:
+            return
         if self.player.is_invincible:
             return
         if self.player.weapon.barrier_block():
@@ -1501,7 +1532,7 @@ class GameScene(
             self.player._invincible_timer = 0.8
             return
         self.player.take_damage(amount)
-        self.particles.spawn_player_hit(self.player.sx, self.player.sy)
+        self.particles.spawn_player_hit(*self.player.rect.center)
         self.camera.shake(10.0)
         # Regenerate the final boss when the player is hit during act 1.
         if (self._boss is not None and self._final.phase == 1
@@ -1516,6 +1547,13 @@ class GameScene(
             self._go_gameover()
         else:
             self.game.sound.play_se("music/se/shout.wav", volume=0.6)
+
+    def _play_video_effect(self, key: str, **kwargs) -> None:
+        """Battle/debug entry point shared with boss pattern callbacks."""
+        self._video_fx.play(key, **kwargs)
+
+    def _play_debug_effect(self, key: str) -> None:
+        self._video_fx.play_debug(key)
 
     def _pickup_weapon_item(self) -> None:
         """Apply a weapon stock pickup."""
@@ -1536,6 +1574,9 @@ class GameScene(
                               px, py, color=(120, 230, 255), life=3.0)
         else:
             self._spawn_popup(f"WEAPON +1  [{wsel}]", px, py)
+        if not self.game.shared.upgrade_tutorial_shown:
+            self.game.shared.upgrade_tutorial_shown = True
+            self._open_upgrade_ui()
 
     def _companion_spawn_heal(self) -> None:
         """補給: 先輩が前方へ回復アイテムを射出する（Lvで頻度上昇）。"""
@@ -1560,15 +1601,36 @@ class GameScene(
     def _update_popups(self, dt: float) -> None:
         for p in self._popups:
             p[3] -= dt
-            p[2] -= 35.0 * dt   # 上に流れめE        self._popups = [p for p in self._popups if p[3] > 0]
+            p[2] -= 35.0 * dt
+        self._popups = [p for p in self._popups if p[3] > 0]
 
     def _draw_popups(self, screen: pygame.Surface) -> None:
-        font = self.game.resources.pixelfont(24)
-        for text, sx, sy, timer, color in self._popups:
-            alpha = min(255, int(timer / 1.4 * 255 + 80))
+        font = self.game.resources.pixelfont(20)
+        bounds = pygame.Rect(8, HUD_BOTTOM + 6, screen.get_width() - 16,
+                             screen.get_height() - HUD_BOTTOM - 72)
+        occupied: list[pygame.Rect] = []
+        for text, sx, sy, timer, color in reversed(self._popups):
+            alpha = max(0, min(255, int(timer / 1.4 * 255 + 80)))
             surf  = font.render(text, True, color)
+            if surf.get_width() > screen.get_width() - 16:
+                scale = (screen.get_width() - 16) / surf.get_width()
+                surf = pygame.transform.smoothscale(
+                    surf, (screen.get_width() - 16, max(1, int(surf.get_height() * scale))))
             surf.set_alpha(alpha)
-            screen.blit(surf, (int(sx) - surf.get_width() // 2, int(sy)))
+            shadow = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+            shadow.blit(surf, (0, 0))
+            shadow.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            rect = surf.get_rect(midtop=(int(sx), int(sy)))
+            rect.clamp_ip(bounds)
+            # Several rewards can arrive together. Keep the newest notice closest
+            # to its source, then place older notices on adjacent free rows.
+            for offset in [0, *(d for n in range(1, 20) for d in (n, -n))]:
+                candidate = rect.move(0, offset * (rect.height + 4))
+                if bounds.contains(candidate) and not any(candidate.colliderect(r) for r in occupied):
+                    screen.blit(shadow, candidate.move(1, 1))
+                    screen.blit(surf, candidate)
+                    occupied.append(candidate.inflate(0, 4))
+                    break
 
     def _draw_combo(self, screen: pygame.Surface) -> None:
         # COMBO BREAK 表示
@@ -1577,7 +1639,7 @@ class GameScene(
             f = self.game.resources.pixelfont(28)
             s = f.render("COMBO BREAK", True, (180, 180, 180))
             s.set_alpha(alpha)
-            screen.blit(s, (SCREEN_WIDTH // 2 - s.get_width() // 2, 55))
+            screen.blit(s, (SCREEN_WIDTH // 2 - s.get_width() // 2, 100))
             return
 
         if self._combo_count < COMBO_MIN:
@@ -1599,7 +1661,7 @@ class GameScene(
             label += f"  x{mult}"
         surf = font.render(label, True, color)
         cx   = SCREEN_WIDTH // 2
-        cy   = 58
+        cy   = 112
         screen.blit(surf, (cx - surf.get_width() // 2, cy - surf.get_height() // 2))
 
         bar_w   = 160

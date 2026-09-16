@@ -13,7 +13,7 @@ from src.core.scene import Scene
 class PrologueScene(Scene):
     def on_enter(self) -> None:
         # ストーリー進行フラグを初期化（カロナール先輩 同行開始）
-        self.game.story.begin_journey()
+        self.game.start_new_run()
 
         from src.scenes.story_flow import start_stage
         start_stage(self.game, 1)

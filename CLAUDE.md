@@ -27,236 +27,81 @@
 | 相棒エンティティ（カロナール先輩） | `src/entities/companion.py` > `Karonaru` |
 | 脚本（正典・全台本・演出注記。ユーザー編集の入力点） | `docs/story.md`（セリフ実装の SSOT は `src/story/script.py`。相互同期） |
 
-## 設計判断の心得（distilled heuristics）
+## 作業原則
 
-過去の振り返りから蒸留した「いつ・何をするか」の判断指針。哲学ではなく**トリガ**で書く。
-新しい教訓が出たら、同じ「トリガ→対応→アンチパターン→実例」の形式でここに追記する。
+- ユーザーの目的と現在の依頼を起点にする。このガイド・設計書・過去のメモリも古くなり得るため、実装・実画面・検証結果と照合する。
+- 自分で実装するか、独立した範囲を分担するかは、並列化の効果と作業量で判断する。特定モデルへの委任や、主担当の実装禁止は設けない。分担時は対象ファイルと責任範囲を明確にし、主担当が統合と最終確認を担う。
+- 質問・評価の依頼には診断を返す。修正を任された場合は、既に与えられた権限の範囲で実装・検証を進める。ユーザー作業の破壊、依頼範囲の拡大、未提供の必須情報があるときに確認する。
+- 例外分岐が増える、同じ概念が別々のデータに分かれる、ユーザーが構造を疑う場合は、局所修正の前にデータの所有先を見直す。既存テストは設計の根拠ではなく、守りたい振る舞いを検証するものとして扱う。
+- 完了報告は実行結果を根拠にし、確認できた範囲、残る問題、未検証の範囲を区別する。失敗は理由を示し、成功として扱わない。
 
-### モデルを疑う前に band-aid を出さない
+## 運用上の確定判断
 
-**トリガ**（次のどれかが出たら、局所修正の前にデータモデル自体を1段問い直す）:
-- ユーザーが構造に疑問を向ける（「無駄に分割されている」「なんでこうなってる」「そもそも〜の必要ある？」）。
-- 同じ概念が複数の入れ物／命名規則に割れている（例: 同じ会話が「前ステージ名の定数」と「次ステージ番号のキー」に跨る）。
-- ある分類軸（ステージ番号など）で全ケースが綺麗に並ばず、例外を特殊分岐で足し続けている。
-- 「整合性チェック／テストが要求するから現状維持」と言いたくなる。
+- `.claude/hooks` と `.codex/hooks` の統合は見送り（2026-06-20）。各環境の起動方法に違いがあり、統合による条件分岐を増やさない。両方を残し、共通の不具合は個別に修正する。
+- ローカルの自動フック登録は既定で空とする。自動生成・HTML確認ダイアログ・API呼び出し・ターン終了時の停止に開発を依存させない。検証は明示的なコマンドとCIで行う。
 
-**対応**:
-- 「このデータはそもそも何に紐づくべきか」を先に問う。チェック／テストは設計の*帰結*であって*理由*ではない。設計が誤りならチェック側を直す前提で選択肢を出す。
-- 「楽な案」と「筋の良い案」を分けて提示し、後者を率直に推す。実装は worktree＋PR で。
+## 変更時に揃えるもの
 
-**アンチパターン**: 「整合性チェックが要求するから残すべき」のような、設計の*結果*を*理由*にすり替える循環論法。
-
-**実例**: PR #70（ステージ間会話を `STAGE_INTRO[n]`／`INTERLUDE_*`＝ステージ所有 → 境界に紐づく `STORY_BEATS` タイムラインへ全面リファクタ）。最初に局所統合 #65 を出し、2回エスカレートされてやっと根本に到達 → #65 は無駄サイクルになった。
-
-## エージェント運用ポリシー（モデル横断）
-
-Anthropic の Claude Fable 5 プロンプティングガイド（https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5 ）から本プロジェクトに適用する運用指針。上位モデル（Fable 5 / Opus 級）向けの矯正が中心だが、明記のない項目はモデル・エージェントを問わず適用する。本プロジェクトは haiku / sonnet / opus / Fable 5 を併用する前提で書く。
-
-### 役割分担（オーケストレーションと委任）
-
-- この項はサブエージェント機構を持つ環境（Claude Code）向け。委任するかどうかは、タスク内容とメインエージェントのモデルに応じて判断する。
-  - メインが上位モデル（Fable 5 / Opus 級）の場合: 計画・分解・統合・レビューに専念し、独立したサブタスク（調査・ドキュメント取得・定型実装・PR作成）は軽量モデルへ委任する（調査＝haiku（Explore）、実装・文書＝sonnet。opus はサブエージェントには基本使わない）。
-  - メインが sonnet 級の場合: 中難易度までの実装は自分で実施してよい。委任は並列化や調査ファンアウトが効く場面に絞る。
-- どう役割分担したか（自分で実施したか、どのモデルに何を委任したか）はユーザーに伝える。
-- 委任は非同期で行い、完了を待つ間も自分の作業を続ける。サブエージェントが脱線している・文脈が不足していると気づいたら介入する。
-
-### 進捗・完了報告の根拠付け
-
-- 進捗や完了を報告する前に、各主張を今セッションのツール実行結果と突き合わせる。証拠を指せる作業だけを完了と報告し、未検証のものは未検証と明示する。
-- テストが落ちたら出力ごと報告する。スキップした手順はスキップしたと書く。検証済みで完了したものは断定で書く（ヘッジしない）。
-- 離席開発（ユーザーがリアルタイムで見ていない）前提の本プロジェクトでは特に厳守する。
-
-### スコープ境界（余計な作業をしない・気付きは提案で返す）
-
-- ユーザーが問題を説明・質問しているだけのときの成果物は「診断」。所見を報告して止まり、修正は依頼されてから行う。
-- タスクに必要な範囲を超えた機能追加・リファクタ・抽象化を勝手に実行しない。バグ修正に周辺の清掃は不要。将来の仮定要件のための設計をしない。
-- ただし、作業中に気付いた改善点・リスク・違和感は黙殺しない。実行はせず、提案・提言としてユーザーに知らせる。
-- 状態を変えるコマンド（削除・設定変更・リセット）の前に、証拠がその操作を支持しているか確認する。既知の障害にパターンが似ているだけで原因が同じとは限らない。
-
-### 完了報告の書き方
-
-- 結果から書く。最初の1文は「何が起きたか／何が分かったか」。詳細と経緯はその後。
-- 作業中の速記（矢印連鎖・略語・自作ラベル）を最終報告に持ち込まない。ファイル・コミット・フラグに言及するときは、それが何か／何が変わったかを平文で1つずつ書く。
-
-### 自律実行時（離席開発）の心得
-
-- ユーザーに確認して止まるのは、破壊的・不可逆な操作、実質的なスコープ変更、ユーザーにしか出せない入力が必要なときだけ。該当したら質問してターンを終える。それ以外は「〜しましょうか？」で止まらず進める。
-- ターンの最後の段落が「計画・次にやることリスト・約束（あとで〜します）」になっていたら、いま実行してから終える。
-
-### 指示文の書き方（このガイド自体を編集するとき）
-
-- 上位モデル（Fable 5 / Opus 級）には、目的と制約を書き、手順の逐一指定はしない。過剰に規範的な指示（CRITICAL / MUST の乱用、手順の細分化）はかえって出力品質を下げる。
-- 本ガイドのチェックリストは「プロジェクト固有の事実・制約（SSOT の場所、必須の同期手順）」であり、思考手順の指定ではない。この性質を保ったまま追記する。
-- 軽量モデル（haiku 級）に委任するタスクの指示は逆に明示的・具体的に書く。
-
-## 運用上の確定判断（won't-do）
-
-ユーザーが理由込みで見送りを決めた提案。**エージェント側から蒸し返さない**（状況を変える新しい根拠が出た場合のみ再提起してよい）。
-
-- **`.claude/hooks` と `.codex/hooks` の重複解消 ＝ 見送り（2026-06-20）**。理由: (1) 差分は各エージェントの実行事情を反映しており（`.claude`＝`python` 直叩き、`.codex`＝`run.py` 経由）、1本化すると条件分岐が増える。(2) CI が最終チェックを担保するので、フックは各自のローカル事前チェックと割り切る。(3) プロジェクト規模的に二重管理で回る。
-
-## 機能変更チェックリスト
-
-### 敵を追加するとき
-
-1. `src/entities/enemies/{name}.py` を作成
-2. `src/core/registries.py` > `ENEMY_DEFS` に1行追加（se / drop_chance / stats / doc_movement / doc_notes を設定）
-3. `src/core/factories.py` に生成分岐を追加
-4. `python tools/gen_docs.py` を実行（design.md の敵一覧表が自動更新される）
-5. `python tools/check_consistency.py` で全項目パスを確認
-
-### ステージを追加するとき
-
-1. `data/stages/stage{N}.json` を作成（`stage_id`・`bgm`・`terrain_layout`・`events` / `world_events` を記述）
-2. `src/scenes/game/config.py` > `STAGE_NAMES`・`BOSS_NAMES` に追加
-3. `src/story/script.py` > `STORY_BEATS`（ステージ間会話。`before_stage={N}` の遷移ビートを追加）・`BOSS_INTRO`・`BOSS_MID`・`BOSS_DEFEAT` にセリフを追加
-4. `src/entities/enemies/boss.py` > `_BOSS_CONFIG`・`_PHASE_CONFIGS` に追加
-5. `python tools/check_consistency.py` で確認
-
-### アイテムを追加するとき
-
-1. `src/entities/items/{name}.py` を作成
-2. `src/core/registries.py` > `ITEM_DEFS` に1行追加（`drop_weight > 0` でランダムドロップ対象）
-3. `src/core/factories.py` に生成分岐を追加
-4. `python tools/check_consistency.py` で確認
-
-### 武器レベルを変更するとき
-
-1. `src/entities/weapon.py` > `_MAIN_LEVELS` を変更（唯一のソース）
-2. `src/scenes/game/config.py` > `MAIN_NEXT_NAMES` の長さを合わせる
-3. `python tools/check_consistency.py` で段数一致を確認
-
-### セリフ・ストーリーを変更するとき
-
-0. 先に `docs/story.md` 冒頭の正典（内輪ネタ・弄りの線引き）を確認。正典ネタの削除・改変はユーザー確認なしに行わない
-1. セリフ／ナレーション／カットシーンの内容は `src/story/script.py` だけを編集（実装の唯一のソース）
-2. 新しい話者を出す場合は `src/story/speakers.py` > `SPEAKERS` に追加（表示名・色）
-3. 新しい BGM/SE エイリアスは `src/story/aliases.py` に追加（未用意なら `None`＝ダミー扱い）
-4. `python tools/check_consistency.py --section story` で話者登録・ステージ網羅・実ファイル存在を確認
-5. `docs/story.md` の該当台本を同じPRで逐語同期する（story.md はユーザーが直接編集する入力点。ユーザー編集起点の場合は逆向きに script.py へ反映する）
-
-## docs の更新方針
-
-- `docs/design.md` の `<!-- AUTOGEN:* -->` 内は **手で書かない**
-- gen_docs.py が自動更新する（ターン終了時の Stop フックでも自動実行）
-- 散文・設計説明・セクション見出しは手書き
-
-## 自動化されている仕組み
-
-| タイミング | 動作 |
+| 変更 | 同じ変更で確認・同期する箇所 |
 |---|---|
-| ターン終了時（Stopフック） | `gen_docs.py` 実行 → `check_consistency.py` 実行 |
-| 不整合があった場合 | フックが exit 2 で差し戻し、Claude がその場で修正 |
-| `pytest` | `tests/test_consistency.py` で同じ整合性を検証 |
+| 敵 | `src/entities/enemies/`、`ENEMY_DEFS`（SE・ドロップ・ステータス・説明）、`factories.py` |
+| アイテム | `src/entities/items/`、`ITEM_DEFS`（ドロップ重み）、`factories.py` |
+| ステージ | `data/stages/stage{N}.json`、`STAGE_NAMES` / `BOSS_NAMES`、`STORY_BEATS` と各ボス会話、`_BOSS_CONFIG` / `_PHASE_CONFIGS`。配布時に使う地形・マスクの同梱も確認する |
+| 武器の段階 | `weapon.py` の `_MAIN_LEVELS`、`config.py` の `MAIN_NEXT_NAMES` |
+| 会話・ストーリー | `script.py` と `docs/story.md` の該当台本を逐語同期する。新しい話者は `speakers.py`、BGM/SE別名は `aliases.py` に登録する |
+| 共有ガイド | この `docs/agent_guide_shared.md` を変更し、`tools/run.py docs` で `AGENTS.md` / `CLAUDE.md` へ反映する |
 
-## Claude PR運用フロー
+ストーリー変更の前に `docs/story.md` 冒頭の正典を読む。内輪ネタや弄りの線引きを守り、正典そのものを変える判断はユーザーの許可範囲で行う。台本に存在するだけでなく、実際の再生経路へ届くことも確認する。
 
-問題調査からPR作成までを任せる依頼では、Claude は以下を標準手順にする。
+`docs/design.md` と両ガイドの `<!-- AUTOGEN:* -->` 内は手書きしない。`tools/run.py docs` で生成し、手書きの説明は同じ変更で整合させる。
 
-1. 管理用フォルダ `C:\02_work\01_Fighting_the_Flu` では編集せず、タスク別 worktree で作業する
-2. `git status --short --branch` で未コミット変更を確認し、ユーザー作業を巻き込まない
-3. 作業ブランチは担当エージェントの小文字prefixで切る（Claude→`claude/{短い内容}`、Codex→`codex/{短い内容}`。例: `claude/fix-stage4-boss-ui`）
-4. worktree フォルダは `C:\02_work\01_Fighting_the_Flu-worktrees\flu-{agent}-{短い内容}` に作る
-5. worktree ごとに `.venv` を作成し、管理用フォルダの `.venv` は標準運用では共用しない
-6. `rg`・コード読解・`docs/design.md` で仕様とSSOTを確認し、必要なら `data/stages/*.json` も見る
-7. 見た目や挙動の疑いがある場合は `tools/run.py capture ...` でPNGを取り、必要なら `tools/run.py game` か `tools/run.py preview-boss ...` で実プレイ確認する
-8. 修正はSSOTに沿って最小範囲に入れ、手動生成が必要な資料は `tools/run.py docs` で再生成する
-9. `tools/run.py check` と、影響範囲に応じて `tools/run.py test` / `tools/run.py pycompile` / 再キャプチャを実行する
-10. 差分・検証結果・確認したキャプチャをPR本文にまとめ、GitHub CLI が使える環境では push してPRを作成する
+## 作業場所とPR
 
-再現に使ったキャプチャは `captures/` 配下に出力する。調査用の一時画像をPRに含めない場合は、最終差分へ混ぜず、PR本文やコメントでファイル名だけ共有する。
-
-### worktree 運用
-
-`C:\02_work\01_Fighting_the_Flu` は管理用 main フォルダとして扱い、`main` の同期・worktree 作成・worktree 削除だけに使う。実作業は必ず `C:\02_work\01_Fighting_the_Flu-worktrees` 配下のタスク別 worktree で行う。
+- `C:\02_work\01_Fighting_the_Flu` は管理用mainとし、同期・worktree管理に使う。実装や修正は `C:\02_work\01_Fighting_the_Flu-worktrees` 配下のタスク別worktreeで行う。
+- 作業前に `git status --short --branch` とworktree一覧を確認し、未コミットのユーザー作業や他タスクを巻き込まない。ブランチは `codex/{短い内容}` または `claude/{短い内容}` を使う。
+- worktreeごとに `.venv` を用意し、対応Pythonの下限は `pyproject.toml` に従う。同じタスクの継続は既存worktreeの状態を確認して再開できる。
+- PRには変更理由、結果、実行した検証と未確認事項を書く。公開済みPRの判断では、検証したコミットがPR先端と一致しているかを確認する。
+- マージはユーザーの許可範囲で行う。マージ後の削除は、そのタスクのworktree・ブランチであること、未コミット変更がないこと、必要な証拠を保存したことを確認してから行う。他タスクは削除しない。
 
 ```powershell
-# Codex の新規タスク
-cd C:\02_work\01_Fighting_the_Flu
+# 管理用mainから、最新のmainを起点に作業場所を用意する例
 git fetch --prune origin
 git worktree add C:\02_work\01_Fighting_the_Flu-worktrees\flu-codex-some-task -b codex/some-task origin/main
 
-# Claude の新規タスク
-cd C:\02_work\01_Fighting_the_Flu
-git fetch --prune origin
-git worktree add C:\02_work\01_Fighting_the_Flu-worktrees\flu-claude-some-task -b claude/some-task origin/main
-```
-
-各 worktree の初回セットアップは、その worktree 内で行う。
-
-```powershell
-cd C:\02_work\01_Fighting_the_Flu-worktrees\flu-codex-some-task
+# 新しいworktree内で実行する
 py -3 -m venv .venv
-.venv\Scripts\python -m pip install -U pip
-.venv\Scripts\python -m pip install -e ".[dev]" markdown
+.venv\Scripts\python -m pip install -e ".[dev]"
+```
+
+## 検証と証拠
+
+基本の確認は以下のとおり。テストは影響範囲に合わせ、結果が揃った後の同じ確認を理由なく繰り返さない。CIでは構文・整合性・テストを確認する。
+
+```powershell
+.venv\Scripts\python tools\run.py docs-check
 .venv\Scripts\python tools\run.py check
+.venv\Scripts\python tools\run.py test
+.venv\Scripts\python tools\run.py pycompile
 ```
 
-`tools\run.py pr-report --fancy` を使うタスクだけ、追加で `anthropic` を入れる。
+- 生成データを変更した場合は `tools/run.py docs` を実行してから差分を確認する。
+- 見た目・操作・進行に関する変更は、必要な画面や実際の振る舞いを確認する。画像のbefore/afterやPR添付を一律の必須条件にはしない。
+- 実プレイ報告には対象バージョン、入力方法、到達範囲を記録する。自動キャプチャ、デバッグ直行、通常操作の通しプレイは区別し、ウインドウへの入力が届いたことを確認する。
+- 再現画像は `captures/` などへ保存する。調査用の一時画像は通常のソース差分へ混ぜず、役立つ場合だけPRに添付する。
+- `pr-media` / `pr-html` / `pr-report` は外部へアップロードする任意ツール。PR作成のたびに実行しない。使用時はアップロード内容と公開範囲を確認する。ホスティング用 `media` ブランチはmainへマージしない。
+- HTMLレビューや有料APIによる装飾も任意。通常のMarkdownレビューで足りる場合は追加処理を行わない。
+
+## よく使うコマンド
+
+`tools/run.py` は実行したworktreeの `.venv` を優先し、UTF-8と必要なヘッドレス設定を揃える。補助ツールの詳細は `docs/tools.md` を参照する。
 
 ```powershell
-.venv\Scripts\python -m pip install anthropic
+.venv\Scripts\python tools\run.py game
+.venv\Scripts\python tools\run.py playtest
+.venv\Scripts\python tools\run.py capture --stage 4 --boss --form 3
+.venv\Scripts\python tools\run.py preview-boss --stage 4 --pattern all
+.venv\Scripts\python tools\run.py balance
 ```
 
-PR がマージされたら、該当 worktree とマージ済みブランチを削除する。未コミット変更がある worktree は削除しない。
-
-```powershell
-cd C:\02_work\01_Fighting_the_Flu
-git worktree remove C:\02_work\01_Fighting_the_Flu-worktrees\flu-codex-some-task
-git branch -d codex/some-task
-git push origin --delete codex/some-task
-```
-
-### PR 可視化
-
-PR 本文に載せる画像やHTMLは `media` ブランチへアップロードする。`media` はホスティング専用ブランチで、`main` にはマージしない。
-
-```powershell
-.venv\Scripts\python tools\run.py pr-media captures\before.png captures\after.png
-.venv\Scripts\python tools\run.py pr-html .html\report.html
-.venv\Scripts\python tools\run.py pr-report docs\design.md
-```
-
-`gh` は `PATH` を優先し、見つからない場合は `GH_EXE`、`~/bin/gh.exe`、`C:\Program Files\GitHub CLI\gh.exe`、現在の venv の `Scripts\gh.exe` の順に探す。
-
-## ツール使用方法
-
-実行環境・文字化け事故を避けるため、可能なら直接 `python` を叩かず `tools/run.py` を使う。
-`tools/run.py` はローカル `.venv` を優先し、UTF-8 出力と pygame のヘッドレス設定を揃える。
-
-```powershell
-# 推奨ラッパー
-.venv/Scripts/python tools/run.py check
-.venv/Scripts/python tools/run.py test
-.venv/Scripts/python tools/run.py docs
-.venv/Scripts/python tools/run.py game
-
-# docs を手動更新
-.venv/Scripts/python tools/gen_docs.py
-
-# 整合性チェック
-.venv/Scripts/python tools/check_consistency.py
-
-# テスト
-.venv/Scripts/pytest
-
-# ゲーム起動
-.venv/Scripts/python tools/run.py game
-
-# 任意状態の画面キャプチャ
-.venv/Scripts/python tools/run.py capture --stage 4 --boss --form 3
-
-# プレイ動画(GIF)を生成（PR添付・離席レビュー向け）
-.venv/Scripts/python tools/run.py clip --stage 1 --out captures/stage1.gif
-
-# ビジュアル回帰（baseline と差分HTML。見た目変更を確定したら --update で baseline 更新）
-.venv/Scripts/python tools/run.py visual-regress
-.venv/Scripts/python tools/run.py visual-regress --update
-
-# ボス弾幕プレビュー
-.venv/Scripts/python tools/run.py preview-boss --stage 4 --pattern all
-
-# バランスシート確認
-.venv/Scripts/python tools/run.py balance
-```
+`gh` はPATHを優先し、見つからない場合は `GH_EXE`、`~/bin/gh.exe`、`C:\Program Files\GitHub CLI\gh.exe`、現在のvenvの `Scripts\gh.exe` を確認する。
 <!-- AUTOGEN:agent_guide END -->

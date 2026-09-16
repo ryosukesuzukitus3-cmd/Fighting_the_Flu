@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 import pytest  # noqa: E402
 
 # headless の import で SDL ダミー設定と sys.path が済む。
-from tools.headless import HOLD_KEYS, build_game_scene, skip_to_fight, step_frame  # noqa: E402
+from tools.headless import hold_keys_from_names, build_game_scene, skip_to_fight, step_frame  # noqa: E402
 import pygame  # noqa: E402
 
 from src.core.registries import stage_ids  # noqa: E402
@@ -32,7 +32,6 @@ from src.scenes.game_scene import GameScene  # noqa: E402
 STAGES = stage_ids()
 NORMAL_FRAMES = 180   # 3秒 @60fps（クラッシュは spawn/遷移直後に出やすい）
 BOSS_FRAMES = 180
-FIRE = (HOLD_KEYS["fire"],)
 
 
 @pytest.fixture(scope="module")
@@ -61,8 +60,9 @@ def _assert_finite(scene: GameScene) -> None:
 def test_stage_normal_play_runs_without_crash(game, stage_id):
     """通常進行（自機が撃ちながら前進）を数秒回しても例外・非有限が出ない。"""
     scene = _fresh_scene(game, stage_id)
+    fire = hold_keys_from_names("fire", game.settings)
     for _ in range(NORMAL_FRAMES):
-        step_frame(scene, hold=FIRE, invincible=True)
+        step_frame(scene, hold=fire, invincible=True)
         _assert_finite(scene)
 
 

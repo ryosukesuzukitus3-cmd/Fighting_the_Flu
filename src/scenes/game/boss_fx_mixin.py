@@ -42,7 +42,7 @@ class GameSceneBossFxMixin:
                 pygame.draw.circle(ring, (160, 230, 255, 220), (r + 3, r + 3), r, 3)
                 buf.blit(ring, (cx - r - 3, cy - r - 3))
                 label, lcol = "SHIELD", (160, 230, 255)
-            else:
+            elif self._accepts_combat_input:
                 label, lcol = "BREAK CHANCE!", (120, 255, 140)
 
         elif gimmick == "weakpoint":

@@ -2,11 +2,10 @@
 from __future__ import annotations
 import math
 import random
-from pathlib import Path
 import pygame
 
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
-import pygame
+from src.core.registries import next_stage_id
 from src.scenes.game.config import (
     POST_BOSS_AUTO_TIMEOUT, POST_BOSS_FINAL_TIMEOUT, POST_BOSS_EDGE_MARGIN,
     MAGNET_SPEED, FINAL_SLOW_FACTOR,
@@ -60,11 +59,11 @@ class GameScenePostBossMixin:
                 self._defeat_dialogue_active = True  # type: ignore[attr-defined]
             return  # 遅延中は遷移しない
 
-        # ── 撃破後セリフ表示中（ENTERで送る、プレイヤーはフリーズ）──────
+        # ── 撃破後セリフ表示中（決定アクションで送る、プレイヤーはフリーズ）
         if self._defeat_dialogue_active:  # type: ignore[attr-defined]
             inp = self.game.input  # type: ignore[attr-defined]
-            if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                    or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+            if inp.is_action_held_with_repeat(
+                    "ui_accept", initial_delay=0.25, repeat_interval=0.12):
                 self._defeat_dialogue_index += 1  # type: ignore[attr-defined]
                 if self._defeat_dialogue_index >= len(self._defeat_dialogue_pages):  # type: ignore[attr-defined]
                     self._defeat_dialogue_active = False  # type: ignore[attr-defined]
@@ -225,9 +224,7 @@ class GameScenePostBossMixin:
         self.enemy_bullets.empty()  # type: ignore[attr-defined]
         self.laser.state = "ready"  # type: ignore[attr-defined]
 
-        next_id   = self._stage_id + 1  # type: ignore[attr-defined]
-        next_path = Path("data") / "stages" / f"stage{next_id}.json"
-        self._post_boss_next_id = next_id if next_path.exists() else None  # type: ignore[attr-defined]
+        self._post_boss_next_id = next_stage_id(self._stage_id)  # type: ignore[attr-defined]
         is_final = (self._post_boss_next_id is None)
 
         if not is_final:
@@ -256,12 +253,12 @@ class GameScenePostBossMixin:
         self._boss = None  # type: ignore[attr-defined]
         self._post_boss = True  # type: ignore[attr-defined]
 
-        # 撃破後セリフ設定（爆発演出が落ち着く 2.5 秒後に表示開始）
+        # 最終戦も決着の会話を再生してから朝へ進む。閃光・爆発後に表示開始。
         pages = BOSS_DEFEAT.get(sid, [])   # list[Line]
-        self._defeat_dialogue_pages  = [] if is_final else pages  # type: ignore[attr-defined]
+        self._defeat_dialogue_pages  = list(pages)  # type: ignore[attr-defined]
         self._defeat_dialogue_index  = 0  # type: ignore[attr-defined]
         self._defeat_dialogue_active = False  # type: ignore[attr-defined]
-        self._defeat_dialogue_delay  = 0.0 if is_final else (2.5 if pages else 0.0)  # type: ignore[attr-defined]
+        self._defeat_dialogue_delay  = (1.2 if is_final else 2.5) if pages else 0.0  # type: ignore[attr-defined]
 
     def _go_next_after_boss(self) -> None:
         """ボス後フェーズ終了: 武器・HP・先輩強化を引き継いで次シーンへ遷移する。"""

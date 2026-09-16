@@ -25,6 +25,11 @@ class GameState:
     # コンティニュー用: ステージ開始時のスナップショット
     stage_start_weapon:    dict | None = None
     stage_start_companion: dict | None = None
+    stage_start_story: dict[str, bool] | None = None
+
+    # 1プレイ中に一度だけ表示する、ボスダウン説明バークの既読状態
+    boss_break_tutorial_shown: bool = False
+    upgrade_tutorial_shown: bool = False
 
     def take_carry(self) -> tuple[int, dict] | None:
         """引き継ぎデータを取り出す。データがなければ None を返す。"""

@@ -32,7 +32,7 @@ if str(ROOT) not in sys.path:
 
 # ヘッドレス設定（SDL ダミー）は headless の import 時に済む。
 from tools.headless import (  # noqa: E402
-    HOLD_KEYS,
+    hold_keys_from_names,
     apply_weapon,
     build_game_scene,
     skip_to_fight,
@@ -79,7 +79,7 @@ def render_shot(spec: dict) -> Image.Image:
         homing=spec.get("homing", 0), speed=spec.get("speed", 0),
         magnet=spec.get("magnet", 0), barrier=spec.get("barrier", False),
     )
-    hold = [HOLD_KEYS[n] for n in spec.get("hold", ())]
+    hold = hold_keys_from_names(",".join(spec.get("hold", ())), game.settings)
 
     if spec.get("boss"):
         skip_to_fight(scene, spec["stage"], form=spec.get("form", 1), hold=hold)

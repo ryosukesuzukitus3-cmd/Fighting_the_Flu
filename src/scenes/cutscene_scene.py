@@ -15,6 +15,7 @@ from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.scenes.dialogue_panel import DARK_STYLE, LIGHT_STYLE, draw_story_panel
 from src.story.lines import Page
+from src.entities.video_effect import VideoEffectLayer
 
 _TYPEWRITER_SPEED = 30.0   # 1秒あたりの文字数
 _TYPE_SE_INTERVAL = 0.045
@@ -61,6 +62,7 @@ class CutsceneScene(Scene):
         self._finished   = False    # on_complete 多重呼び防止
         self._story_active  = None   # 直近に話した登場人物（立ち絵ハイライト用）
         self._story_partner = None   # その前に話した登場人物（会話相手）
+        self._video_fx = VideoEffectLayer(self.game.resources)
         self._window_bg: pygame.Surface | None = None
         if self._theme == "window":
             raw = self.game.resources.image(_EPILOGUE_MORNING_BG)
@@ -97,6 +99,8 @@ class CutsceneScene(Scene):
             self._shake_t = 0.4
         if any(f in pg.fx for f in ("fade_white", "white_particle", "light")):
             self._flash_t = 0.35
+        if "white_particle" in pg.fx:
+            self._video_fx.play("warp_flash", size=(SCREEN_WIDTH, 450), opacity=210)
         if "glitch" in pg.fx:
             self._glitch_t = 0.6
         self._redglow = ("red_noise" in pg.fx)
@@ -129,6 +133,7 @@ class CutsceneScene(Scene):
     def update(self, dt: float) -> None:
         self._blink   += dt
         self._fx_time += dt
+        self._video_fx.update(dt)
         if self._shake_t  > 0: self._shake_t  -= dt
         if self._flash_t  > 0: self._flash_t  -= dt
         if self._glitch_t > 0: self._glitch_t -= dt
@@ -151,9 +156,10 @@ class CutsceneScene(Scene):
             return
 
         inp = self.game.input
-        # ENTER/SPACE は長押しで連続送り（オートリピート）
-        advance = (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                   or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12))
+        # 決定アクションは長押しで連続送り（オートリピート）
+        advance = inp.is_action_held_with_repeat(
+            "ui_accept", initial_delay=0.25, repeat_interval=0.12,
+        )
         if advance:
             if not self._is_complete():
                 self._chars = float(self._total_chars() + 1)
@@ -162,7 +168,7 @@ class CutsceneScene(Scene):
                 self._enter_page()
             else:
                 self._begin_finish()
-        if inp.is_just_pressed(pygame.K_x):
+        if inp.is_action_just_pressed("ui_back"):
             self._begin_finish()
 
     # ── 背景テーマ ────────────────────────────────────────────────
@@ -256,6 +262,7 @@ class CutsceneScene(Scene):
     # ── 描画 ──────────────────────────────────────────────────────
     def draw(self, screen: pygame.Surface) -> None:
         self._draw_bg(screen)
+        self._video_fx.draw(screen)
 
         # シェイクオフセット
         ox = oy = 0
@@ -280,6 +287,8 @@ class CutsceneScene(Scene):
         glitch = self._glitch_t > 0
         from src.scenes.dialogue_panel import story_sides
         left_sp, right_sp = story_sides(self._story_active, self._story_partner)
+        accept = self.game.settings.key_display("ui_accept")
+        back = self.game.settings.key_display("ui_back")
         draw_story_panel(
             screen,
             self.game.resources,
@@ -292,8 +301,8 @@ class CutsceneScene(Scene):
             total_pages=len(self._pages),
             complete=self._is_complete(),
             blink=self._blink,
-            hint_last="ENTER: 続ける   X: スキップ",
-            hint_next="ENTER: 次へ   X: スキップ",
+            hint_last=f"{accept}: 続ける   {back}: スキップ",
+            hint_next=f"{accept}: 次へ   {back}: スキップ",
             style=LIGHT_STYLE if is_light_bg else DARK_STYLE,
             text_transform=self._glitch_text if glitch else None,
             text_color=(210, 60, 60) if glitch else None,

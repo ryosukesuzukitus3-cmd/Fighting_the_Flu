@@ -6,8 +6,9 @@ state（フェーズ・各種タイマー・カロナール帰還モーション
 へは `self.scene` 経由でアクセスする。
 
 呼び出し側（GameScene）が触れる公開 API は以下のみ：
-- 読み取り: `phase` / `seq` / `dialogue_active`
-- 更新: `update_timers` / `update_dialogue` / `update_return_join` / `update_combat`
+- 読み取り: `phase` / `seq` / `dialogue_active` / `input_gate_active` / `final_strike_active`
+- 更新: `update_timers` / `update_dialogue` / `update_return_join` / `update_combat` / `update_input_gate`
+- 終局射撃: `consume_final_shot_request` / `mark_final_shot` / `allows_final_hit`
 - 遷移: `on_form2_transition` / `on_form3_transition`
 - 描画: `draw_arrival_trail` / `draw_overlays`
 """
@@ -20,6 +21,7 @@ from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
 from src.scenes.game.config import BOSS_BGM
 from src.story.aliases import bgm_path
 from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS
+from src.story.script import FINAL_INPUT_PROMPTS
 
 
 class FinalBattleDirector:
@@ -55,6 +57,8 @@ class FinalBattleDirector:
         self._karonaru_arrival_from: tuple[float, float] = (0.0, 0.0)
         self._karonaru_arrival_to: tuple[float, float] = (0.0, 0.0)
         self._karonaru_arrival_trail: list[tuple[float, float, float]] = []
+        self._gate_released = False
+        self._final_shot_requested = False
 
     # ── 公開: 状態読み取り ────────────────────────────────────────
     @property
@@ -69,6 +73,66 @@ class FinalBattleDirector:
     def dialogue_active(self) -> bool:
         return self._final_dialogue_active
 
+    @property
+    def input_gate_active(self) -> bool:
+        return self._final_seq in {"await_help", "final_ready"}
+
+    @property
+    def final_strike_active(self) -> bool:
+        return self._final_seq == "final_chance"
+
+    def update_input_gate(self) -> None:
+        """Wait without a timeout for a released-and-pressed player fire action."""
+        if not self.input_gate_active:
+            return
+        inp = self.scene.game.input
+        if not self._gate_released:
+            if not inp.is_action_pressed("fire"):
+                self._gate_released = True
+            return
+        if not inp.is_action_just_pressed("fire"):
+            return
+        if self._final_seq == "await_help":
+            self._do_karonaru_max()
+        else:
+            self._clear_pending_attacks()
+            if self.scene._boss is not None:
+                self.scene._boss.arm_final_kill()
+            self._final_seq = "final_chance"
+            self._final_shot_requested = True
+            self._show_final_banner("final_chance", 2.4)
+
+    def consume_final_shot_request(self) -> bool:
+        """Deliver the first fresh shot even if the request was a short tap."""
+        requested = self._final_shot_requested
+        self._final_shot_requested = False
+        return requested
+
+    def mark_final_shot(self, bullets) -> None:
+        """Called only for the player's newly generated normal weapon bullets.
+
+        Further player shots remain eligible if the first shot misses. Companion
+        and piece-bomb bullets must not pass through this entry point.
+        """
+        if self.final_strike_active:
+            for bullet in bullets:
+                bullet.final_strike = True
+
+    def allows_final_hit(self, projectile=None) -> bool:
+        """Only fresh player bullets may end the battle after the final signal."""
+        return not self.final_strike_active or bool(getattr(projectile, "final_strike", False))
+
+    def _clear_pending_attacks(self) -> None:
+        self.scene.player_bullets.empty()
+        self.scene.enemy_bullets.empty()
+        self.scene.laser.state = "ready"
+
+    def _begin_input_gate(self, sequence: str) -> None:
+        self._clear_pending_attacks()
+        self._final_seq = sequence
+        self._gate_released = False
+        self._final_shot_requested = False
+
     # ── 公開: 更新エントリ ────────────────────────────────────────
     def update_timers(self, dt: float) -> None:
         """演出タイマー（バナー・宣言オーバーレイ）とカロナール到着モーション。"""
@@ -82,8 +146,8 @@ class FinalBattleDirector:
 
     def update_dialogue(self) -> None:
         inp = self.scene.game.input
-        if (inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-                or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)):
+        if inp.is_action_held_with_repeat(
+                "ui_accept", initial_delay=0.25, repeat_interval=0.12):
             self._final_dialogue_idx += 1
             if self._final_dialogue_idx >= len(self._final_dialogue_pages):
                 self._final_dialogue_active = False
@@ -95,7 +159,7 @@ class FinalBattleDirector:
     def update_return_join(self, dt: float) -> None:
         companion = self.scene._companion
         if companion is None:
-            self._do_karonaru_max()
+            self._begin_input_gate("await_help")
             return
         self._karonaru_return_timer += dt
         dur = 1.35
@@ -117,7 +181,7 @@ class FinalBattleDirector:
         if t >= 1.0:
             self.scene._spawn_popup("LET'S GO", int(companion.sx), int(companion.sy) - 34,
                                     color=(180, 255, 200), life=1.8)
-            self._do_karonaru_max()
+            self._begin_input_gate("await_help")
 
     def update_combat(self, dt: float) -> None:
         """最終形態中のストーリー要所を進める。"""
@@ -252,6 +316,10 @@ class FinalBattleDirector:
         self._final_seq = "return"
         self._show_final_banner("kouhatsu", 3.0)
         self.scene._boss_kill_flash_timer = 1.2   # 白閃光
+        self.scene._play_video_effect(
+            "radiant_flash", center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),
+            size=(SCREEN_WIDTH, 450),
+        )
         self.scene.game.sound.play_bgm("music/bgm/Rebirth_the_edge.mp3", volume=0.7)
         self.scene.game.sound.play_se_alias("SE_LIGHT")
         self._spawn_returning_karonaru()
@@ -343,6 +411,7 @@ class FinalBattleDirector:
 
     def _do_karonaru_max(self) -> None:
         scene = self.scene
+        self._final_seq = "act2_intro"
         if scene._companion is None:
             from src.entities.companion import Karonaru
             scene._companion = Karonaru(scene.game, popup_fn=scene._spawn_popup,
@@ -415,11 +484,8 @@ class FinalBattleDirector:
         self._play_final_dialogue(FINAL_SEQ["final_sengen"], on_done=self._arm_final_kill)
 
     def _arm_final_kill(self) -> None:
-        if self.scene._boss is not None:
-            self.scene._boss.arm_final_kill()
-        self._show_final_banner("final_chance", 2.4)
-        self.scene._spawn_popup("NOW STRIKE", SCREEN_WIDTH // 2, 120, color=(255, 230, 150), life=2.0)
-        self._final_seq = "final_chance"
+        # Finishing the conversation cannot itself fire the last shot.
+        self._begin_input_gate("final_ready")
 
     # ── 公開/内部: 最終決戦 描画 ──────────────────────────────────
     def draw_overlays(self, screen: pygame.Surface) -> None:
@@ -429,6 +495,25 @@ class FinalBattleDirector:
             self._draw_final_banner(screen)
         if self._final_dialogue_active:
             self._draw_final_dialogue(screen)
+        if self.input_gate_active:
+            self._draw_input_gate(screen)
+
+    def _draw_input_gate(self, screen: pygame.Surface) -> None:
+        fire = self.scene.game.settings.key_display("fire")
+        prompt = FINAL_INPUT_PROMPTS[self._final_seq].format(fire=fire)
+        hint_key = "ready" if self._gate_released else "release"
+        hint = FINAL_INPUT_PROMPTS[hint_key].format(fire=fire)
+        font = self.scene.game.resources.pixelfont(26)
+        small = self.scene.game.resources.pixelfont(18)
+        panel = pygame.Rect(110, SCREEN_HEIGHT // 2 - 12, SCREEN_WIDTH - 220, 102)
+        shade = pygame.Surface(panel.size, pygame.SRCALPHA)
+        shade.fill((8, 16, 20, 235))
+        pygame.draw.rect(shade, (170, 240, 205), shade.get_rect(), 2, border_radius=6)
+        screen.blit(shade, panel.topleft)
+        for text, face, y, color in ((prompt, font, panel.y + 17, (215, 255, 225)),
+                                      (hint, small, panel.y + 58, (195, 210, 205))):
+            rendered = face.render(text, True, color)
+            screen.blit(rendered, (panel.centerx - rendered.get_width() // 2, y))
 
     def _draw_sengen_overlay(self, screen: pygame.Surface) -> None:
         """Draw the final declaration overlay."""
@@ -464,11 +549,12 @@ class FinalBattleDirector:
             return
         line  = pages[idx]
         total = len(pages)
+        accept = self.scene.game.settings.key_display("ui_accept")
 
         if idx < total - 1:
-            hint = f"{idx + 1}/{total}  ENTER: 次へ"
+            hint = f"{idx + 1}/{total}  {accept}: 次へ"
         else:
-            hint = "ENTER: OK"
+            hint = f"{accept}: OK"
         draw_combat_panel(
             screen,
             self.scene.game.resources,
