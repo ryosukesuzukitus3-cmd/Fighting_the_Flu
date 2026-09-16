@@ -87,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         "pr-media":   ([py, "tools/pr_media.py", *argv], True),
         "pr-html":    ([py, "tools/pr_html.py", *argv], True),
         "pr-report":  ([py, "tools/pr_report.py", *argv], True),
-        "pycompile":  ([py, "-m", "compileall", "-q", "src", "tools", "tests", *argv], True),
+        "pycompile":  ([py, "-m", "compileall", "-q", "src", "tools", "tests",
+                        ".codex/hooks", ".claude/hooks", *argv], True),
     }
     if cmd not in commands:
         print(f"unknown command: {cmd}", file=sys.stderr)

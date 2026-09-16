@@ -1,6 +1,7 @@
 """Regression checks for optional local development helpers."""
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -209,3 +210,24 @@ def test_fancy_does_not_guess_an_api_model(agent, monkeypatch):
     monkeypatch.delenv("FLU_HTML_MODEL", raising=False)
     with pytest.raises(RuntimeError, match="FLU_HTML_MODEL"):
         module.render_fancy("# Review", ROOT / "docs/design.md")
+
+
+@pytest.mark.parametrize("markdown, expected", [
+    (
+        "- **準備**\n  * A & B",
+        "<ul>\n<li><strong>準備</strong></li>\n<li>A &amp; B</li>\n</ul>",
+    ),
+    (
+        "1. `check`\n  12. <完了>",
+        "<ol>\n<li><code>check</code></li>\n<li>&lt;完了&gt;</li>\n</ol>",
+    ),
+])
+def test_fallback_lists_strip_markers_and_preserve_inline_markup(agent, markdown, expected):
+    module = _load_hook(agent, "md_to_html")
+    assert module.simple_md(markdown) == expected
+
+
+def test_optional_helpers_parse_with_python_311_grammar(agent):
+    for name in ("check_sync", "md_to_html"):
+        path = ROOT / agent / "hooks" / f"{name}.py"
+        ast.parse(path.read_text(encoding="utf-8"), filename=str(path), feature_version=(3, 11))

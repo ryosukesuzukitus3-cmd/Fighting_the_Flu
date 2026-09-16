@@ -1258,7 +1258,7 @@ class Boss(pygame.sprite.Sprite):
         self.game.sound.play_se_alias("SE_BOSS_SHOT", volume=0.6)
 
     def _make_form3_sprite(self) -> pygame.Surface:
-        """頑固王サワグチのダミースプライト（差し替え前提）。
+        """頑固王サワグチの影スプライト。
 
         台本「澤口の影が巨大化」に沿い、プレイヤー画像を暗紫シルエット化＋拡大。
         """
@@ -1278,10 +1278,6 @@ class Boss(pygame.sprite.Sprite):
         dark.fill((40, 10, 55, 255))
         silhouette.blit(dark, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         shadow.blit(silhouette, (0, 0))
-        # ダミー明示ラベル
-        font = self.game.resources.pixelfont(14)
-        tag = font.render("(DUMMY)", True, (255, 0, 255))
-        shadow.blit(tag, (w // 2 - tag.get_width() // 2, 2))
         return shadow
 
     def _transform_form3(self) -> None:

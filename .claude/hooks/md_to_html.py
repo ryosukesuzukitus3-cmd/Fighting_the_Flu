@@ -275,14 +275,16 @@ def simple_md(md: str) -> str:
                 flush_list()
                 out.append("<ul>")
                 in_list = "ul"
-            out.append(f"<li>{_inline(re.sub(r'^\\s*[-*]\\s+', '', line))}</li>")
+            item_text = re.sub(r"^\s*[-*]\s+", "", line)
+            out.append(f"<li>{_inline(item_text)}</li>")
             continue
         if re.match(r"^\s*\d+\.\s+", line):
             if in_list != "ol":
                 flush_list()
                 out.append("<ol>")
                 in_list = "ol"
-            out.append(f"<li>{_inline(re.sub(r'^\\s*\\d+\\.\\s+', '', line))}</li>")
+            item_text = re.sub(r"^\s*\d+\.\s+", "", line)
+            out.append(f"<li>{_inline(item_text)}</li>")
             continue
 
         flush_list()
