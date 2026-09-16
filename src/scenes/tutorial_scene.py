@@ -225,7 +225,8 @@ class TutorialScene(Scene):
             if inp.is_just_pressed(pygame.K_LEFT) or inp.is_just_pressed(pygame.K_RIGHT):
                 self._choice ^= 1
                 self.game.sound.play_se("music/se/メニュー操作SE：カーソル移動.mp3", volume=0.5)
-            if inp.is_just_pressed(pygame.K_RETURN) or inp.is_just_pressed(pygame.K_z):
+            if (inp.is_action_just_pressed("ui_accept")
+                    or inp.is_action_just_pressed("fire")):
                 self.game.sound.play_se("music/se/メニュー操作SE：決定.mp3", volume=0.6)
                 self._choosing = False
                 if self._choice == 0:
@@ -235,7 +236,8 @@ class TutorialScene(Scene):
             return
 
         if self._in_dialogue:
-            if inp.is_just_pressed(pygame.K_RETURN) or inp.is_just_pressed(pygame.K_z):
+            if (inp.is_action_just_pressed("ui_accept")
+                    or inp.is_action_just_pressed("fire")):
                 self._advance_dialogue()
             return
 
@@ -365,14 +367,26 @@ class TutorialScene(Scene):
             screen.blit(box, (bx, cy))
             screen.blit(surf, (bx + 20, cy + 10))
 
+        fire = self.game.settings.key_display("fire")
+        accept = self.game.settings.key_display("ui_accept")
+        controls = self._tag_font.render(
+            f"← →：選択　{fire} / {accept}：決定", True, (220, 220, 235)
+        )
+        hint_y = cy + self._banner_font.get_height() + 34
+        screen.blit(controls, (cx - controls.get_width() // 2, hint_y))
+
     def _draw_panel(self, screen: pygame.Surface, line, blocking: bool) -> None:
         speaker = line.speaker
         style = COMBAT_BLUE_STYLE if speaker == KARONARU else COMBAT_RED_STYLE
         if blocking:
             total = len(self._dialogue)
             idx = self._dialogue_idx
-            hint = f"{idx + 1}/{total}  ENTER: 次へ" if idx < total - 1 else "ENTER: 続ける"
+            accept = self.game.settings.key_display("ui_accept")
+            hint = f"{accept}: 次へ" if idx < total - 1 else f"{accept}: 続ける"
         else:
+            total = None
+            idx = None
             hint = None
         draw_combat_panel(screen, self.game.resources, speaker, line.lines,
+                          page_index=idx, total_pages=total,
                           hint_text=hint, style=style)

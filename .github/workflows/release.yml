@@ -33,6 +33,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e . pyinstaller
 
+      - name: Assert production optimization
+        shell: pwsh
+        run: |
+          if (-not (Select-String -Path game.spec -Pattern '^\s*optimize=1,\s*$' -Quiet)) {
+            throw "game.spec must set Analysis(optimize=1) so release builds disable __debug__ UI"
+          }
+
       - name: Build (PyInstaller onedir)
         run: pyinstaller game.spec --noconfirm
 

@@ -82,7 +82,7 @@ class GameSceneUpgradeMixin:
         top = self._top_available_indices()
         bot = self._bottom_available_indices()
 
-        if inp.is_just_pressed(pygame.K_x):
+        if inp.is_action_just_pressed("ui_back"):
             self.game.sound.play_se("music/se/メニュー操作SE：キャンセル.mp3", volume=0.5)  # type: ignore[attr-defined]
             self._upgrading = False  # type: ignore[attr-defined]
             return
@@ -95,7 +95,7 @@ class GameSceneUpgradeMixin:
             self._move_zone(-1, top, bot)
         if inp.is_just_pressed(pygame.K_DOWN):
             self._move_zone(1, top, bot)
-        if inp.is_just_pressed(pygame.K_RETURN):
+        if inp.is_action_just_pressed("ui_accept"):
             self._confirm_zone(top, bot)
 
     def _move_cursor(self, delta: int, top: list[int], bot: list[int]) -> None:
@@ -229,8 +229,12 @@ class GameSceneUpgradeMixin:
         screen.blit(dlabel, (bx + btn_w // 2 - dlabel.get_width() // 2,
                              by + btn_h // 2 - dlabel.get_height() // 2))
 
+        accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
+        back = self.game.settings.key_display("ui_back")  # type: ignore[attr-defined]
         hint = small.render(
-            "↑↓:行移動   ←→:選択   ENTER:決定/送り   X:閉じる", True, (130, 130, 150))
+            f"↑↓:行移動   ←→:選択   {accept}:決定/送り   {back}:閉じる",
+            True, (175, 175, 195),
+        )
         screen.blit(hint, (cx - hint.get_width() // 2, cy + 140))
 
     def _draw_slot_row(self, screen, slots, y, cursor, choice, zone_active,

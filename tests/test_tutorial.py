@@ -40,6 +40,11 @@ class _FakeInput:
             return self.fire
         return action in self.move
 
+    def is_action_just_pressed(self, action: str) -> bool:
+        if action in ("ui_accept", "fire"):
+            return self.enter
+        return False
+
     def is_pressed(self, key: int) -> bool:
         return False
 

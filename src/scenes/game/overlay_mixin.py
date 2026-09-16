@@ -127,7 +127,7 @@ class GameSceneOverlayMixin:
         pygame.draw.rect(screen, speaker_color(speaker), (px, py, size, size), 2, border_radius=4)
         return px + size + 12
 
-    # ── ボス登場時セリフ（ENTERで送る）────────────────────────
+    # ── ボス登場時セリフ（決定アクションで送る）──────────────
     def _draw_boss_intro_dialogue(self, screen: pygame.Surface) -> None:
         if not hasattr(self, "_intro_dialogue_font") or self._intro_dialogue_font is None:  # type: ignore[attr-defined]
             self._intro_dialogue_font = self.game.resources.pixelfont(26)  # type: ignore[attr-defined]
@@ -138,8 +138,10 @@ class GameSceneOverlayMixin:
             return
         line  = pages[idx]
         total = len(pages)
+        accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
 
-        hint = f"{idx + 1}/{total}  ENTER: 次へ" if idx < total - 1 else "ENTER: 戦闘開始"
+        hint = (f"{idx + 1}/{total}  {accept}: 次へ"
+                if idx < total - 1 else f"{accept}: 戦闘開始")
         draw_combat_panel(
             screen,
             self.game.resources,  # type: ignore[attr-defined]
@@ -186,7 +188,7 @@ class GameSceneOverlayMixin:
             alpha=alpha,
         )
 
-    # ── 戦闘中カットイン（戦闘停止・ENTERで送る）───────────────
+    # ── 戦闘中カットイン（戦闘停止・決定アクションで送る）─────
     def _draw_combat_cutin(self, screen: pygame.Surface) -> None:
         pages = self._cutin_pages   # type: ignore[attr-defined]   # list[Line]
         idx   = self._cutin_idx     # type: ignore[attr-defined]
@@ -194,7 +196,9 @@ class GameSceneOverlayMixin:
             return
         line  = pages[idx]
         total = len(pages)
-        hint = f"{idx + 1}/{total}  ENTER: 次へ" if idx < total - 1 else "ENTER: 戦闘再開"
+        accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
+        hint = (f"{idx + 1}/{total}  {accept}: 次へ"
+                if idx < total - 1 else f"{accept}: 戦闘再開")
         draw_combat_panel(
             screen,
             self.game.resources,  # type: ignore[attr-defined]
@@ -206,7 +210,7 @@ class GameSceneOverlayMixin:
             style=COMBAT_PURPLE_STYLE,
         )
 
-    # ── ボス撃破後セリフ（ENTERで送る）────────────────────────
+    # ── ボス撃破後セリフ（決定アクションで送る）──────────────
     def _draw_defeat_dialogue(self, screen: pygame.Surface) -> None:
         if not hasattr(self, "_defeat_dialogue_font") or self._defeat_dialogue_font is None:  # type: ignore[attr-defined]
             self._defeat_dialogue_font = self.game.resources.pixelfont(26)  # type: ignore[attr-defined]
@@ -217,11 +221,12 @@ class GameSceneOverlayMixin:
             return
         line  = pages[idx]
         total = len(pages)
+        accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
 
         if idx < total - 1:
-            hint = f"{idx + 1}/{total}  ENTER: 次へ"
+            hint = f"{idx + 1}/{total}  {accept}: 次へ"
         else:
-            hint = "ENTER: 続ける"
+            hint = f"{accept}: 続ける"
         draw_combat_panel(
             screen,
             self.game.resources,  # type: ignore[attr-defined]

@@ -95,9 +95,8 @@ class BlackholeScene(Scene):
             return
 
         inp = self.game.input
-        advance = (
-            inp.is_held_with_repeat(pygame.K_RETURN, 0.25, 0.12)
-            or inp.is_held_with_repeat(pygame.K_SPACE, 0.25, 0.12)
+        advance = inp.is_action_held_with_repeat(
+            "ui_accept", initial_delay=0.25, repeat_interval=0.12,
         )
         if advance:
             if not self._is_text_complete():
@@ -107,7 +106,7 @@ class BlackholeScene(Scene):
                 self._enter_page()
             else:
                 self._begin_finish()
-        if inp.is_just_pressed(pygame.K_x):
+        if inp.is_action_just_pressed("ui_back"):
             self._begin_finish()
 
     def _enter_page(self) -> None:
@@ -344,10 +343,17 @@ class BlackholeScene(Scene):
         )
         noisy = pg.speaker == KARONARU and self._noise_level > 0.1
         transform = (lambda s: self._noisy_text(s, self._noise_level)) if noisy else None
+        accept = self.game.settings.key_display("ui_accept")
+        back = self.game.settings.key_display("ui_back")
+        if self._page < len(self._pages) - 1:
+            hint = f"{accept}: 次へ   {back}: スキップ"
+        else:
+            hint = f"{accept}: 続ける   {back}: スキップ"
         draw_combat_panel(
             screen, self.game.resources, pg.speaker, pg.lines,
             style=COMBAT_BLUE_STYLE, chars=int(self._chars),
             complete=self._is_text_complete(),
+            page_index=self._page, total_pages=len(self._pages), hint_text=hint,
             text_transform=transform,
             text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
         )
