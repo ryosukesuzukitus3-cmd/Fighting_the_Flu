@@ -2,11 +2,10 @@
 from __future__ import annotations
 import math
 import random
-from pathlib import Path
 import pygame
 
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
-import pygame
+from src.core.registries import next_stage_id
 from src.scenes.game.config import (
     POST_BOSS_AUTO_TIMEOUT, POST_BOSS_FINAL_TIMEOUT, POST_BOSS_EDGE_MARGIN,
     MAGNET_SPEED, FINAL_SLOW_FACTOR,
@@ -225,9 +224,7 @@ class GameScenePostBossMixin:
         self.enemy_bullets.empty()  # type: ignore[attr-defined]
         self.laser.state = "ready"  # type: ignore[attr-defined]
 
-        next_id   = self._stage_id + 1  # type: ignore[attr-defined]
-        next_path = Path("data") / "stages" / f"stage{next_id}.json"
-        self._post_boss_next_id = next_id if next_path.exists() else None  # type: ignore[attr-defined]
+        self._post_boss_next_id = next_stage_id(self._stage_id)  # type: ignore[attr-defined]
         is_final = (self._post_boss_next_id is None)
 
         if not is_final:
