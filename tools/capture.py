@@ -14,6 +14,9 @@
   # ステージ4 のボス戦・第3形態（頑固王サワグチ）を撮る
   python tools/capture.py --stage 4 --boss --form 3 --frames 60
 
+  # 特定のボス攻撃を固定して撮る
+  python tools/capture.py --stage 4 --boss --form 3 --pattern mega_beam --shots 20
+
   # 武器フル強化で弾を撃たせて 5 枚連番
   python tools/capture.py --stage 2 --main 5 --laser 6 --homing 7 \
       --shots 5 --interval 8
@@ -67,6 +70,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
     p.add_argument("--boss", action="store_true", help="ボス戦へ即移行（演出をスキップして戦闘状態に）")
     p.add_argument("--form", type=int, choices=(1, 2, 3), default=1, help="ボスのフォーム（ステージ4のみ有効）")
+    p.add_argument("--pattern", help="ボス攻撃パターンを固定（--boss と併用）")
 
     p.add_argument("--main", type=int, default=0, help="メインウェポンLv 0-5")
     p.add_argument("--laser", type=int, default=0, help="レーザーLv 0-6")
@@ -146,26 +150,49 @@ def main(argv: list[str] | None = None) -> int:
                              hold=hold, invincible=args.invincible):
             print("warning: boss intro did not reach 'fighting' within frame cap", file=sys.stderr)
 
-    # 最初の撮影まで warmup
-    for _ in range(max(0, args.frames)):
-        step_frame(scene, dt=args.dt, hold=hold, invincible=args.invincible)
+    phase_owner = None
+    original_phase = None
+    if args.pattern:
+        if not args.boss or scene._boss is None:
+            print("--pattern requires --boss", file=sys.stderr)
+            pygame.quit()
+            return 2
+        from src.entities.enemies.boss import _PHASE_CONFIGS
+        patterns = {phase[1] for phases in _PHASE_CONFIGS.values() for phase in phases}
+        if args.pattern not in patterns:
+            print(f"unknown boss pattern {args.pattern!r}", file=sys.stderr)
+            pygame.quit()
+            return 2
+        fixed_phase = (1.0, args.pattern, 0.55)
+        phase_owner = type(scene._boss)
+        original_phase = phase_owner._phase
+        phase_owner._phase = property(lambda _boss: fixed_phase)
+        scene._boss._shoot_timer = 0.01
 
-    out_prefix = Path(args.out)
-    if not out_prefix.is_absolute():
-        out_prefix = ROOT / out_prefix
-    out_prefix.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # 最初の撮影まで warmup
+        for _ in range(max(0, args.frames)):
+            step_frame(scene, dt=args.dt, hold=hold, invincible=args.invincible)
 
-    saved: list[Path] = []
-    for i in range(max(1, args.shots)):
-        if i > 0:
-            for _ in range(max(1, args.interval)):
-                step_frame(scene, dt=args.dt, hold=hold, invincible=args.invincible)
-        if args.shots == 1:
-            out = out_prefix.with_suffix(".png")
-        else:
-            out = out_prefix.with_name(f"{out_prefix.name}_{i:02d}.png")
-        pygame.image.save(game.screen, str(out))
-        saved.append(out)
+        out_prefix = Path(args.out)
+        if not out_prefix.is_absolute():
+            out_prefix = ROOT / out_prefix
+        out_prefix.parent.mkdir(parents=True, exist_ok=True)
+
+        saved: list[Path] = []
+        for i in range(max(1, args.shots)):
+            if i > 0:
+                for _ in range(max(1, args.interval)):
+                    step_frame(scene, dt=args.dt, hold=hold, invincible=args.invincible)
+            if args.shots == 1:
+                out = out_prefix.with_suffix(".png")
+            else:
+                out = out_prefix.with_name(f"{out_prefix.name}_{i:02d}.png")
+            pygame.image.save(game.screen, str(out))
+            saved.append(out)
+    finally:
+        if phase_owner is not None and original_phase is not None:
+            phase_owner._phase = original_phase
 
     for path in saved:
         print(path)

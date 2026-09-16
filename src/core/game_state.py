@@ -26,6 +26,9 @@ class GameState:
     stage_start_weapon:    dict | None = None
     stage_start_companion: dict | None = None
 
+    # 1プレイ中に一度だけ表示する、ボスダウン説明バークの既読状態
+    boss_break_tutorial_shown: bool = False
+
     def take_carry(self) -> tuple[int, dict] | None:
         """引き継ぎデータを取り出す。データがなければ None を返す。"""
         if self.carry_hp is None or self.carry_weapon is None:

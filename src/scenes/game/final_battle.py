@@ -252,6 +252,10 @@ class FinalBattleDirector:
         self._final_seq = "return"
         self._show_final_banner("kouhatsu", 3.0)
         self.scene._boss_kill_flash_timer = 1.2   # 白閃光
+        self.scene._play_video_effect(
+            "radiant_flash", center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),
+            size=(SCREEN_WIDTH, 450),
+        )
         self.scene.game.sound.play_bgm("music/bgm/Rebirth_the_edge.mp3", volume=0.7)
         self.scene.game.sound.play_se_alias("SE_LIGHT")
         self._spawn_returning_karonaru()

@@ -230,6 +230,8 @@ class Boss(pygame.sprite.Sprite):
         self._shoot_delay_override: float | None = None
         # game_scene が注入。巨大レーザー発射時の画面シェイク用（None 可）。
         self.camera: "Camera | None" = None
+        # game_scene が注入。攻撃判定とは独立した動画エフェクトの再生口。
+        self.video_effect_fn = None
         # 超サイヤ人レーザーのチャージ中、game_scene が自機を吸い込むためのフラグ。
         self.suction_active: bool  = False
         self.suction_x:      float = 0.0
@@ -574,17 +576,19 @@ class Boss(pygame.sprite.Sprite):
             frames=zunda_charge_frames(self.game.resources), frame_mode="progress",
         )
 
-    def _mega_beam(self, by: float) -> LaserBeamSprite:
+    def _mega_beam(self, by: float, *, height: int = 210,
+                   damage: int = 28) -> LaserBeamSprite:
         # 極太・凶悪な本体レーザー（粒子砲 本体→放電を寿命で1周）。
+        # 藤井Form3も同じ素材を少し細くして使い、レーザー表現を統一する。
         width = max(80, int(self.sx - 18))
         return LaserBeamSprite(
             width / 2,
             by,
             width,
-            210,
+            height,
             palette=ZUNDA_PALETTE,
             lifetime=0.82,
-            damage=28,
+            damage=damage,
             warning_only=False,
             taper_time=0.20,
             frames=zunda_beam_frames(self.game.resources),
@@ -608,35 +612,6 @@ class Boss(pygame.sprite.Sprite):
             frames=zunda_beam_frames(self.game.resources),
             frame_mode="progress",
         )
-
-    def _laser_bullet(self, by: float, *, warning: bool = False, height: int = 46,
-                      warn_height: int = 12, damage: int = 18) -> EnemyBullet:
-        # Form3「巨大破壊光線」(mega_beam) 用の従来型レーザー弾（origin/main 由来）。
-        width = max(80, int(self.sx - 18))
-        h = warn_height if warning else height
-        bullet = EnemyBullet(
-            width / 2,
-            by,
-            0.0,
-            0.0,
-            0 if warning else damage,
-            size=(width, h),
-            color=(255, 230, 80) if warning else (255, 40, 55),
-            lifetime=0.28 if warning else 0.58,
-            terrain_passthrough=True,
-            warning_only=warning,
-        )
-        bullet.image.fill((0, 0, 0, 0))
-        if warning:
-            if h > 24:   # 極太ビームの予告は本体の太さを薄く示す（回避用）
-                pygame.draw.rect(bullet.image, (255, 110, 60, 46), (0, 0, width, h), border_radius=h // 2)
-            pygame.draw.rect(bullet.image, (255, 235, 90, 150), (0, h // 2 - 2, width, 4))
-            pygame.draw.rect(bullet.image, (255, 245, 160, 210), (0, h // 2 - 1, width, 2))
-        else:
-            pygame.draw.rect(bullet.image, (255, 35, 45, 120), (0, 0, width, h), border_radius=h // 2)
-            pygame.draw.rect(bullet.image, (255, 235, 210, 240), (0, h // 2 - 5, width, 10), border_radius=5)
-            pygame.draw.rect(bullet.image, (255, 100, 80, 190), (0, h // 2 - 15, width, 30), 2, border_radius=15)
-        return bullet
 
     def _forward_aim(self, sx: float, sy: float, player: "Player", tilt: float) -> tuple[float, float]:
         """右端から左へ進む駒に、プレイヤー方向へ控えめな上下の傾きを与える。"""
@@ -943,6 +918,8 @@ class Boss(pygame.sprite.Sprite):
                 self._shoot_delay_override = 0.62
             else:
                 enemy_bullets.add(self._mega_beam(by))
+                if self.video_effect_fn is not None:
+                    self.video_effect_fn("angel_flash", center=(bx - 120.0, by), size=(520, 293))
                 # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク＋発射音。
                 enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.28, by,
                                                    ZUNDA_PALETTE, max_radius=104, spikes=10))
@@ -988,6 +965,9 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage3: 砲台/子機の射線と交差する狙撃。
         elif pattern == "drone_cross":
+            if self.video_effect_fn is not None:
+                self.video_effect_fn("retro_lasers", center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),
+                                     size=(SCREEN_WIDTH, 450), opacity=210)
             for origin_y in (by - 70.0, by + 70.0):
                 dx = player.sx - bx
                 dy = player.sy - origin_y
@@ -1104,10 +1084,17 @@ class Boss(pygame.sprite.Sprite):
         # ── Form3: 巨大破壊光線。チャージ警告 → 極太レーザー。
         elif pattern == "mega_beam":
             if variant % 2 == 0:
-                enemy_bullets.add(self._laser_bullet(by, warning=True, warn_height=132))
+                enemy_bullets.add(self._charge_beam(by, 0.85, 160))
                 self._shoot_delay_override = 0.85
             else:
-                enemy_bullets.add(self._laser_bullet(by, height=128, damage=24))
+                enemy_bullets.add(self._mega_beam(by, height=160, damage=24))
+                enemy_bullets.add(LaserMuzzleFlash(
+                    self.sx - self.rect.width * 0.28, by,
+                    ZUNDA_PALETTE, max_radius=96, spikes=10,
+                ))
+                self.game.sound.play_se_alias("SE_LASER_FIRE", volume=0.55)
+                if self.camera is not None:
+                    self.camera.shake(8.0)
                 for off in (-120, -60, 60, 120):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -360.0, off * 0.1, 14,
                                                   radius=6, color=(255, 90, 70)))
@@ -1116,6 +1103,9 @@ class Boss(pygame.sprite.Sprite):
         # ── Form3: 時空破壊。外周から収縮する弾＋中心から拡散する弾。
         elif pattern == "void_break":
             cx, cy = SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5
+            if self.video_effect_fn is not None:
+                self.video_effect_fn("rupture_laser", center=(cx, cy),
+                                     size=(SCREEN_WIDTH, 450), opacity=210)
             for i in range(16):
                 a = math.radians(i * 22.5 + self._spiral_angle)
                 rx = cx + math.cos(a) * 360.0
