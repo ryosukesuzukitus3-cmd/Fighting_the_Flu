@@ -43,13 +43,19 @@ def _pygame_key_names() -> dict[int, str]:
     """Return one stable pygame constant name for each supported key code."""
     names: dict[int, str] = {}
     for name, value in vars(pygame).items():
-        if name.startswith("K_") and isinstance(value, int):
+        if (name.startswith("K_") and type(value) is int
+                and value != pygame.K_UNKNOWN and pygame.key.name(value)):
             names.setdefault(value, name)
     return names
 
 
 _PYGAME_KEY_NAMES = _pygame_key_names()
+_PYGAME_KEYS_BY_NAME = {
+    name: value for name, value in vars(pygame).items()
+    if name.startswith("K_") and type(value) is int and value in _PYGAME_KEY_NAMES
+}
 _MENU_NAV_KEYS = frozenset({pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT})
+_MENU_ACTIONS = ("ui_accept", "ui_back", "pause")
 
 
 class SettingsManager:
@@ -76,7 +82,7 @@ class SettingsManager:
                         if (
                             action in _DEFAULTS["key_bindings"]
                             and isinstance(key_name, str)
-                            and isinstance(getattr(pygame, key_name, None), int)
+                            and key_name in _PYGAME_KEYS_BY_NAME
                         )
                     }
                     self._data["key_bindings"].update(valid_bindings)
@@ -106,11 +112,11 @@ class SettingsManager:
         """アクション名 → pygame キー定数（int）を返す。未定義時はデフォルト値を使用。"""
         bindings = self._data.get("key_bindings", {})
         key_name = bindings.get(action) or _DEFAULTS["key_bindings"].get(action, "K_RETURN")
-        key = getattr(pygame, key_name, None)
-        if isinstance(key, int):
+        key = _PYGAME_KEYS_BY_NAME.get(key_name) if isinstance(key_name, str) else None
+        if key is not None:
             return key
         default_name = _DEFAULTS["key_bindings"].get(action, "K_RETURN")
-        return getattr(pygame, default_name, pygame.K_RETURN)
+        return _PYGAME_KEYS_BY_NAME[default_name]
 
     def get_key_bindings(self) -> dict[str, int]:
         """Return a detached action-to-pygame-key mapping in settings UI order."""
@@ -133,7 +139,7 @@ class SettingsManager:
 
     def _menu_binding_conflicts(self, action: str, key: int) -> bool:
         """Keep menu navigation usable while allowing pause/back to share a key."""
-        if action not in {"ui_accept", "ui_back", "pause"}:
+        if action not in _MENU_ACTIONS:
             return False
         if key in _MENU_NAV_KEYS:
             return True
@@ -143,17 +149,12 @@ class SettingsManager:
 
     def _repair_menu_binding_conflicts(self) -> None:
         """Repair hand-edited or legacy settings that could trap menu input."""
-        bindings = self._data["key_bindings"]
-        accept = self.get_key("ui_accept")
-        back = self.get_key("ui_back")
-        pause = self.get_key("pause")
-        if accept in _MENU_NAV_KEYS or accept in {back, pause}:
-            bindings["ui_accept"] = _DEFAULTS["key_bindings"]["ui_accept"]
-            accept = self.get_key("ui_accept")
-        if back in _MENU_NAV_KEYS or back == accept:
-            bindings["ui_back"] = _DEFAULTS["key_bindings"]["ui_back"]
-        if pause in _MENU_NAV_KEYS or pause == accept:
-            bindings["pause"] = _DEFAULTS["key_bindings"]["pause"]
+        if any(self._menu_binding_conflicts(action, self.get_key(action)) for action in _MENU_ACTIONS):
+            # Repair the group together. Resetting back/pause individually to X
+            # could otherwise create a fresh collision with a valid accept=X.
+            bindings = self._data["key_bindings"]
+            for action in _MENU_ACTIONS:
+                bindings[action] = _DEFAULTS["key_bindings"][action]
 
     def reset_key_bindings(self) -> None:
         """Restore every gameplay and UI action to its default key."""

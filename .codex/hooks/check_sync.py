@@ -1,64 +1,89 @@
-"""Stopフック: src/data/tools/docs のいずれかが変更されていたら
-gen_docs + check_consistency を自動実行する。
+"""Optional local consistency check; no automatic hook registration is required.
 
-不整合または docs ドリフトがあれば exit 2 + stderr にレポートを出力し、
-Claude にそのターンでの修正を促す。
-
-settings.json での登録:
-  "Stop": [{"hooks": [{"type": "command", "command": ".venv/Scripts/python .codex/hooks/check_sync.py"}]}]
+Run from any directory using this worktree's script path. The default only
+checks generated documentation. Use --write to regenerate it explicitly, or
+--changed-only to skip checks when no watched working-tree paths changed.
 """
 from __future__ import annotations
+
+import argparse
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
-PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path(__file__).parent.parent.parent))
-PYTHON      = str(PROJECT_DIR / ".venv" / "Scripts" / "python.exe")
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+_WATCH_PATHS = [
+    "src", "data", "assets", "tools", "docs", "tests", ".github",
+    ".codex", ".claude", "AGENTS.md", "CLAUDE.md", "main.py",
+    "game.spec", "pyproject.toml",
+]
 
-_WATCH_DIRS = ["src", "data", "tools", "docs"]
+
+def _project_python() -> str:
+    relative = ("Scripts", "python.exe") if os.name == "nt" else ("bin", "python")
+    candidate = PROJECT_DIR / ".venv" / Path(*relative)
+    return str(candidate) if candidate.is_file() else sys.executable
+
+
+def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env.setdefault("SDL_VIDEODRIVER", "dummy")
+    env.setdefault("SDL_AUDIODRIVER", "dummy")
+    return subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=PROJECT_DIR, env=env,
+    )
+
+
+def _output(result: subprocess.CompletedProcess[str]) -> str:
+    return "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
 
 
 def _has_changes() -> bool:
-    """git status で監視ディレクトリに変更があるか確認する。"""
-    result = subprocess.run(
-        ["git", "status", "--porcelain", "--", *_WATCH_DIRS],
-        capture_output=True, text=True, cwd=str(PROJECT_DIR)
-    )
+    result = _run(["git", "status", "--porcelain", "--", *_WATCH_PATHS])
+    if result.returncode != 0:
+        raise RuntimeError(f"git status failed ({result.returncode}):\n{_output(result)}")
     return bool(result.stdout.strip())
 
 
-def _run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=str(PROJECT_DIR))
+def _commands(write: bool) -> list[tuple[str, list[str]]]:
+    py = _project_python()
+    runner = str(PROJECT_DIR / "tools" / "run.py")
+    return [
+        ("docs", [py, runner, "docs" if write else "docs-check"]),
+        ("consistency", [py, runner, "check"]),
+    ]
 
 
-def main() -> None:
-    if not _has_changes():
-        sys.exit(0)  # 変更なし → スキップ（高速）
-
-    errors: list[str] = []
-
-    # 1. gen_docs で docs を自動再生成
-    r = _run([PYTHON, str(PROJECT_DIR / "tools" / "run.py"), "docs"])
-    if r.returncode != 0:
-        errors.append(f"gen_docs.py failed:\n{r.stderr.strip()}")
-    elif r.stdout.strip() and "no changes" not in r.stdout:
-        # docs が更新された場合は警告として stderr に出す（エラーではない）
-        print(r.stdout.strip(), file=sys.stderr)
-
-    # 2. 整合性チェック
-    r2 = _run([PYTHON, str(PROJECT_DIR / "tools" / "run.py"), "check"])
-    if r2.returncode != 0:
-        errors.append(f"check_consistency.py failed:\n{r2.stderr.strip()}")
-
-    if errors:
-        print("\n[check_sync] 整合性エラー: 次の問題を修正してください", file=sys.stderr)
-        for e in errors:
-            print(f"  - {e}", file=sys.stderr)
-        sys.exit(2)
-
-    sys.exit(0)
+def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--write", action="store_true", help="Regenerate docs before checking")
+    parser.add_argument("--changed-only", action="store_true", help="Skip an unchanged working tree")
+    args = parser.parse_args(argv)
+    try:
+        changed = _has_changes()
+        if args.changed_only and not changed:
+            return 0
+        errors = []
+        for label, cmd in _commands(args.write):
+            result = _run(cmd)
+            if result.returncode != 0:
+                errors.append(f"{label} failed ({result.returncode}):\n{_output(result)}")
+            elif result.stdout.strip():
+                print(result.stdout.strip())
+        if errors:
+            raise RuntimeError("\n".join(errors))
+    except (OSError, RuntimeError) as exc:
+        print(f"[check_sync] {exc}", file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

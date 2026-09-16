@@ -48,20 +48,10 @@ def test_cutscene_advance_uses_ui_accept_action() -> None:
     game = SimpleNamespace(
         input=_ActionInput(pressed={"ui_accept"}),
         sound=_Sound(),
+        resources=SimpleNamespace(pixelfont=lambda size: None),
     )
     scene = CutsceneScene(game, [page("narration", "test")], lambda: None)
-    scene._page = 0
-    scene._chars = 0.0
-    scene._blink = 0.0
-    scene._fx_time = 0.0
-    scene._shake_t = 0.0
-    scene._flash_t = 0.0
-    scene._glitch_t = 0.0
-    scene._fade_in_t = 0.0
-    scene._fade_out_active = False
-    scene._fade_out_t = 0.0
-    scene._finished = False
-    scene._type_se_cooldown = 0.0
+    scene.on_enter()
 
     scene.update(0.01)
 

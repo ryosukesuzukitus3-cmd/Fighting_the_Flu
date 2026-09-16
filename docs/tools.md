@@ -1,26 +1,37 @@
 # 補助ツール 使い方ガイド
 
-プロジェクトルート（`main.py` と同じ場所）で実行する。
+Python 3.11以上を使い、作業するworktreeのルート（`main.py` と同じ場所）で実行する。
+ゲームの初期操作は [README](../README.md#操作方法) を参照。通常操作のキーは初期設定を記載しており、設定画面で変更した場合はそのキーを使う。
+
+## A. 戦闘中の強化・持駒・停止
+
+- Wアイテムは自機と、同行している先輩にそれぞれ強化在庫を与える。各新規プレイの初回取得では自動で戦闘が止まり、2段の選択画面を開く。以後は在庫があるときにウェポン選択キー（初期値V）で開く。
+- メイン武器の通常強化はWIDE+まで。MEDICは最終決戦の先輩復帰時に解禁する3方向の貫通弾。
+- レーザーは装備後に設定のレーザーキー（初期値Space）で使用する。HUDのレーザー・強化・持駒のキー表示も現在の設定に従う。
+- 持駒キー（初期値B）は歩・金・龍を取得順に消費し、追尾弾を発射する。全画面弾消しではない。金・龍には短い無敵時間がある。
+- ポーズ中はコンボ時間も停止する。強化・停止型会話中にも持駒を消費しない。
+- ゲームオーバーの継続は有給を1日減らして現在章から再開し、スコアを維持する。武器・先輩・物語は章開始時、HPは全回復。「最初からやり直す」は第一章から新規開始し、有給・スコア・強化などを初期化する。有給0日では継続できない。
 
 ---
 
 ## B. デバッグモード（ゲーム内）
 
-ゲームを **通常起動**（`python main.py`）した状態で以下のキーが使える。
-`python -O main.py` で起動すると全デバッグ機能が除去される。
+ソースを最適化なしで起動（`python main.py`）した開発時だけ、以下のキーが使える。
+`python -O main.py` と配布EXEではデバッグ機能が除去される。
 
 | キー | 効果 |
 |------|------|
-| `F1` | 無敵トグル（ON 中は右上オーバーレイに `INV:ON` 表示） |
+| `F1` | 無敵トグル（情報表示中は右上に `INV:ON` 表示） |
 | `F2` | ウェポンアイテムを自機前方にドロップ |
 | `F3` | 現在の状態をターミナルに出力（HP・武器・コンボ・IntroState 等） |
 | `F4` | 押している間、ステージ中の進行を早送り（右上オーバーレイに `FFx6` 表示） |
 | `F5` | 現在のウェーブをスキップして次ウェーブを即スポーン（ボス演出中は無効） |
 | `F6` | 残りウェーブを全スキップしてボスを即スポーン（ALERT なし） |
 | `F7` | ウェポン状態を最大化 |
+| `F8` | デバッグ情報の表示・非表示を切り替える |
 | `Ctrl+1` ～ `Ctrl+9` | 登録済みステージへ即ワープ（会話シーンなどでも有効） |
 
-右上にデバッグオーバーレイが表示される（ステージ・HP・武器レベル・コンボ状態など）。
+右上のデバッグ情報（ステージ・HP・武器レベル・コンボ状態など）は通常ステージでは既定で非表示。F8で切り替える。stage 99では最初から表示する。
 
 ### タイトル画面のデバッグジャンプ
 
@@ -146,7 +157,7 @@ python tools/capture.py [オプション]
 | `--barrier` | バリア付与 |
 | `--frames N` | 最初の撮影までに進めるフレーム数（既定60） |
 | `--shots N` / `--interval N` | 連番の枚数とフレーム間隔（既定 1 / 12） |
-| `--hold fire,up,...` | 毎フレーム押し続けるキー（fire/laser/up/down/left/right、既定 fire） |
+| `--hold fire,up,...` | 保持する操作名（fire/laser/up/down/left/right、既定fire）。ゲームの現在のキー設定へ解決する |
 | `--invincible` / `--no-invincible` | 撮影中の死亡・点滅を防ぐ（既定 ON） |
 | `--dt SEC` | 1フレームの経過秒（既定 1/60） |
 | `--out PATH` | 出力先プレフィックス（既定 `captures/shot`） |
@@ -167,7 +178,7 @@ python tools/capture.py --stage 2 --shots 5 --interval 8 --out captures/seq
 python tools/capture.py --stage 1 --frames 120 --out captures/stage1_intro
 ```
 
-出力 PNG はそのまま画像として確認できるため、「変更 → 撮影 → 確認 → 修正」の視覚フィードバックループに使える。
+出力PNGで変更した場面を確認できる。capture/clipの操作保持は各Gameの設定キーへ変換し、保持しないフレームでは解除する。画像のPR添付やbefore/after一式の作成は必須ではない。
 連続アニメーションの体感は静止画では確認しきれないので、その場合は `--shots` の連番で複数フレームを並べる。
 
 ---
@@ -302,6 +313,65 @@ python tools/analyze_log.py --export csv
 
 ### ログデータについて
 
-- 保存場所: `data/playlogs/session_YYYYMMDD.jsonl`（1行1ラン）
+- 保存場所: 開発時は `data/playlogs/session_YYYYMMDD.jsonl`、Windows配布版は `%APPDATA%\InfuruToNoShito\playlogs\session_YYYYMMDD.jsonl`（1行1ラン）。実際の保存先は `user_data_dir()` に従う
 - `boss_killed` イベントへの weapon snapshot は今回のバージョンから記録開始。
   旧ログは WEAPON STATE AT BOSS KILL セクションが空になる。
+
+
+---
+
+## 配布EXEの実行検査
+
+`game.spec` でビルドしたEXEを対象にする。Pythonからのソース起動だけでは、この検査の代わりにならない。
+
+```powershell
+.venv/Scripts/python tools/run_packaged_smoke.py
+
+# 別の配布物とレポート保存先を指定する例
+.venv/Scripts/python tools/run_packaged_smoke.py --exe dist/InfuruToNoShito/InfuruToNoShito.exe --report build-reports/packaged-smoke.json
+```
+
+このツールはリポジトリ外の一時フォルダを作ってEXEを起動し、全章の地形・マスク読込、初期化・描画、次章判定、設定・ハイスコア・プレイログの保存と再読込を確認する。
+ユーザーデータも別の一時領域に隔離し、通常のプレイヤー保存データを変更しない。
+既定のレポートは `build-reports/packaged-smoke.json`。失敗はプロセス終了コードとJSONの両方で判定する。
+検査はヘッドレスであり、実ウインドウの入力・音・全編クリアは別途確認する。
+
+---
+
+## 開発用の任意チェック・HTMLレビュー
+
+`.codex/hooks.json` と `.claude/settings.json` の自動フック登録は空にしている。
+編集のたびのHTMLダイアログ、API呼び出し、ターン終了時の生成・停止は行わない。
+整合性は `tools/run.py docs-check` / `check` と関連テスト、CIで確認する。
+
+既存の `check_sync.py` は手動ツールとして使える。実行したスクリプトのあるworktreeを検査し、
+別の `CLAUDE_PROJECT_DIR` や実行時フォルダでは対象を変更しない。Gitや検査の失敗は診断と終了コード2を返す。
+
+```powershell
+# 文書生成差分と整合性を検査する。書き換えは行わない
+.venv/Scripts/python .codex/hooks/check_sync.py
+
+# 明示的に生成してから検査する
+.venv/Scripts/python .codex/hooks/check_sync.py --write
+
+# 監視対象の作業差分がない場合は省略する
+.venv/Scripts/python .codex/hooks/check_sync.py --changed-only
+```
+
+`.claude/hooks/check_sync.py` も同じオプションを持つ。
+どちらもホストアプリのフック対応状況には依存せず、手動実行できる。
+
+MarkdownのローカルHTML化も任意。ファイルを明示した場合だけ生成し、既定ではブラウザやAPIを呼ばない。
+
+```powershell
+.venv/Scripts/python .codex/hooks/md_to_html.py --file docs/design.md
+.venv/Scripts/python .codex/hooks/md_to_html.py --file docs/design.md --open
+```
+
+出力先は同じworktreeの `.html/`。失敗はstderrと非ゼロの終了コードで確認できる。
+`.claude/hooks/md_to_html.py` も同じ使い方。
+`--mode fancy` は有料APIを使う明示オプションで、追加依存 `anthropic` と環境変数 `FLU_HTML_MODEL` に利用するモデルの指定が必要。
+モデルを自動選択しない。通常のplainモードにはAPIキーも追加依存も不要。
+
+`tools/run.py pr-media` / `pr-html` / `pr-report` はリモートへ公開する別の任意ツールであり、
+ローカルHTML化だけではアップロードしない。PRに画像やHTMLを付けることは必須ではない。

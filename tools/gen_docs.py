@@ -76,7 +76,7 @@ def _gen_weapon_main() -> str:
         "rapid2": "超連射（発射間隔0.12s）",
         "wide1":  "正面＋斜め 2本発射",
         "wide2":  "正面＋斜め 3本発射",
-        "medic":  "回復弾追加（メディックモード）",
+        "medic":  "先輩復帰時に解禁する3方向貫通弾（通常強化の対象外）",
     }
     rows = ["| レベル | 種別 | 効果 |", "|---|---|---|"]
     for lv, name in enumerate(_MAIN_LEVELS):

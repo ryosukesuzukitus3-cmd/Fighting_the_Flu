@@ -172,21 +172,57 @@ class GameSceneOverlayMixin:
     # ── 戦闘中セリフ（自動タイムアウト）───────────────────────
     def _draw_boss_dialogue(self, screen: pygame.Surface) -> None:
         if self._boss_dialogue_font is None:  # type: ignore[attr-defined]
-            self._boss_dialogue_font = self.game.resources.pixelfont(26)  # type: ignore[attr-defined]
+            self._boss_dialogue_font = self.game.resources.pixelfont(16)  # type: ignore[attr-defined]
 
         line_dur = getattr(self, "_boss_dialogue_line_dur", BOSS_DIALOGUE_DURATION)
-        t = self._boss_dialogue_timer / line_dur  # type: ignore[attr-defined]
-        alpha = 240 if t > 0.15 else int(240 * (t / 0.15))
-
+        t = self._boss_dialogue_timer / max(0.001, line_dur)  # type: ignore[attr-defined]
+        alpha = max(0, min(240, int(240 * t / 0.15)))
         speaker = getattr(self, "_boss_dialogue_speaker", "")
-        draw_combat_panel(
-            screen,
-            self.game.resources,  # type: ignore[attr-defined]
-            speaker,
-            self._boss_dialogue_lines,  # type: ignore[attr-defined]
-            style=COMBAT_PURPLE_STYLE,
-            alpha=alpha,
-        )
+        text = " ".join(self._boss_dialogue_lines)  # type: ignore[attr-defined]
+        if not text:
+            return
+        box_w = screen.get_width() - 32
+        text_w = box_w - 24
+        font = self._boss_dialogue_font
+
+        def wrap(body, selected_font):
+            rows, row = [], ""
+            for char in body:
+                if row and selected_font.size(row + char)[0] > text_w:
+                    rows.append(row)
+                    row = ""
+                row += char
+            if row:
+                rows.append(row)
+            return rows
+
+        rows = wrap(text, font)
+        if len(rows) > 2:
+            font = self.game.resources.pixelfont(14)  # type: ignore[attr-defined]
+            rows = wrap(text, font)
+        name_font = self.game.resources.pixelfont(14)  # type: ignore[attr-defined]
+        name = speaker_name(speaker)
+        name_h = name_font.get_linesize() if name else 0
+        row_h = font.get_linesize()
+        box_h = 12 + name_h + row_h * len(rows)
+        # Timed barks stay above the boss gauge and leave the central fight visible.
+        box_y = screen.get_height() - 58 - box_h
+        panel = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        panel.fill((10, 12, 24, min(150, alpha)))
+        color = speaker_color(speaker)
+        pygame.draw.line(panel, (*color, alpha), (0, 0), (box_w - 1, 0), 2)
+        y = 5
+        if name:
+            label = name_font.render(name, True, color)
+            label.set_alpha(alpha)
+            panel.blit(label, (12, y))
+            y += name_h
+        for row in rows:
+            label = font.render(row, True, (255, 240, 230))
+            label.set_alpha(alpha)
+            panel.blit(label, (12, y))
+            y += row_h
+        screen.blit(panel, (16, box_y))
 
     # ── 戦闘中カットイン（戦闘停止・決定アクションで送る）─────
     def _draw_combat_cutin(self, screen: pygame.Surface) -> None:

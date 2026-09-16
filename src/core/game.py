@@ -42,6 +42,12 @@ class Game:
         self._next_scene: Scene | None = None
         self._next_reinit: bool = True
 
+    def start_new_run(self) -> None:
+        """Reset a whole journey explicitly; entering stage 1 can also be a continue."""
+        self.shared = GameState()
+        self.story.begin_journey()
+        self.playlog.begin_run()
+
     def change_scene(self, scene: Scene, reinit: bool = True) -> None:
         """シーン遷移。reinit=False のとき on_enter() を呼ばずに復帰する。"""
         self._next_scene  = scene
@@ -76,7 +82,14 @@ class Game:
                 self._next_reinit = True   # フラグをデフォルトにリセット
                 if reinit:
                     self._scene.on_enter()
-                fade_timer = _SCENE_FADE_SEC
+                # Resuming play/settings must reveal the existing screen immediately.
+                # Narrative scenes own their fades; only menus use this short transition.
+                fade_timer = (
+                    _SCENE_FADE_SEC
+                    if reinit and type(self._scene).__name__ in
+                    {"TitleScene", "GameOverScene", "StageClearScene", "HighScoreScene"}
+                    else 0.0
+                )
 
             # フレーム先頭: just_pressed/released をクリア
             self.input.pre_update()

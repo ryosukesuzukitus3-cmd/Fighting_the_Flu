@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pygame
+import pytest
 from PIL import Image
 
 from src.core.video_effects import DEBUG_ONLY_VIDEO_EFFECT_KEYS, VIDEO_EFFECT_SPECS
@@ -14,6 +15,40 @@ from tools.capture import _parse_args as parse_capture_args
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("opacity", [0, 64, 145, 255])
+def test_additive_effect_opacity_controls_pixels_without_mutating_source(opacity):
+    from src.core.video_effects import VideoEffectSpec
+    from src.entities.video_effect import VideoEffectLayer, _PlayingEffect
+
+    source = pygame.Surface((1, 1), pygame.SRCALPHA)
+    source.fill((255, 255, 255, 255))
+    effect = _PlayingEffect(VideoEffectSpec("test", "synthetic", "test", 1, 1, (1, 1)),
+                            (source,), (0, 0), (1, 1), opacity=opacity)
+    layer = VideoEffectLayer(None)
+    layer._effects.append(effect)
+    target = pygame.Surface((1, 1), pygame.SRCALPHA)
+    target.fill((0, 0, 0, 255))
+    layer.draw(target)
+    assert tuple(target.get_at((0, 0)))[:3] == (opacity, opacity, opacity)
+    assert tuple(source.get_at((0, 0))) == (255, 255, 255, 255)
+
+
+def test_alpha_effect_still_uses_surface_opacity():
+    from src.core.video_effects import VideoEffectSpec
+    from src.entities.video_effect import VideoEffectLayer, _PlayingEffect
+
+    source = pygame.Surface((1, 1), pygame.SRCALPHA)
+    source.fill((255, 255, 255, 255))
+    effect = _PlayingEffect(VideoEffectSpec("test", "synthetic", "test", 1, 1, (1, 1), "alpha"),
+                            (source,), (0, 0), (1, 1), opacity=0)
+    layer = VideoEffectLayer(None)
+    layer._effects.append(effect)
+    target = pygame.Surface((1, 1), pygame.SRCALPHA)
+    target.fill((20, 30, 40, 255))
+    layer.draw(target)
+    assert tuple(target.get_at((0, 0))) == (20, 30, 40, 255)
 
 
 def test_all_supplied_video_effect_sequences_are_complete() -> None:
@@ -82,15 +117,51 @@ def test_accepted_effects_are_wired_outside_the_debug_gallery() -> None:
             assert f'"{spec.key}"' in source, f"{spec.key} is unexpectedly debug-only"
 
 
-def test_homing_uses_larger_missile_until_final_tokin_upgrade() -> None:
-    bullet_source = (ROOT / "src" / "entities" / "bullets" / "player_bullet.py").read_text(
-        encoding="utf-8"
-    )
-    weapon_source = (ROOT / "src" / "entities" / "weapon.py").read_text(encoding="utf-8")
-    assert "_MISSILE_SIZE = (34, 20)" in bullet_source
-    assert "pygame.transform.smoothscale(frame, (34, 15))" in bullet_source
-    assert "canvas = pygame.Surface(_MISSILE_SIZE" in bullet_source
-    assert "missile_skin=self.homing_level < 7" in weapon_source
+@pytest.mark.parametrize("level", [1, 6, 7])
+def test_homing_animates_missile_until_tokin_without_enlarging_collision(monkeypatch, level):
+    from src.core.camera import Camera
+    from src.entities.bullets.player_bullet import HomingBullet
+    from src.entities.weapon import Weapon
+    import src.entities.video_effect as video_effect
+
+    def colored(color):
+        surface = pygame.Surface((52, 30), pygame.SRCALPHA)
+        surface.fill(color)
+        return surface
+
+    frames = (colored("red"), colored("green"))
+    requested = []
+
+    def load_frames(resources, key):
+        requested.append(key)
+        return frames
+
+    monkeypatch.setattr(video_effect, "load_video_effect_frames", load_frames)
+    monkeypatch.setattr(HomingBullet, "_missile_frames", None)
+    monkeypatch.setattr(HomingBullet, "_base_image", None)
+    tokin = pygame.Surface((26, 20), pygame.SRCALPHA)
+    tokin.fill("blue")
+    game = SimpleNamespace(resources=SimpleNamespace(image=lambda path: tokin))
+    weapon = Weapon()
+    weapon.homing_level = level
+    bullets = [bullet for bullet in weapon.get_bullets(100, 100, pygame.sprite.Group(), game)
+               if isinstance(bullet, HomingBullet)]
+    assert bullets
+    assert all(bullet.rect.size == (26, 20) for bullet in bullets)
+    # These tiers each include a horizontal shot, so rotation does not alter its bounds.
+    bullet = next(bullet for bullet in bullets if bullet.vy == 0)
+    before = bullet.image.get_at((13, 10))
+    bullet.update(0.1, Camera())
+    assert bullet.rect.size == (26, 20)
+    assert bullet.world_x > 100
+    after = bullet.image.get_at((13, 10))
+    if level < 7:
+        assert requested == ["missile_loop"]
+        assert before == pygame.Color("red")
+        assert after == pygame.Color("green")
+    else:
+        assert requested == []
+        assert before == after == pygame.Color("blue")
 
 
 def test_boss_break_is_subdued_and_explained_only_once() -> None:

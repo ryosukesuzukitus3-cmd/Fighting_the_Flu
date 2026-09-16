@@ -41,6 +41,9 @@ class GameSceneDebugMixin:
 
     def _debug_handle_input(self) -> bool:
         inp  = self.game.input          # type: ignore[attr-defined]
+        if inp.is_just_pressed(pygame.K_F8):
+            self._debug_overlay_visible = not getattr(
+                self, "_debug_overlay_visible", self._is_debug_stage)
         # F1: 無敵トグル
         if inp.is_just_pressed(pygame.K_F1):
             self._debug_invincible = not self._debug_invincible  # type: ignore[attr-defined]

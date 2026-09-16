@@ -98,7 +98,7 @@ class KaronaruMaxBullet(Bullet):
 
 
 _TOKIN_SIZE = (26, 20)   # 最終強化「と金」のサイズ
-_MISSILE_SIZE = (34, 20)  # 通常ホーミング。テポドンを従来より少し大きく見せる
+_MISSILE_SIZE = (26, 20)  # 演出を変更しても既存の当たり判定寸法を維持する
 
 
 class HomingBullet(Bullet):
@@ -131,7 +131,7 @@ class HomingBullet(Bullet):
             raw_frames = load_video_effect_frames(game.resources, "missile_loop")
             missile_frames = []
             for frame in raw_frames:
-                scaled = pygame.transform.smoothscale(frame, (34, 15))
+                scaled = pygame.transform.smoothscale(frame, (26, 15))
                 canvas = pygame.Surface(_MISSILE_SIZE, pygame.SRCALPHA)
                 canvas.blit(scaled, scaled.get_rect(center=canvas.get_rect().center))
                 missile_frames.append(canvas)

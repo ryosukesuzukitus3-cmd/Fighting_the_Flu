@@ -139,9 +139,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"unknown stage {args.stage} (available: {sorted(valid)})", file=sys.stderr)
         return 2
 
-    hold = hold_keys_from_names(args.hold)
-
     game, scene = build_game_scene(args.stage)
+    hold = hold_keys_from_names(args.hold, game.settings)
     apply_weapon(scene, main=args.main, laser=args.laser, homing=args.homing,
                  speed=args.speed, magnet=args.magnet, barrier=args.barrier)
 

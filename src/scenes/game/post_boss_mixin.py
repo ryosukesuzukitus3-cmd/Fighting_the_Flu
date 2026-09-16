@@ -253,12 +253,12 @@ class GameScenePostBossMixin:
         self._boss = None  # type: ignore[attr-defined]
         self._post_boss = True  # type: ignore[attr-defined]
 
-        # 撃破後セリフ設定（爆発演出が落ち着く 2.5 秒後に表示開始）
+        # 最終戦も決着の会話を再生してから朝へ進む。閃光・爆発後に表示開始。
         pages = BOSS_DEFEAT.get(sid, [])   # list[Line]
-        self._defeat_dialogue_pages  = [] if is_final else pages  # type: ignore[attr-defined]
+        self._defeat_dialogue_pages  = list(pages)  # type: ignore[attr-defined]
         self._defeat_dialogue_index  = 0  # type: ignore[attr-defined]
         self._defeat_dialogue_active = False  # type: ignore[attr-defined]
-        self._defeat_dialogue_delay  = 0.0 if is_final else (2.5 if pages else 0.0)  # type: ignore[attr-defined]
+        self._defeat_dialogue_delay  = (1.2 if is_final else 2.5) if pages else 0.0  # type: ignore[attr-defined]
 
     def _go_next_after_boss(self) -> None:
         """ボス後フェーズ終了: 武器・HP・先輩強化を引き継いで次シーンへ遷移する。"""

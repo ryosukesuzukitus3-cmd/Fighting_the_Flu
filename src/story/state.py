@@ -4,7 +4,7 @@
 シーンをまたいで保持する。NEW GAME 開始時に reset() で初期化する。
 """
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 
 @dataclass
@@ -17,6 +17,13 @@ class StoryState:
     blackhole_event_done: bool = False   # 承認欲求ブラックホールイベント済み
     final_self_distanced: bool = False   # 頑固王と自分の分離に成功
     tutorial_done:        bool = False   # 対話型チュートリアル（準備運動）を提示済み
+
+    def snapshot(self) -> dict[str, bool]:
+        return asdict(self)
+
+    def restore(self, snapshot: dict[str, bool]) -> None:
+        for name in self.__dataclass_fields__:
+            setattr(self, name, bool(snapshot.get(name, False)))
 
     def reset(self) -> None:
         """NEW GAME 開始時に初期状態へ戻す。"""

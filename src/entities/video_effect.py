@@ -61,7 +61,14 @@ class _PlayingEffect:
             image = pygame.transform.rotate(image, self.angle)
         if self.opacity < 255:
             image = image.copy()
-            image.set_alpha(self.opacity)
+            if self.spec.blend == "add":
+                # SDL additive blits ignore the Surface alpha. Scale RGB, the
+                # values actually added to the destination, without touching
+                # the shared source frame.
+                image.fill((self.opacity, self.opacity, self.opacity, 255),
+                           special_flags=pygame.BLEND_RGBA_MULT)
+            else:
+                image.set_alpha(self.opacity)
         # Keep only the current scaled frame.  Full-screen effects can contain
         # 30+ frames; retaining every 800x600 transform would otherwise add
         # tens of megabytes for a cue that only lives for a second or two.

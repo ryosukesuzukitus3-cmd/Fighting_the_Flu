@@ -1,90 +1,42 @@
 ---
 name: pr-precheck
-description: PR を作成する直前・「マージしていい？」に答える前に必ず通すチェックリスト。PR作成・完了宣言の前に使用。
+description: PRの作成やレビュー時に、必要な確認を選ぶための任意の手引き。
 ---
 
-# pr-precheck
+# PR確認の手引き
 
-PR 作成・マージ可否の完了宣言の前に必ず通す確認ゲート。詳細な運用方針は
-`CLAUDE.md` の「Claude PR運用フロー」「PR 可視化」を参照（本スキルはそこから導出した
-実行コマンド列とゲートのみを持つ薄いラッパー）。
+詳細な方針は `CLAUDE.md` の「作業場所とPR」「検証と証拠」を参照する。
+この手引きを毎回呼ぶ必要はない。変更に関係する確認を選び、既に揃っている証拠を再利用する。
 
-PowerShell は 1コール = 1コマンド。変数展開は使わず、スラッシュ区切りの絶対パスを直書きする。
-以下 `<wt>` はタスクの worktree 絶対パス（例: `C:/02_work/01_Fighting_the_Flu-worktrees/flu-claude-<短いタスク名>`）。
+## 提出内容を確認する
 
-## 1. 全コミット push 照合
+- 作業treeの未コミット変更と差分を確認し、他の作業を混ぜない。
+- PR作成後は、ローカルで検証したコミットとPR先端の `headRefOid` を照合する。不一致をpush漏れと決めつけず、他の更新やブランチも確認する。
+- PRのCI状態を確認する。失敗は原因を調べ、未解決のものを報告する。
 
-push 漏れのまま「マージOK」と宣言した実害があるため、必ず二段階で確認する。
-
-PR作成前:
-
-```
-git -C <wt> status --short --branch
-```
-
-**ゲート**: `ahead`/`behind` が 0 であること。ahead が残っていれば push してから次に進む。
-
-PR作成後（マージ可否を答える直前）:
-
-```
+```powershell
+git status --short --branch
+git diff --check
+git rev-parse HEAD
 gh pr view <N> --json headRefOid
-```
-
-```
-git -C <wt> rev-parse HEAD
-```
-
-**ゲート**: 両方の commit hash が一致することを確認してから「マージしていい」と答える。
-一致しない場合は push 漏れなので、押してから再照合する。
-
-## 2. 検証の実行
-
-影響範囲に応じて実行する。
-
-```
-<wt>/.venv/Scripts/python <wt>/tools/run.py check
-```
-
-```
-<wt>/.venv/Scripts/python <wt>/tools/run.py test
-```
-
-必要なら再キャプチャ（3.参照）。
-
-**ゲート**: 報告する検証結果は、実際に実行したツール出力を根拠にする。
-実行していない検証を「実行済み」「パス」と書かない。
-
-## 3. 見た目変更がある場合
-
-```
-<wt>/.venv/Scripts/python <wt>/tools/run.py capture ...（before/after を captures/ 配下に出力）
-```
-
-```
-<wt>/.venv/Scripts/python <wt>/tools/run.py pr-media <wt>/captures/before.png <wt>/captures/after.png
-```
-
-**ゲート**: 調査用に撮った一時画像は PR の差分（コミット対象）に混ぜない。
-`pr-media` で media ブランチにアップロードした URL だけを PR 本文に埋め込む。
-
-## 4. PR 本文はファイル化
-
-ヒアドキュメント連結は権限照合と文字化けの事故源になるため、本文は必ずファイルに書き出してから渡す。
-
-```
-gh pr create --title "..." --body-file <wt>/tmp/pr_body.md
-```
-
-## 5. PR 作成後の CI 確認
-
-```
 gh pr checks <N>
 ```
 
-**ゲート**: 落ちている場合、原因が自分の変更由来か main 由来（既知の赤）かを切り分けてから報告する。
-切り分けずに「CI失敗＝自分の変更のせい」と決めつけない。
+## 変更に合う検証を選ぶ
 
-## 参照
+```powershell
+.venv/Scripts/python tools/run.py docs-check
+.venv/Scripts/python tools/run.py check
+.venv/Scripts/python tools/run.py test
+```
 
-- `CLAUDE.md` > 「Claude PR運用フロー」
-- `CLAUDE.md` > 「PR 可視化」
+画面や操作の変更では必要な場面を確認し、実行した検証だけを報告する。
+before/after画像、画像のPR添付、`pr-media`によるアップロードは任意とする。
+調査用の一時画像は通常のソース差分へ混ぜない。
+
+PR本文には、問題、変更後の振る舞い、検証結果、残る制約を簡潔に書く。
+複数行の本文をGitHub CLIへ渡す場合は `--body-file` を使い、引用符や改行の崩れを避ける。
+
+```powershell
+gh pr create --title "..." --body-file tmp/pr_body.md
+```

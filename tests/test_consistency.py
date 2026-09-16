@@ -3511,16 +3511,6 @@ def test_boss_gate_clamps_camera_and_player_before_room() -> None:
     assert scene.camera.x + scene.player.rect.right <= 3650
 
 
-def test_final_boss_post_defeat_does_not_require_extra_dialogue_wait() -> None:
-    from src.scenes.game.config import POST_BOSS_FINAL_TIMEOUT
-
-    src = (ROOT / "src" / "scenes" / "game" / "post_boss_mixin.py").read_text(encoding="utf-8")
-    assert POST_BOSS_FINAL_TIMEOUT <= 2.5
-    assert "[] if is_final else pages" in src
-    assert "0.0 if is_final else" in src
-    assert "FFVI_勝利のファンファーレ.mp3" in src
-
-
 def test_stage3_blackhole_uses_actor_scene() -> None:
     # 承認欲求ブラックホールは専用の俳優シーン（BlackholeScene）で再生する。
     # 物語タイムラインの "3->4" ビートが scene="blackhole" を持ち、story_flow が

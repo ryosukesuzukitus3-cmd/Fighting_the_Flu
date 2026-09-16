@@ -54,7 +54,7 @@ class Player(pygame.sprite.Sprite):
         self._cooldown:       float = 0.0
         self.shoot_requested: bool  = False
         self.fire_held:       bool  = False
-        self.laser_fire_held: bool  = False   # レーザー用: SPACE長押し状態
+        self.laser_fire_held: bool  = False   # 設定したレーザー操作の長押し状態
 
     @property
     def is_invincible(self) -> bool:
@@ -137,9 +137,9 @@ class Player(pygame.sprite.Sprite):
         self.weapon._homing_timer = max(0.0, self.weapon._homing_timer - dt)
         self.shoot_requested = False
 
-        # 射撃（長押し連射）・レーザー保持判定（レーザーはVキー専用）
+        # 射撃（長押し連射）・レーザー保持判定は設定した操作キーに従う。
         self.fire_held = inp.is_action_pressed("fire")
-        self.laser_fire_held = inp.is_pressed(pygame.K_SPACE)
+        self.laser_fire_held = inp.is_action_pressed("laser")
         if self.fire_held and self._cooldown <= 0.0:
             self.shoot_requested = True
             self._cooldown = self.weapon.shoot_cooldown

@@ -71,7 +71,10 @@ class TitleScene(Scene):
             self._cursor = (self._cursor + 1) % len(_MENU)
             self.game.sound.play_se("music/se/メニュー操作SE：カーソル移動.mp3", volume=0.5)
             moved = True
-        if inp.is_action_just_pressed("ui_accept"):
+        # Preserve the original title shortcut only with the default confirm key.
+        legacy_space = (self.game.settings.get_key("ui_accept") == pygame.K_RETURN
+                        and inp.is_just_pressed(pygame.K_SPACE))
+        if inp.is_action_just_pressed("ui_accept") or legacy_space:
             self._select()
             moved = True
 
@@ -86,7 +89,7 @@ class TitleScene(Scene):
                 self._idle_timer = _IDLE_DELAY
                 self._idle_index = (self._idle_index + 1) % len(TITLE_IDLE)
         # デバッグジャンプ（python -O で除去）
-        if __debug__:
+        if __debug__ and not moved:
             if inp.is_just_pressed(pygame.K_d):
                 from src.scenes.game_scene import GameScene
                 self.game.change_scene(GameScene(self.game, stage_id=99))
@@ -182,6 +185,8 @@ class TitleScene(Scene):
             idle.set_alpha(a)
             screen.blit(idle, (cx - idle.get_width() // 2, SCREEN_HEIGHT - 72))
         accept = self.game.settings.key_display("ui_accept")
+        if self.game.settings.get_key("ui_accept") == pygame.K_RETURN:
+            accept += " / SPACE"
         hint = self._small_font.render(f"↑↓  {accept}: 決定", True, (150, 146, 158))
         hint.set_alpha(150)
         screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 40))

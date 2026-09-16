@@ -577,7 +577,7 @@ class Boss(pygame.sprite.Sprite):
         )
 
     def _mega_beam(self, by: float, *, height: int = 210,
-                   damage: int = 28) -> LaserBeamSprite:
+                   damage: int = 28, lifetime: float = 0.82) -> LaserBeamSprite:
         # 極太・凶悪な本体レーザー（粒子砲 本体→放電を寿命で1周）。
         # 藤井Form3も同じ素材を少し細くして使い、レーザー表現を統一する。
         width = max(80, int(self.sx - 18))
@@ -587,7 +587,7 @@ class Boss(pygame.sprite.Sprite):
             width,
             height,
             palette=ZUNDA_PALETTE,
-            lifetime=0.82,
+            lifetime=lifetime,
             damage=damage,
             warning_only=False,
             taper_time=0.20,
@@ -1087,7 +1087,7 @@ class Boss(pygame.sprite.Sprite):
                 enemy_bullets.add(self._charge_beam(by, 0.85, 160))
                 self._shoot_delay_override = 0.85
             else:
-                enemy_bullets.add(self._mega_beam(by, height=160, damage=24))
+                enemy_bullets.add(self._mega_beam(by, height=128, damage=24, lifetime=0.58))
                 enemy_bullets.add(LaserMuzzleFlash(
                     self.sx - self.rect.width * 0.28, by,
                     ZUNDA_PALETTE, max_radius=96, spikes=10,

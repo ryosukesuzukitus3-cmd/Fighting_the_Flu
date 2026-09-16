@@ -8,6 +8,7 @@
 /.uv-cache/
 /.pytest_cache/
 /captures/
+/build-reports/
 /tmp/
 
 # Python キャッシュ

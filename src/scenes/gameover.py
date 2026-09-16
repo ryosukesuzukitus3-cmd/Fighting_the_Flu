@@ -34,7 +34,12 @@ class GameOverScene(Scene):
 
     def _do_continue(self) -> None:
         """現在のステージをステージ開始時のウェポン・先輩強化状態で再スタート。"""
+        if self.game.shared.lives <= 0:
+            return
         self.game.shared.lives -= 1
+        self.game.playlog.begin_run()
+        if self.game.shared.stage_start_story is not None:
+            self.game.story.restore(self.game.shared.stage_start_story)
         stage = self._stage
         wdata = self.game.shared.stage_start_weapon
         # HP は最大100制。コンティニューは全回復（残機消費が十分なペナルティ）。
@@ -52,6 +57,7 @@ class GameOverScene(Scene):
 
     def _do_retry(self) -> None:
         """ステージ1からやり直し（残機リセット）。"""
+        self.game.start_new_run()
         from src.scenes.game_scene import GameScene
         self.game.change_scene(GameScene(self.game, stage_id=1))
 
