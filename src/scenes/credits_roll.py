@@ -7,6 +7,8 @@ from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.lines import Page
 from src.story.speakers import speaker_name, speaker_color, DEFAULT_TEXT_COLOR, NARRATION
+from src.scenes.dialogue_panel import _wrap_lines
+from src.scenes.meta_ui import draw_meta_footer
 
 _SCROLL_SPEED = 40.5          # BGM を聴かせつつ、間延びしない速さ
 _FAST_MULT = 3.6
@@ -21,7 +23,7 @@ _TITLE_MARK = "■"             # セクション見出し（大・金・下線�
 _ROLE_MARK = "/"              # 役職ラベル（小・控えめ色）
 
 _TITLE_COLOR = (255, 220, 120)
-_ROLE_COLOR = (170, 164, 148)
+_ROLE_COLOR = (197, 205, 223)
 
 
 class CreditsRollScene(Scene):
@@ -34,10 +36,10 @@ class CreditsRollScene(Scene):
         self._font_title = self.game.resources.pixelfont(44)
         self._font_speaker = self.game.resources.pixelfont(22)
         self._font_name = self.game.resources.pixelfont(28)
-        self._font_role = self.game.resources.pixelfont(19)
+        self._font_role = self.game.resources.pixelfont(20)
         self._font_body = self.game.resources.pixelfont(24)
         self._font_small = self.game.resources.pixelfont(18)
-        self._hint_font = self.game.resources.pixelfont(16)
+        self._hint_font = self.game.resources.pixelfont(18)
         self._entries: list[tuple[str, str, tuple[int, int, int]]] = []
         self._build_entries()
         self._insert_final_gap()
@@ -105,10 +107,8 @@ class CreditsRollScene(Scene):
         self._draw_vignette(screen)
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
-        hint = self._hint_font.render(
-            f"{accept}: FAST   {back}: TITLE", True, (175, 170, 155),
-        )
-        screen.blit(hint, (SCREEN_WIDTH - hint.get_width() - 18, SCREEN_HEIGHT - 28))
+        action = "続ける" if self._hold_timer > 0 else "長押しで早送り"
+        draw_meta_footer(screen, self._hint_font, f"{accept}: {action}　　{back}: 終了")
 
     def _last_text_index(self) -> int | None:
         for i in range(len(self._entries) - 1, -1, -1):
@@ -174,19 +174,9 @@ class CreditsRollScene(Scene):
     def _append_line(self, text: str, kind: str, color: tuple[int, int, int]) -> None:
         font = self._font_for(kind, text)
         max_w = SCREEN_WIDTH - _SIDE_PAD * 2
-        if kind in ("title", "speaker") or font.size(text)[0] <= max_w:
-            self._entries.append((text, kind, color))
-            return
-
-        buf = ""
-        for ch in text:
-            if not buf or font.size(buf + ch)[0] <= max_w:
-                buf += ch
-            else:
-                self._entries.append((buf, "small", color))
-                buf = ch
-        if buf:
-            self._entries.append((buf, "small", color))
+        # Keep the original text size and role when a long credit wraps.
+        for line in _wrap_lines(font, (text,), max_w):
+            self._entries.append((line, kind, color))
 
     def _font_for(self, kind: str, text: str) -> pygame.font.Font:
         if kind == "title":
@@ -231,7 +221,7 @@ class CreditsRollScene(Scene):
             x = cx + math.cos(ang) * 760
             y = cy + math.sin(ang) * 760
             pygame.draw.line(layer, (210, 170, 70, 18), (cx, cy), (int(x), int(y)), 18)
-        screen.blit(layer, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        screen.blit(layer, (0, 0))
 
     def _draw_vignette(self, screen: pygame.Surface) -> None:
         fade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)

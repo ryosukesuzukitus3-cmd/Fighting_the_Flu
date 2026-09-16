@@ -13,7 +13,7 @@ import pygame
 
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
-from src.scenes.dialogue_panel import DARK_STYLE, LIGHT_STYLE, draw_story_panel
+from src.scenes.dialogue_panel import DARK_STYLE, draw_story_panel, _wrap_lines
 from src.story.lines import Page
 from src.entities.video_effect import VideoEffectLayer
 
@@ -271,14 +271,13 @@ class CutsceneScene(Scene):
             oy = random.randint(-5, 5)
 
         cx = SCREEN_WIDTH // 2 + ox
-        cy = SCREEN_HEIGHT // 2 + oy
-        is_light_bg = (self._theme == "window")
 
         # タイトル（任意）
         if self._title:
-            tcol = (100, 40, 20) if is_light_bg else (120, 50, 30)
-            tsurf = self._font_title.render(self._title, True, tcol)
-            screen.blit(tsurf, (cx - tsurf.get_width() // 2, 44))
+            title_lines = _wrap_lines(self._font_title, (self._title,), SCREEN_WIDTH - 96)
+            for index, line in enumerate(title_lines):
+                self._blit_outlined(screen, self._font_title, line, (248, 221, 160),
+                                    cx, 36 + index * self._font_title.get_linesize())
 
         if not self._pages:
             return
@@ -289,6 +288,10 @@ class CutsceneScene(Scene):
         left_sp, right_sp = story_sides(self._story_active, self._story_partner)
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
+        advance = "次へ" if self._page < len(self._pages) - 1 else "続ける"
+        if not self._is_complete():
+            advance = "全文表示"
+        hint = f"{accept}: {advance}（長押し可）　{back}: 会話を省略"
         draw_story_panel(
             screen,
             self.game.resources,
@@ -301,9 +304,9 @@ class CutsceneScene(Scene):
             total_pages=len(self._pages),
             complete=self._is_complete(),
             blink=self._blink,
-            hint_last=f"{accept}: 続ける   {back}: スキップ",
-            hint_next=f"{accept}: 次へ   {back}: スキップ",
-            style=LIGHT_STYLE if is_light_bg else DARK_STYLE,
+            hint_last=hint,
+            hint_next=hint,
+            style=DARK_STYLE,
             text_transform=self._glitch_text if glitch else None,
             text_color=(210, 60, 60) if glitch else None,
             text_jitter=6 if glitch else 0,

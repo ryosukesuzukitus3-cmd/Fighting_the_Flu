@@ -839,6 +839,7 @@ class GameScene(
             lives=self.game.shared.lives,
             heat=self._heat,
             pieces=self._pieces if BATTLE_V2_ENABLED else None,
+            companion_stock=self._companion.stock if self._companion is not None else None,
         )
 
         self._draw_popups(screen)

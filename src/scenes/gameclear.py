@@ -2,7 +2,9 @@ import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.script import GAME_CLEAR
-from src.scenes.meta_ui import draw_meta_footer, draw_meta_panel
+from src.scenes.meta_ui import (
+    ACCENT_GOLD, TEXT, TEXT_MUTED, draw_meta_footer, draw_meta_panel, fit_text, wrap_text,
+)
 
 
 class GameClearScene(Scene):
@@ -12,9 +14,9 @@ class GameClearScene(Scene):
         self._record_result = record_result
 
     def on_enter(self) -> None:
-        self._title_font = self.game.resources.pixelfont(100)
-        self._info_font  = self.game.resources.pixelfont(28)
-        self._sub_font   = self.game.resources.pixelfont(22)
+        self._title_font = self.game.resources.pixelfont(84)
+        self._info_font  = self.game.resources.pixelfont(34)
+        self._sub_font   = self.game.resources.pixelfont(20)
         self._next_font  = self.game.resources.pixelfont(18)
         self._score = self.game.shared.score
         stage       = self.game.shared.stage
@@ -59,29 +61,32 @@ class GameClearScene(Scene):
         screen.blit(self._bg, (0, 0))
 
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 120))
+        overlay.fill((6, 12, 24, 120))
         screen.blit(overlay, (0, 0))
 
         cx = SCREEN_WIDTH // 2
 
-        clear = self._title_font.render("治癒", True, (255, 220, 100))
-        screen.blit(clear, (cx - clear.get_width() // 2, 132))
+        clear = self._title_font.render("治癒", True, (132, 225, 194))
+        screen.blit(clear, (cx - clear.get_width() // 2, 74))
 
-        card = pygame.Rect(70, 268, 660, 205)
-        draw_meta_panel(screen, card, accent=(255, 220, 100), fill=(8, 10, 18, 150))
+        card = pygame.Rect(60, 204, 680, 300)
+        draw_meta_panel(screen, card, accent=(132, 225, 194), fill=(9, 18, 32, 220))
 
-        sub = self._sub_font.render(GAME_CLEAR["subtitle"], True, (235, 225, 200))
-        screen.blit(sub, (cx - sub.get_width() // 2, 292))
+        for i, line in enumerate(wrap_text(self._sub_font, GAME_CLEAR["subtitle"], 620)):
+            sub = self._sub_font.render(line, True, TEXT)
+            screen.blit(sub, sub.get_rect(centerx=cx, y=226 + i * 29))
 
-        score = self._info_font.render(f"SCORE : {self._score}", True, (200, 200, 200))
-        screen.blit(score, (cx - score.get_width() // 2, 336))
+        label = self._next_font.render("最終スコア", True, TEXT_MUTED)
+        screen.blit(label, label.get_rect(centerx=cx, y=302))
+        score = self._info_font.render(fit_text(self._info_font, f"{self._score:,}", 620), True, ACCENT_GOLD)
+        screen.blit(score, score.get_rect(centerx=cx, y=330))
 
         if self._is_high:
-            hi = self._info_font.render("★ NEW HIGH SCORE! ★", True, (255, 220, 60))
-            screen.blit(hi, (cx - hi.get_width() // 2, 376))
+            hi = self._sub_font.render("ハイスコア更新！", True, ACCENT_GOLD)
+            screen.blit(hi, hi.get_rect(centerx=cx, y=390))
 
-        nxt = self._next_font.render(GAME_CLEAR["next_preview"], True, (150, 150, 170))
-        screen.blit(nxt, (cx - nxt.get_width() // 2, 420))
+        nxt = self._next_font.render(fit_text(self._next_font, GAME_CLEAR["next_preview"], 620), True, TEXT_MUTED)
+        screen.blit(nxt, nxt.get_rect(centerx=cx, y=452))
 
         if self._timer >= 1.5:
             accept = self.game.settings.key_display("ui_accept")

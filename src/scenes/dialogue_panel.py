@@ -1,4 +1,4 @@
-"""会話ウィンドウ描画（V2: 角ばり太枠・モノクロ名前・ピクセル基調）。
+"""台詞を省略せず、本文・話者・操作欄を分けて表示する会話パネル。
 
 - 半透明ウィンドウ＋角ばったピクセル太枠
 - 名前枠はメッセージ枠の左端にぴったり／名前は縦中央／下辺=本体上辺で連結／色一致
@@ -38,14 +38,29 @@ class DialoguePanelStyle:
     light: bool = False
 
 
-DARK_STYLE = DialoguePanelStyle(fill=(12, 14, 26, 198), border=(120, 150, 200, 230), hint=(150, 170, 205))
+DARK_STYLE = DialoguePanelStyle(fill=(12, 20, 37, 244), border=(110, 151, 198, 235), hint=(191, 207, 230))
 LIGHT_STYLE = DialoguePanelStyle(fill=(250, 242, 214, 214), border=(150, 120, 86, 230),
                                  hint=(120, 96, 72), text=(54, 42, 32), light=True)
-COMBAT_RED_STYLE = DialoguePanelStyle(fill=(24, 8, 16, 200), border=(198, 92, 92, 230), hint=(170, 130, 150))
-COMBAT_BLUE_STYLE = DialoguePanelStyle(fill=(8, 14, 28, 200), border=(86, 140, 196, 230),
-                                       hint=(130, 166, 198), text=(214, 234, 255))
-COMBAT_PURPLE_STYLE = DialoguePanelStyle(fill=(16, 8, 28, 202), border=(176, 86, 176, 230),
-                                         hint=(186, 140, 196), text=(255, 236, 246))
+COMBAT_RED_STYLE = DialoguePanelStyle(fill=DARK_STYLE.fill, border=(202, 125, 135, 235), hint=DARK_STYLE.hint)
+COMBAT_BLUE_STYLE = DialoguePanelStyle(fill=DARK_STYLE.fill, border=(105, 163, 214, 235),
+                                       hint=DARK_STYLE.hint, text=(225, 237, 251))
+COMBAT_PURPLE_STYLE = DialoguePanelStyle(fill=DARK_STYLE.fill, border=(189, 134, 204, 235),
+                                         hint=DARK_STYLE.hint, text=(245, 232, 249))
+
+_TEXT_TOP = 18
+_TEXT_BOTTOM = 14
+_FOOTER_SPACE = 48
+
+
+def _line_height(font):
+    return font.get_height() + 2
+
+
+def _panel_for_text(base_rect, font, lines, footer_height=0):
+    """Keep the lower edge stable and reserve separate space for instructions."""
+    text_height = len(lines) * _line_height(font) - 2
+    height = max(base_rect.h, _TEXT_TOP + text_height + max(footer_height, _TEXT_BOTTOM))
+    return pygame.Rect(base_rect.x, base_rect.bottom - height, base_rect.w, height)
 
 
 def story_sides(active, partner):
@@ -71,12 +86,6 @@ def story_sides(active, partner):
 
 def _sa(color, alpha):
     return (*color[:3], min(color[3], alpha))
-
-
-def _fit_font(resources, lines, max_width, base_size, min_size):
-    # 文字サイズは固定（自動縮小はしない＝サイズが暴れる違和感を避ける）。
-    # 長い行は台本側で1行を短く保つ（収まらなければ Line/page の行を分ける）。
-    return resources.pixelfont(base_size)
 
 
 def _visible_lines(lines, chars):
@@ -113,7 +122,9 @@ def _wrap_line(font, text, max_w):
         split = len(text) // 2
         while split < len(text) and text[split] in "。、！？!?）】」』":
             split += 1
-        out = [text[:split], text[split:]]
+        balanced = [text[:split], text[split:]]
+        if all(font.size(part)[0] <= max_w for part in balanced):
+            out = balanced
     return out
 
 
@@ -137,6 +148,17 @@ def _footer_text(page_index, total_pages, hint_text):
     return page, hint
 
 
+def _footer_layout(resources, rect, page_index, total_pages, hint_text, text_x, font_size):
+    page, hint = _footer_text(page_index, total_pages, hint_text)
+    if not page and not hint:
+        return page, [], 0
+    font = resources.pixelfont(font_size)
+    page_width = font.size(page)[0] + 22 if page else 0
+    width = rect.right - 46 - text_x - page_width
+    lines = _wrap_lines(font, (hint,), width) if hint else []
+    return page, lines, max(_FOOTER_SPACE, len(lines) * font.get_height() + 16)
+
+
 def _arrow_visible(arrow_on):
     if arrow_on is not None:
         return arrow_on
@@ -154,10 +176,10 @@ def _draw_name_tab(screen, resources, rect, speaker, style, alpha):
     name = speaker_name(speaker)
     if not name:
         return
-    nf = resources.pixelfont(19)
-    label = nf.render(name, True, NAME_TEXT)
+    nf = resources.pixelfont(20)
+    label = nf.render(name, True, style.text if style.light else NAME_TEXT)
     label.set_alpha(alpha)
-    pad, tab_h = 14, 30
+    pad, tab_h = 14, 38
     tab = pygame.Rect(rect.x, rect.y - tab_h, label.get_width() + pad * 2, tab_h)
     ts = pygame.Surface(tab.size, pygame.SRCALPHA)
     ts.fill(_sa(style.fill, alpha))
@@ -171,23 +193,26 @@ def _draw_name_tab(screen, resources, rect, speaker, style, alpha):
     screen.blit(label, (tab.x + pad, tab.y + (tab_h - label.get_height()) // 2))
 
 
+def _text_rect(rect, text_x, text_w, reserved_bottom=0):
+    return pygame.Rect(text_x, rect.y + _TEXT_TOP, text_w,
+                       rect.h - _TEXT_TOP - _TEXT_BOTTOM - reserved_bottom)
+
+
 def _draw_text(screen, resources, rect, lines, style, *, chars, center, valign,
-               body_size, min_body_size, text_x, text_w, alpha,
+               body_size, text_x, text_w, alpha,
                text_transform, text_color, text_jitter, reserved_bottom=0):
     visible = _visible_lines(lines, chars)
-    body = _fit_font(resources, visible or lines, text_w, body_size, min_body_size)
-    line_h = body.get_height() + 5
-    total_h = len(lines) * line_h
-    pad_top = 18
-    content_top = rect.y + pad_top
-    content_h = rect.h - pad_top - 14 - reserved_bottom
-    start_y = content_top + max(0, (content_h - total_h) // 2) if valign == "center" else content_top
+    body = resources.pixelfont(body_size)
+    line_h = _line_height(body)
+    total_h = len(lines) * line_h - 2
+    content = _text_rect(rect, text_x, text_w, reserved_bottom)
+    start_y = content.y + max(0, (content.h - total_h) // 2) if valign == "center" else content.y
     for i, ln in enumerate(visible):
         draw = text_transform(ln) if text_transform else ln
         surf = body.render(draw, True, text_color or style.text)
         surf.set_alpha(alpha)
         if center:
-            x = rect.centerx - surf.get_width() // 2
+            x = text_x + (text_w - surf.get_width()) // 2
         else:
             j = random.randint(-text_jitter, text_jitter) if text_jitter > 0 else 0
             x = text_x + j
@@ -196,22 +221,25 @@ def _draw_text(screen, resources, rect, lines, style, *, chars, center, valign,
 
 def _draw_footer(screen, resources, rect, style, *, page_index, total_pages,
                  hint_text, alpha, text_x, font_size):
-    page, hint = _footer_text(page_index, total_pages, hint_text)
-    if not page and not hint:
+    page, hints, height = _footer_layout(resources, rect, page_index, total_pages,
+                                       hint_text, text_x, font_size)
+    if not height:
         return
 
     font = resources.pixelfont(font_size)
-    y = rect.bottom - font.get_height() - 8
+    y = rect.bottom - max(1, len(hints)) * font.get_height() - 8
+    pygame.draw.line(screen, style.border[:3], (text_x, rect.bottom - height + 5),
+                     (rect.right - 22, rect.bottom - height + 5), 1)
     if page:
         surf = font.render(page, True, style.hint)
         surf.set_alpha(alpha)
         screen.blit(surf, (text_x, y))
-    if hint:
+    for index, hint in enumerate(hints):
         surf = font.render(hint, True, style.hint)
         surf.set_alpha(alpha)
         # 右下の送りマークと干渉させない。
         right = rect.right - 46
-        screen.blit(surf, (right - surf.get_width(), y))
+        screen.blit(surf, (right - surf.get_width(), y + index * font.get_height()))
 
 
 def _draw_arrow(screen, rect, alpha, arrow_on, complete):
@@ -225,9 +253,7 @@ def _draw_arrow(screen, rect, alpha, arrow_on, complete):
 
 # ── 戦闘パネル（顔アイコン・省スペース） ──────────────────────────────
 
-# 本文は 22pt（従来 26pt より一段小）。最長行 616px でも折返さず 1 行に収まり
-# （全行 ≤ 使用可能幅 624px を実測確認）、セリフは最大 2 行。パネルは最初から
-# 2 行ぶんの固定サイズにして自動拡張しない（サイズが暴れる違和感を避ける）。
+# 通常の短い台詞は省スペースに保ち、折返しや操作欄があるときだけ上へ広げる。
 _COMBAT_BODY_SIZE = 22
 _COMBAT_PORTRAIT_SIZE = 68        # 顔アイコンは固定
 # 下端はボスHPバー（y=564〜）直上の体幹ゲージ（y=555〜561）に掛からない位置に置く
@@ -239,7 +265,8 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                       total_pages=None, hint_text=None, style=COMBAT_RED_STYLE,
                       alpha=255, center=False, arrow_on=None, chars=None,
                       complete=None, text_transform=None, text_jitter=0,
-                      show_portrait=True):
+                      show_portrait=True) -> pygame.Rect:
+    """Draw the panel and return the body area, excluding its name/portrait/footer."""
     rect = COMBAT_PANEL_RECT
     body = resources.pixelfont(_COMBAT_BODY_SIZE)
     # 本文の左端と使える横幅（顔アイコンぶんを差し引く）を先に確定する。
@@ -250,7 +277,9 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
         text_w = rect.right - 22 - text_x
     # 想定外に長い行だけ横幅で折り返す安全網（通常は 1 行に収まる）。
     wrapped = _wrap_lines(body, lines, text_w)
-    footer_visible = bool(_footer_text(page_index, total_pages, hint_text)[0] or hint_text)
+    _, _, footer_height = _footer_layout(resources, rect, page_index, total_pages,
+                                         hint_text, text_x, 16)
+    rect = _panel_for_text(rect, body, wrapped, footer_height)
 
     _draw_window(screen, rect, style, alpha)
     if portrait:
@@ -264,16 +293,17 @@ def draw_combat_panel(screen, resources, speaker, lines, *, page_index=None,
                          (px - 3, py - 3, size + 6, size + 6), 2)
     _draw_name_tab(screen, resources, rect, speaker, style, alpha)
     _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
-               valign="center", body_size=_COMBAT_BODY_SIZE, min_body_size=_COMBAT_BODY_SIZE,
+               valign="center", body_size=_COMBAT_BODY_SIZE,
                text_x=text_x, text_w=text_w, alpha=alpha, text_transform=text_transform,
                text_color=None, text_jitter=text_jitter,
-               reserved_bottom=18 if footer_visible else 0)
+               reserved_bottom=max(0, footer_height - _TEXT_BOTTOM))
     _draw_footer(screen, resources, rect, style, page_index=page_index,
                  total_pages=total_pages, hint_text=hint_text, alpha=alpha,
-                 text_x=text_x, font_size=14)
+                 text_x=text_x, font_size=16)
     if complete is None:
         complete = hint_text is not None
     _draw_arrow(screen, rect, alpha, arrow_on, complete=complete)
+    return _text_rect(rect, text_x, text_w, max(0, footer_height - _TEXT_BOTTOM))
 
 
 # ── ストーリーパネル（左右に立ち絵・上詰め） ──────────────────────────
@@ -298,7 +328,14 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, page_inde
                      style=DARK_STYLE, show_portrait=True, text_transform=None,
                      text_color=None, text_jitter=0, center=False, arrow_on=None,
                      left_speaker=None, right_speaker=None):
-    rect = pygame.Rect(40, SCREEN_HEIGHT - 210, SCREEN_WIDTH - 80, 176)
+    body = resources.pixelfont(26)
+    text_w = SCREEN_WIDTH - 132
+    wrapped = _wrap_lines(body, lines, text_w)
+    hint = hint_next if page_index < total_pages - 1 else hint_last
+    base_rect = pygame.Rect(40, SCREEN_HEIGHT - 218, SCREEN_WIDTH - 80, 184)
+    _, _, footer_height = _footer_layout(resources, base_rect, page_index, total_pages,
+                                         hint, base_rect.x + 26, 18)
+    rect = _panel_for_text(base_rect, body, wrapped, footer_height)
 
     # 立ち絵（ウィンドウより先に描いて、ウィンドウ下部が重なる＝奥行き感）
     if show_portrait:
@@ -319,16 +356,13 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, page_inde
     _draw_name_tab(screen, resources, rect, speaker, style, 255)
     text_x = rect.x + 26
     text_w = rect.w - 52
-    body = resources.pixelfont(27)
-    # 台本の論理行は維持したまま表示時だけ折り返すため、文字送りの総文字数は変わらない。
-    wrapped = _wrap_lines(body, lines, text_w)
-    hint = hint_next if page_index < total_pages - 1 else hint_last
+    # 折返し位置・枠の高さは全文から決め、文字送り中にレイアウトを動かさない。
     _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
-               valign="center" if center else "top", body_size=27, min_body_size=21,
+               valign="center" if center else "top", body_size=26,
                text_x=text_x, text_w=text_w, alpha=255,
                text_transform=text_transform, text_color=text_color, text_jitter=text_jitter,
-               reserved_bottom=22)
+               reserved_bottom=max(0, footer_height - _TEXT_BOTTOM))
     _draw_footer(screen, resources, rect, style, page_index=page_index,
                  total_pages=total_pages, hint_text=hint, alpha=255,
-                 text_x=text_x, font_size=16)
+                 text_x=text_x, font_size=18)
     _draw_arrow(screen, rect, 255, arrow_on, complete=complete)
