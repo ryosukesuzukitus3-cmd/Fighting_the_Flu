@@ -5,14 +5,13 @@ from src.core.constants import SCREEN_WIDTH
 from src.core.balance import PLAYER_MAX_HP
 from src.story.script import GAMEOVER_LINES
 from src.scenes.meta_ui import (
-    ACCENT_GOLD,
+    ACCENT_CORAL,
     TEXT,
     TEXT_MUTED,
     draw_meta_background,
     draw_meta_footer,
-    draw_meta_panel,
     draw_meta_title,
-    draw_selection_marker,
+    draw_pixel_cursor,
     fit_text,
     wrap_text,
 )
@@ -92,27 +91,25 @@ class GameOverScene(Scene):
             self._do_title()
 
     def draw(self, screen: pygame.Surface) -> None:
-        accent = (241, 145, 139)
-        draw_meta_background(screen, accent=accent)
+        accent = ACCENT_CORAL
+        draw_meta_background(screen)
         cx = SCREEN_WIDTH // 2
         draw_meta_title(screen, self._title_font, "力尽きた…", accent=accent, y=24)
         y = 112
         for line in self._mono_lines:
             for part in wrap_text(self._mono_font, line, 660):
-                surf = self._mono_font.render(part, True, TEXT_MUTED)
+                surf = self._mono_font.render(part, False, TEXT_MUTED)
                 screen.blit(surf, surf.get_rect(centerx=cx, y=y))
                 y += 27
 
-        panel = pygame.Rect(70, 190, 660, 110 + len(self._options) * 72)
-        draw_meta_panel(screen, panel, accent=accent)
-        label = self._hint_font.render(f"第{self._stage}章まで到達", True, TEXT_MUTED)
+        label = self._hint_font.render(f"第{self._stage}章まで到達", False, TEXT_MUTED)
         screen.blit(label, (94, 210))
         score = self._info_font.render(
-            fit_text(self._info_font, f"スコア {self._score:,}", 400), True, TEXT,
+            fit_text(self._info_font, f"スコア {self._score:,}", 400), False, TEXT,
         )
         screen.blit(score, score.get_rect(right=706, y=205))
         life_text = f"残り有給 {self._lives}日" if self._lives else "有給は残っていません"
-        life = self._hint_font.render(fit_text(self._hint_font, life_text, 612), True, accent)
+        life = self._hint_font.render(fit_text(self._hint_font, life_text, 612), False, accent)
         screen.blit(life, (94, 247))
         labels = {
             "continue": "有給を1日使って続ける",
@@ -127,11 +124,12 @@ class GameOverScene(Scene):
         for i, option in enumerate(self._options):
             selected = i == self._cursor
             rect = pygame.Rect(86, 284 + i * 72, 628, 66)
-            draw_selection_marker(screen, rect, selected=selected, accent=ACCENT_GOLD)
-            color = ACCENT_GOLD if selected else TEXT
-            surf = self._info_font.render(labels[option], True, color)
+            color = ACCENT_CORAL if selected else TEXT
+            surf = self._info_font.render(labels[option], False, color)
             screen.blit(surf, (108, rect.y + 3))
-            detail = self._hint_font.render(fit_text(self._hint_font, details[option], 584), True, TEXT_MUTED)
+            if selected:
+                draw_pixel_cursor(screen, 86, rect.y + 3 + surf.get_height() // 2)
+            detail = self._hint_font.render(fit_text(self._hint_font, details[option], 584), False, TEXT_MUTED)
             screen.blit(detail, (108, rect.y + 36))
 
         accept = self.game.settings.key_display("ui_accept")

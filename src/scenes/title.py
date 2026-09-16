@@ -1,22 +1,12 @@
+import math
 import random
 import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.script import TITLE_IDLE
-from src.scenes.meta_ui import (
-    ACCENT_GOLD, TEXT, TEXT_MUTED, draw_meta_background,
-    draw_meta_footer, draw_meta_panel, draw_selection_marker, fit_text,
-)
 
 
-_MENU = ["ゲームをはじめる", "操作の練習", "ハイスコア", "プレイ記録", "設定"]
-_MENU_HELP = [
-    "物語のはじめから出撃します。",
-    "移動とショットの基本を練習します。",
-    "これまでの最高スコアを確認します。",
-    "挑戦の記録やステージごとの成績を確認します。",
-    "音量と操作キーを変更します。",
-]
+_MENU = ["ゲームスタート", "チュートリアル", "ハイスコア", "統計", "設定"]
 
 _IDLE_DELAY  = 6.0   # 無操作からアイドルテキスト表示までの秒数
 _IDLE_ROTATE = 5.0   # アイドルテキストの切替間隔
@@ -24,16 +14,43 @@ _IDLE_ROTATE = 5.0   # アイドルテキストの切替間隔
 _SUBTITLE = "すまん、陽性だったにょ"
 
 
+def _make_radial_glow(w: int, h: int, color: tuple[int, int, int], max_alpha: int) -> pygame.Surface:
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    cx, cy = w // 2, h // 2
+    maxr = min(w, h) // 2
+    for r in range(maxr, 0, -1):
+        t = r / maxr
+        a = int(max_alpha * (1 - t) ** 1.8)
+        pygame.draw.circle(surf, (color[0], color[1], color[2], a), (cx, cy), r)
+    return surf
+
+
+def _make_vgrad(top: tuple[int, int, int], bottom: tuple[int, int, int]) -> pygame.Surface:
+    surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    for y in range(SCREEN_HEIGHT):
+        t = y / (SCREEN_HEIGHT - 1)
+        surf.fill(
+            (int(top[0] + (bottom[0] - top[0]) * t),
+             int(top[1] + (bottom[1] - top[1]) * t),
+             int(top[2] + (bottom[2] - top[2]) * t)),
+            (0, y, SCREEN_WIDTH, 1),
+        )
+    return surf
+
+
 class TitleScene(Scene):
     def on_enter(self) -> None:
         self._title_font = self.game.resources.pixelfont(64)
         self._menu_font  = self.game.resources.pixelfont(28)
-        self._small_font = self.game.resources.pixelfont(20)
+        self._small_font = self.game.resources.pixelfont(18)
         self._idle_font  = self.game.resources.pixelfont(18)
         self._cursor     = 0
         self._idle_timer = 0.0
         self._idle_index = random.randrange(len(TITLE_IDLE)) if TITLE_IDLE else 0
         self._t          = 0.0
+        # 発熱ムード（暖→寒の縦グラデ＋暖色グロー）。静的レイヤは1回だけ生成。
+        self._glow = _make_radial_glow(620, 420, (200, 70, 40), 120)
+        self._grad = _make_vgrad((34, 10, 12), (6, 6, 10))
         self.game.sound.play_bgm_if_new("music/bgm/The_Final_Battle_short.mp3")
 
     def on_exit(self) -> None:
@@ -114,36 +131,62 @@ class TitleScene(Scene):
             from src.scenes.settings_scene import SettingsScene
             self.game.change_scene(SettingsScene(self.game, self))
 
+    # ── 描画 ─────────────────────────────────────────────────────
     def draw(self, screen: pygame.Surface) -> None:
         cx = SCREEN_WIDTH // 2
-        draw_meta_background(screen, accent=(240, 149, 94))
-        title = self._title_font.render("インフルとの死闘", True, (255, 237, 215))
-        shadow = self._title_font.render("インフルとの死闘", True, (3, 6, 14))
-        x = cx - title.get_width() // 2
-        screen.blit(shadow, (x + 2, 78 + 3))
-        screen.blit(title, (x, 78))
-        subtitle = self._small_font.render(_SUBTITLE, True, (228, 179, 147))
-        screen.blit(subtitle, (cx - subtitle.get_width() // 2, 166))
-        pygame.draw.line(screen, (181, 123, 89), (cx - 32, 207), (cx + 32, 207), 2)
+        screen.blit(self._grad, (0, 0))
+        ga = int(150 + 40 * (0.5 + 0.5 * math.sin(self._t * 1.6)))
+        glow = self._glow.copy()
+        glow.set_alpha(ga)
+        screen.blit(glow, (cx - glow.get_width() // 2, 8))
+        # 下側ビネット
+        vig = pygame.Surface((SCREEN_WIDTH, 170), pygame.SRCALPHA)
+        for y in range(170):
+            vig.fill((0, 0, 0, int(150 * (y / 170))), (0, y, SCREEN_WIDTH, 1))
+        screen.blit(vig, (0, SCREEN_HEIGHT - 170))
 
-        panel = pygame.Rect(186, 238, 428, 244)
-        draw_meta_panel(screen, panel, accent=(208, 172, 117))
+        text = "インフルとの死闘"
+        breathe = int(245 + 10 * math.sin(self._t * 1.8))
+        ts = self._title_font.render(text, False, (250, 236, 222))
+        sh = self._title_font.render(text, False, (40, 6, 6))
+        sh.set_alpha(150)
+        ty = 138
+        screen.blit(sh, (cx - ts.get_width() // 2 + 2, ty + 4))
+        ts.set_alpha(min(255, breathe))
+        screen.blit(ts, (cx - ts.get_width() // 2, ty))
+
+        sub = self._small_font.render(_SUBTITLE, True, (214, 150, 120))
+        sub.set_alpha(210)
+        screen.blit(sub, (cx - sub.get_width() // 2, ty + ts.get_height() + 14))
+
+        self._draw_menu(screen, cx, top=304)
+        self._draw_footer(screen)
+
+    def _draw_menu(self, screen, cx, top):
+        row_h = 46
         for i, label in enumerate(_MENU):
-            row = pygame.Rect(panel.x + 14, panel.y + 12 + i * 44, panel.w - 28, 42)
-            selected = i == self._cursor
-            draw_selection_marker(screen, row, selected=selected)
-            color = ACCENT_GOLD if selected else TEXT
-            text = self._menu_font.render(label, True, color)
-            screen.blit(text, (cx - text.get_width() // 2, row.centery - text.get_height() // 2))
+            y = top + i * row_h
+            selected = (i == self._cursor)
+            color = (255, 212, 146) if selected else (150, 134, 130)
+            surf = self._menu_font.render(label, False, color)
+            x = cx - surf.get_width() // 2
+            screen.blit(surf, (x, y))
             if selected:
-                pygame.draw.polygon(screen, ACCENT_GOLD, [(row.x + 18, row.centery - 5), (row.x + 24, row.centery), (row.x + 18, row.centery + 5)])
+                pulse = 0.5 + 0.5 * math.sin(self._t * 3.6)
+                uw = int(surf.get_width() * (0.62 + 0.10 * pulse))
+                uy = y + surf.get_height() + 3
+                pygame.draw.rect(screen, (236, 150, 96), (cx - uw // 2, uy, uw, 2))
 
-        help_text = _MENU_HELP[self._cursor]
+    def _draw_footer(self, screen):
+        cx = SCREEN_WIDTH // 2
         if TITLE_IDLE and self._idle_timer >= _IDLE_DELAY:
-            help_text = TITLE_IDLE[self._idle_index]
-        help_label = self._small_font.render(fit_text(self._small_font, help_text, 700), True, TEXT_MUTED)
-        screen.blit(help_label, (cx - help_label.get_width() // 2, 506))
+            a = int(110 + 60 * (0.5 + 0.5 * math.sin(self._t * 2.0)))
+            idle = self._idle_font.render(TITLE_IDLE[self._idle_index], True, (150, 146, 150))
+            idle.set_alpha(a)
+            screen.blit(idle, (cx - idle.get_width() // 2, SCREEN_HEIGHT - 72))
         accept = self.game.settings.key_display("ui_accept")
         if self.game.settings.get_key("ui_accept") == pygame.K_RETURN:
             accept += " / SPACE"
-        draw_meta_footer(screen, self._small_font, f"↑↓: 選択   {accept}: 決定")
+        hint = self._small_font.render(f"↑↓  {accept}: 決定", True, (150, 146, 158))
+        hint.set_alpha(220)
+        screen.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 40))

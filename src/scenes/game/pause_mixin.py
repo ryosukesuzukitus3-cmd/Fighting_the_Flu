@@ -2,10 +2,9 @@
 from __future__ import annotations
 import pygame
 from src.scenes.meta_ui import (
-    ACCENT_GOLD,
+    ACCENT_CORAL, BG, TEXT, TEXT_MUTED,
     draw_meta_footer,
-    draw_meta_panel,
-    draw_selection_marker,
+    draw_pixel_cursor,
     fit_text,
 )
 
@@ -48,34 +47,26 @@ class GameScenePauseMixin:
             self._pause_title_font = self.game.resources.pixelfont(34)  # type: ignore[attr-defined]
 
         overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
+        overlay.fill((*BG, 200))
         screen.blit(overlay, (0, 0))
 
         cx = screen.get_width() // 2
-        panel = pygame.Rect(cx - 230, 128, 460, 370)
-        draw_meta_panel(screen, panel, accent=ACCENT_GOLD, fill=(8, 15, 29, 245))
-        title = self._pause_title_font.render("一時停止", True, (240, 243, 250))  # type: ignore[attr-defined]
+        title = self._pause_title_font.render("一時停止", False, TEXT)  # type: ignore[attr-defined]
         screen.blit(title, (cx - title.get_width() // 2, 151))
         small = self.game.resources.pixelfont(16)
-        caption = small.render("落ち着いて準備できます。戦闘は停止中です。", True, (175, 188, 205))
-        screen.blit(caption, (cx - caption.get_width() // 2, 202))
-
         for i, label in enumerate(self._PAUSE_ITEMS):
             selected = i == self._pause_cursor
-            color = ACCENT_GOLD if selected else (210, 218, 230)
-            row = pygame.Rect(panel.x + 36, 243 + i * 62, panel.w - 72, 52)
-            draw_selection_marker(screen, row, selected=selected, accent=ACCENT_GOLD)
+            color = ACCENT_CORAL if selected else TEXT
+            row = pygame.Rect(cx - 130, 243 + i * 62, 330, 52)
             if selected:
-                pygame.draw.polygon(screen, ACCENT_GOLD, [(row.x + 14, row.centery - 6),
-                                                        (row.x + 22, row.centery),
-                                                        (row.x + 14, row.centery + 6)])
-            surf = self._pause_font.render(fit_text(self._pause_font, label, row.w - 65), True, color)
-            screen.blit(surf, (row.x + 40, row.centery - surf.get_height() // 2))
+                draw_pixel_cursor(screen, row.x - 20, row.centery)
+            surf = self._pause_font.render(fit_text(self._pause_font, label, row.w - 65), False, color)
+            screen.blit(surf, (row.x + 10, row.centery - surf.get_height() // 2))
 
         notes = ["止めたところから、そのまま再開します。", "音量とキー操作を変更できます。",
                  "このプレイを終了してタイトルへ戻ります。"]
-        note = small.render(notes[self._pause_cursor], True,
-                            (245, 155, 155) if self._pause_cursor == 2 else (175, 188, 205))
+        note = small.render(notes[self._pause_cursor], False,
+                            ACCENT_CORAL if self._pause_cursor == 2 else TEXT_MUTED)
         screen.blit(note, (cx - note.get_width() // 2, 448))
 
         accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]

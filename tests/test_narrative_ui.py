@@ -41,9 +41,7 @@ def test_authored_story_text_stays_inside_its_panel(game):
         for index, pg in enumerate(beat.pages):
             game.screen.fill(background)
             panels.draw_story_panel(game.screen, game.resources, pg.speaker, pg.lines,
-                                    page_index=index, total_pages=len(beat.pages),
-                                    show_portrait=False, hint_next="ENTER: 次へ　X: 会話を省略",
-                                    hint_last="ENTER: 続ける　X: 会話を省略")
+                                    show_portrait=False, hint_text="ENTER: 次へ　X: 会話を省略")
             below = game.screen.subsurface((0, 566, 800, 34))
             unchanged = pygame.mask.from_threshold(below, background, (1, 1, 1, 255))
             assert unchanged.count() == 800 * 34, (beat.key, index)
@@ -52,20 +50,20 @@ def test_authored_story_text_stays_inside_its_panel(game):
             assert all(game.resources.pixelfont(26).size(line)[0] <= 668 for line in wrapped)
 
 
-def test_long_key_hints_reserve_space_beside_page_counter(game):
+def test_long_key_hints_reserve_space_below_name_and_body(game):
     rect = pygame.Rect(40, 382, 720, 184)
     hint = "RIGHTBRACKET: 全文表示（長押し可）　PRINTSCREEN: 会話を省略"
-    label, lines, height = panels._footer_layout(game.resources, rect, 29, 31, hint, 66, 18)
+    lines, height = panels._footer_layout(game.resources, rect, hint, 66, 18)
     font = game.resources.pixelfont(18)
-    assert label == "30/31"
     assert "".join(lines) == hint
-    assert all(font.size(line)[0] <= 760 - 46 - 66 - font.size(label)[0] - 22 for line in lines)
+    assert all(font.size(line)[0] <= 760 - 46 - 66 for line in lines)
     assert height >= len(lines) * font.get_height() + 16
     body = game.resources.pixelfont(26)
     text = panels._wrap_lines(body, script.story_beat("prologue").pages[12].lines, 668)
-    expanded = panels._panel_for_text(rect, body, text, height)
+    name_height = panels._name_height(game.resources, "カロナール先輩")
+    expanded = panels._panel_for_text(rect, body, text, height, name_height)
     assert expanded.top > 100
-    assert expanded.top + 18 + len(text) * (body.get_height() + 2) - 2 <= expanded.bottom - height
+    assert expanded.top + 18 + name_height + len(text) * (body.get_height() + 2) - 2 <= expanded.bottom - height
 
 
 def test_authored_combat_dialogue_stays_above_boss_gauges(game):
@@ -86,7 +84,7 @@ def test_authored_combat_dialogue_stays_above_boss_gauges(game):
         for line in dialogue_lines(value):
             game.screen.fill(background)
             panels.draw_combat_panel(game.screen, game.resources, line.speaker, line.lines,
-                                     page_index=0, total_pages=3, hint_text="ENTER / Z: 次へ")
+                                     hint_text="ENTER / Z: 次へ")
             below = game.screen.subsurface((0, 544, 800, 56))
             unchanged = pygame.mask.from_threshold(below, background, (1, 1, 1, 255))
             assert unchanged.count() == 800 * 56, (name, line.lines)
@@ -95,16 +93,69 @@ def test_authored_combat_dialogue_stays_above_boss_gauges(game):
 def test_cutscene_hint_matches_typewriter_state_and_custom_keys(game, monkeypatch):
     game.settings.set_key_binding("ui_accept", pygame.K_q)
     game.settings.set_key_binding("ui_back", pygame.K_w)
-    scene = CutsceneScene(game, [page(NARRATION, "一文字ずつ表示する会話")], lambda: None)
+    scene = CutsceneScene(game, [page(NARRATION, "一文字ずつ表示する会話")] * 2, lambda: None)
     scene.on_enter()
     draw = Mock()
     monkeypatch.setattr("src.scenes.cutscene_scene.draw_story_panel", draw)
     scene.draw(game.screen)
-    hint = draw.call_args.kwargs["hint_last"]
+    hint = draw.call_args.kwargs["hint_text"]
     assert "Q: 全文表示" in hint and "W: 会話を省略" in hint
     scene._chars = scene._total_chars()
     scene.draw(game.screen)
-    assert "Q: 続ける" in draw.call_args.kwargs["hint_last"]
+    first = draw.call_args.kwargs.copy()
+    assert "Q: 次へ" in first["hint_text"]
+    assert not {"page_index", "total_pages", "hint_last", "hint_next"} & first.keys()
+    scene._page = 1
+    scene.draw(game.screen)
+    assert draw.call_args.kwargs == first
+
+
+@pytest.mark.parametrize("kind", ["intro", "cutin", "defeat", "final", "tutorial", "blackhole"])
+def test_combat_dialogue_renderer_never_receives_sequence_progress(game, monkeypatch, kind):
+    from src.scenes.game.overlay_mixin import GameSceneOverlayMixin
+    from src.scenes.game.final_battle import FinalBattleDirector
+
+    game.settings.set_key_binding("ui_accept", pygame.K_q)
+    pages = [page(NARRATION, "同じ会話で最初と最後の表示を比較する。")] * 2
+    draw = Mock(return_value=pygame.Rect(100, 400, 600, 60))
+    if kind in {"intro", "cutin", "defeat"}:
+        scene = SimpleNamespace(game=game)
+        fields = {
+            "intro": ("_boss_intro_pages", "_boss_intro_page_idx", "_draw_boss_intro_dialogue"),
+            "cutin": ("_cutin_pages", "_cutin_idx", "_draw_combat_cutin"),
+            "defeat": ("_defeat_dialogue_pages", "_defeat_dialogue_index", "_draw_defeat_dialogue"),
+        }
+        pages_field, index_field, method = fields[kind]
+        setattr(scene, pages_field, pages)
+        render = lambda: getattr(GameSceneOverlayMixin, method)(scene, game.screen)
+        monkeypatch.setattr("src.scenes.game.overlay_mixin.draw_combat_panel", draw)
+    elif kind == "final":
+        scene = FinalBattleDirector(SimpleNamespace(game=game))
+        scene._final_dialogue_pages = pages
+        index_field = "_final_dialogue_idx"
+        render = lambda: scene._draw_final_dialogue(game.screen)
+        monkeypatch.setattr("src.scenes.game.final_battle.draw_combat_panel", draw)
+    elif kind == "tutorial":
+        scene = TutorialScene(game)
+        scene._dialogue = pages
+        index_field = "_dialogue_idx"
+        render = lambda: scene._draw_panel(game.screen, pages[getattr(scene, index_field)], True)
+        monkeypatch.setattr("src.scenes.tutorial_scene.draw_combat_panel", draw)
+    else:
+        scene = BlackholeScene(game, pages, lambda: None)
+        scene._chars = sum(map(len, pages[0].lines))
+        scene._noise_level = 0
+        index_field = "_page"
+        render = lambda: scene._draw_dialogue(game.screen)
+        monkeypatch.setattr(panels, "draw_combat_panel", draw)
+    setattr(scene, index_field, 0)
+    render()
+    first = draw.call_args.kwargs.copy()
+    assert not {"page_index", "total_pages", "hint_last", "hint_next"} & first.keys()
+    assert "Q" in first["hint_text"] and "次へ" in first["hint_text"]
+    setattr(scene, index_field, 1)
+    render()
+    assert draw.call_args.kwargs == first
 
 
 def test_practice_instruction_uses_movement_bindings_and_progress(game):

@@ -14,7 +14,7 @@ from src.scenes.dialogue_panel import (
     COMBAT_RED_STYLE,
     draw_combat_panel,
 )
-from src.story.speakers import speaker_name, speaker_color, speaker_portrait
+from src.story.speakers import speaker_name, speaker_color
 
 
 class GameSceneOverlayMixin:
@@ -87,46 +87,6 @@ class GameSceneOverlayMixin:
         name.set_alpha(alpha)
         screen.blit(name, (cx - name.get_width() // 2, cy + 2))
 
-    # ── 話者ネームプレート（セリフボックス共通）────────────────
-    def _draw_speaker_nameplate(self, screen: pygame.Surface, speaker: str,
-                                box_x: int, box_y: int, alpha: int = 255) -> None:
-        """セリフボックス左上に話者名を表示する（name が空なら何もしない）。"""
-        name = speaker_name(speaker)
-        if not name:
-            return
-        if not hasattr(self, "_nameplate_font") or self._nameplate_font is None:  # type: ignore[attr-defined]
-            self._nameplate_font = self.game.resources.pixelfont(18)  # type: ignore[attr-defined]
-        color = speaker_color(speaker)
-        label = self._nameplate_font.render(name, True, color)  # type: ignore[attr-defined]
-        pad   = 8
-        plate_w = label.get_width() + pad * 2
-        plate_h = label.get_height() + 4
-        plate_y = box_y - plate_h + 2
-        plate = pygame.Surface((plate_w, plate_h), pygame.SRCALPHA)
-        plate.fill((10, 0, 30, min(225, alpha)))
-        pygame.draw.rect(plate, (*color, min(220, alpha)), (0, 0, plate_w, plate_h), 2, border_radius=4)
-        screen.blit(plate, (box_x + 6, plate_y))
-        label.set_alpha(alpha)
-        screen.blit(label, (box_x + 6 + pad, plate_y + 2))
-
-    # ── 発言者ポートレート（セリフボックス共通）──────────────────
-    def _draw_speaker_portrait(self, screen: pygame.Surface, speaker: str,
-                               box_x: int, box_y: int, box_h: int, alpha: int = 255) -> int:
-        """セリフボックス左にポートレートを描画し、本文の左x座標を返す。
-        画像が無い話者は何もせず既定の本文x(box_x+20)を返す。"""
-        default_text_x = box_x + 20
-        path = speaker_portrait(speaker)
-        if not path:
-            return default_text_x
-        raw  = self.game.resources.image(path)  # type: ignore[attr-defined]
-        size = box_h - 8
-        img  = pygame.transform.smoothscale(raw, (size, size)).convert_alpha()
-        img.set_alpha(alpha)
-        px, py = box_x + 6, box_y + 4
-        screen.blit(img, (px, py))
-        pygame.draw.rect(screen, speaker_color(speaker), (px, py, size, size), 2, border_radius=4)
-        return px + size + 12
-
     # ── ボス登場時セリフ（決定アクションで送る）──────────────
     def _draw_boss_intro_dialogue(self, screen: pygame.Surface) -> None:
         if not hasattr(self, "_intro_dialogue_font") or self._intro_dialogue_font is None:  # type: ignore[attr-defined]
@@ -137,18 +97,14 @@ class GameSceneOverlayMixin:
         if not pages:
             return
         line  = pages[idx]
-        total = len(pages)
         accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
 
-        hint = (f"{idx + 1}/{total}  {accept}: 次へ"
-                if idx < total - 1 else f"{accept}: 戦闘開始")
+        hint = f"{accept}: 次へ"
         draw_combat_panel(
             screen,
             self.game.resources,  # type: ignore[attr-defined]
             line.speaker,
             line.lines,
-            page_index=idx,
-            total_pages=total,
             hint_text=hint,
             style=COMBAT_RED_STYLE,
         )
@@ -231,17 +187,13 @@ class GameSceneOverlayMixin:
         if not pages or idx >= len(pages):
             return
         line  = pages[idx]
-        total = len(pages)
         accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
-        hint = (f"{idx + 1}/{total}  {accept}: 次へ"
-                if idx < total - 1 else f"{accept}: 戦闘再開")
+        hint = f"{accept}: 次へ"
         draw_combat_panel(
             screen,
             self.game.resources,  # type: ignore[attr-defined]
             line.speaker,
             line.lines,
-            page_index=idx,
-            total_pages=total,
             hint_text=hint,
             style=COMBAT_PURPLE_STYLE,
         )
@@ -256,20 +208,14 @@ class GameSceneOverlayMixin:
         if not pages or idx >= len(pages):
             return
         line  = pages[idx]
-        total = len(pages)
         accept = self.game.settings.key_display("ui_accept")  # type: ignore[attr-defined]
 
-        if idx < total - 1:
-            hint = f"{idx + 1}/{total}  {accept}: 次へ"
-        else:
-            hint = f"{accept}: 続ける"
+        hint = f"{accept}: 次へ"
         draw_combat_panel(
             screen,
             self.game.resources,  # type: ignore[attr-defined]
             line.speaker,
             line.lines,
-            page_index=idx,
-            total_pages=total,
             hint_text=hint,
             style=COMBAT_BLUE_STYLE,
         )

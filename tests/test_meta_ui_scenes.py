@@ -29,7 +29,6 @@ def test_settings_scene_lists_and_rebinds_every_public_action() -> None:
     assert scene._rebinding is None
 
     scene.draw(game.screen)
-    assert game.screen.get_at((400, 20)) != game.screen.get_at((400, 560))
     pygame.quit()
 
 

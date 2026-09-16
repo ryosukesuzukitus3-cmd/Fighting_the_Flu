@@ -288,7 +288,7 @@ class CutsceneScene(Scene):
         left_sp, right_sp = story_sides(self._story_active, self._story_partner)
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
-        advance = "次へ" if self._page < len(self._pages) - 1 else "続ける"
+        advance = "次へ"
         if not self._is_complete():
             advance = "全文表示"
         hint = f"{accept}: {advance}（長押し可）　{back}: 会話を省略"
@@ -300,12 +300,8 @@ class CutsceneScene(Scene):
             left_speaker=left_sp,
             right_speaker=right_sp,
             chars=int(self._chars),
-            page_index=self._page,
-            total_pages=len(self._pages),
             complete=self._is_complete(),
-            blink=self._blink,
-            hint_last=hint,
-            hint_next=hint,
+            hint_text=hint,
             style=DARK_STYLE,
             text_transform=self._glitch_text if glitch else None,
             text_color=(210, 60, 60) if glitch else None,

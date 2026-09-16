@@ -368,7 +368,7 @@ class TutorialScene(Scene):
         lines = wrap_text(self._instruction_font, instruction, SCREEN_WIDTH - 96)
         height = 94 + len(lines) * self._instruction_font.get_linesize()
         rect = pygame.Rect(24, 20, SCREEN_WIDTH - 48, height)
-        draw_meta_panel(screen, rect, accent=(138, 211, 174))
+        draw_meta_panel(screen, rect)
         title = self._banner_font.render(heading, True, (240, 219, 158))
         screen.blit(title, (48, 30))
         y = 70
@@ -396,7 +396,7 @@ class TutorialScene(Scene):
         veil = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         veil.fill((3, 7, 16, 190))
         screen.blit(veil, (0, 0))
-        draw_meta_panel(screen, pygame.Rect(64, 172, SCREEN_WIDTH - 128, 224), accent=(138, 211, 174))
+        draw_meta_panel(screen, pygame.Rect(64, 172, SCREEN_WIDTH - 128, 224))
         # 直前の offer 台詞（問い）を選択肢の上に残して文脈を保つ
         prompt = script.TUTORIAL["offer"][-1].lines[0]
         for row, text in enumerate(wrap_text(self._banner_font, prompt, SCREEN_WIDTH - 192)):
@@ -429,16 +429,11 @@ class TutorialScene(Scene):
         speaker = line.speaker
         style = COMBAT_BLUE_STYLE if speaker == KARONARU else COMBAT_RED_STYLE
         if blocking:
-            total = len(self._dialogue)
-            idx = self._dialogue_idx
             accept = self.game.settings.key_display("ui_accept")
             fire = self.game.settings.key_display("fire")
             keys = accept if accept == fire else f"{accept} / {fire}"
-            hint = f"{keys}: 次へ" if idx < total - 1 else f"{keys}: 続ける"
+            hint = f"{keys}: 次へ"
         else:
-            total = None
-            idx = None
             hint = None
         draw_combat_panel(screen, self.game.resources, speaker, line.lines,
-                          page_index=idx, total_pages=total,
                           hint_text=hint, style=style)

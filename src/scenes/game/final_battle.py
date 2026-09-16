@@ -19,6 +19,7 @@ import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.scenes.dialogue_panel import COMBAT_PURPLE_STYLE, draw_combat_panel
 from src.scenes.game.config import BOSS_BGM
+from src.scenes.meta_ui import TEXT, TEXT_MUTED, draw_meta_panel
 from src.story.aliases import bgm_path
 from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS
 from src.story.script import FINAL_INPUT_PROMPTS
@@ -506,13 +507,10 @@ class FinalBattleDirector:
         font = self.scene.game.resources.pixelfont(26)
         small = self.scene.game.resources.pixelfont(18)
         panel = pygame.Rect(110, SCREEN_HEIGHT // 2 - 12, SCREEN_WIDTH - 220, 102)
-        shade = pygame.Surface(panel.size, pygame.SRCALPHA)
-        shade.fill((8, 16, 20, 235))
-        pygame.draw.rect(shade, (170, 240, 205), shade.get_rect(), 2, border_radius=6)
-        screen.blit(shade, panel.topleft)
-        for text, face, y, color in ((prompt, font, panel.y + 17, (215, 255, 225)),
-                                      (hint, small, panel.y + 58, (195, 210, 205))):
-            rendered = face.render(text, True, color)
+        draw_meta_panel(screen, panel)
+        for text, face, y, color in ((prompt, font, panel.y + 17, TEXT),
+                                      (hint, small, panel.y + 58, TEXT_MUTED)):
+            rendered = face.render(text, False, color)
             screen.blit(rendered, (panel.centerx - rendered.get_width() // 2, y))
 
     def _draw_sengen_overlay(self, screen: pygame.Surface) -> None:
@@ -548,20 +546,14 @@ class FinalBattleDirector:
         if not pages or idx >= len(pages):
             return
         line  = pages[idx]
-        total = len(pages)
         accept = self.scene.game.settings.key_display("ui_accept")
 
-        if idx < total - 1:
-            hint = f"{idx + 1}/{total}  {accept}: 次へ"
-        else:
-            hint = f"{accept}: OK"
+        hint = f"{accept}: 次へ"
         draw_combat_panel(
             screen,
             self.scene.game.resources,
             line.speaker,
             line.lines,
-            page_index=idx,
-            total_pages=total,
             hint_text=hint,
             style=COMBAT_PURPLE_STYLE,
         )

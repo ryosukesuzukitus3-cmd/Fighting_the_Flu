@@ -351,15 +351,13 @@ class BlackholeScene(Scene):
         transform = (lambda s: self._noisy_text(s, self._noise_level)) if noisy else None
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
-        if self._page < len(self._pages) - 1:
-            hint = f"{accept}: 次へ   {back}: スキップ"
-        else:
-            hint = f"{accept}: 続ける   {back}: スキップ"
+        advance = "次へ" if self._is_text_complete() else "全文表示"
+        hint = f"{accept}: {advance}（長押し可）　{back}: 会話を省略"
         body_rect = draw_combat_panel(
             screen, self.game.resources, pg.speaker, pg.lines,
             style=COMBAT_BLUE_STYLE, chars=int(self._chars),
             complete=self._is_text_complete(),
-            page_index=self._page, total_pages=len(self._pages), hint_text=hint,
+            hint_text=hint,
             text_transform=transform,
             text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
         )

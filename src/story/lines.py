@@ -44,7 +44,7 @@ class Page:
     lines:   tuple[str, ...]
     se:      str | None = None
     fx:      tuple[str, ...] = ()
-    last:    bool = False               # 最終ページ（ヒント文言切替に使用）
+    last:    bool = False               # 台本上の終端メタデータ（画面の操作ヒントには使わない）
 
 
 def page(speaker: str, *lines: str, se: str | None = None,

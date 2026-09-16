@@ -6,12 +6,11 @@ from src.core.balance import PLAYER_MAX_HP
 from src.scenes.game.config import STAGE_NAMES
 from src.entities.weapon import Weapon
 from src.scenes.meta_ui import (
-    ACCENT_GOLD,
+    ACCENT_MINT,
     TEXT,
     TEXT_MUTED,
     draw_meta_background,
     draw_meta_footer,
-    draw_meta_panel,
     draw_meta_title,
     fit_text,
 )
@@ -59,8 +58,8 @@ class StageClearScene(Scene):
         start_stage(self.game, self._next_stage_id)
 
     def draw(self, screen: pygame.Surface) -> None:
-        accent = (132, 225, 194)
-        draw_meta_background(screen, accent=accent)
+        accent = ACCENT_MINT
+        draw_meta_background(screen)
         cx = SCREEN_WIDTH // 2
         chapter, stage_name, _ = STAGE_NAMES.get(
             self._cleared_stage, (f"第{self._cleared_stage}章", "", "")
@@ -78,7 +77,6 @@ class StageClearScene(Scene):
             eyebrow_font=self._small_font,
         )
         panel = pygame.Rect(90, 144, 620, 290)
-        draw_meta_panel(screen, panel, accent=accent)
 
         main_level = max(0, min(int(self._weapon.get("main_level", 0)), len(Weapon._MAIN_LEVELS) - 1))
         stats = [
@@ -90,19 +88,17 @@ class StageClearScene(Scene):
         ]
         for i, (label, value) in enumerate(stats):
             y = panel.y + 24 + i * 49
-            ls = self._small_font.render(label, True, TEXT_MUTED)
-            color = ACCENT_GOLD if i == 0 else accent if i == 2 else TEXT
-            vs = self._info_font.render(fit_text(self._info_font, value, 330), True, color)
+            ls = self._small_font.render(label, False, TEXT_MUTED)
+            color = accent if i == 2 else TEXT
+            vs = self._info_font.render(fit_text(self._info_font, value, 330), False, color)
             screen.blit(ls, (panel.x + 28, y + 5))
             screen.blit(vs, (panel.right - 28 - vs.get_width(), y))
-            if i < len(stats) - 1:
-                pygame.draw.line(screen, (46, 60, 79), (panel.x + 28, y + 41), (panel.right - 28, y + 41))
 
         next_label = self._small_font.render(
-            fit_text(self._small_font, f"次は {next_chapter}  {next_name}", 660), True, accent
+            fit_text(self._small_font, f"次は {next_chapter}  {next_name}", 660), False, accent
         )
         screen.blit(next_label, (cx - next_label.get_width() // 2, 450))
-        carry = self._small_font.render("HP・武器・先輩の強化を引き継いで進みます", True, TEXT_MUTED)
+        carry = self._small_font.render("HP・武器・先輩の強化を引き継いで進みます", False, TEXT_MUTED)
         screen.blit(carry, carry.get_rect(centerx=cx, y=482))
 
         if self._timer >= _INPUT_DELAY:

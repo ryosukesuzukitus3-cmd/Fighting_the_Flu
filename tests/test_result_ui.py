@@ -15,7 +15,7 @@ from src.scenes.disclaimer_scene import DisclaimerScene
 from src.scenes.gameclear import GameClearScene
 from src.scenes.gameover import GameOverScene
 from src.scenes.highscore_scene import HighScoreScene
-from src.scenes.meta_ui import ACCENT_GOLD
+from src.scenes.meta_ui import ACCENT_CORAL
 from src.scenes.stageclear import StageClearScene
 from src.scenes.stats_scene import PlayLogger, StatsScene
 from src.story.script import BOOT_DISCLAIMER, GAME_CLEAR, GAMEOVER_LINES
@@ -134,7 +134,7 @@ def test_statistics_pages_fit_and_identify_selected_page(game, monkeypatch, page
     scene.on_enter()
     scene._page = page
     screen = _draw(scene)
-    assert any(text == scene._PAGE_LABELS[page] and color == ACCENT_GOLD
+    assert any(text == scene._PAGE_LABELS[page] and color == ACCENT_CORAL
                for text, _rect, color in screen.text)
     body = [(text, rect) for text, rect, _ in screen.text if 138 <= rect.top < 520]
     assert all(pygame.Rect(70, 138, 660, 378).contains(rect) for _text, rect in body)
@@ -222,4 +222,3 @@ def test_disclaimer_wraps_canonical_text_and_shows_configured_skip_key(game):
     assert not any(line == "。" for line, _width in rendered)
     assert "RIGHT SHIFT" in text and "LEFT CTRL" in text
     assert all(width <= 752 for _text, width in rendered)
-    assert screen.get_at((400, 250)) != screen.get_at((400, 20))
