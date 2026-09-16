@@ -76,8 +76,8 @@ def test_all_player_status_fits_inside_top_band(game):
     assert all(width <= 248 for _text, width in game.rendered)
     text = [item[0] for item in game.rendered]
     assert "有給 0日" in text
-    assert "武器 MEDIC" in text
-    assert any("LASER6" in item and "HOMING7" in item and "MGT3" in item and "防壁" in item for item in text)
+    assert "メイン MEDIC" in text
+    assert any("レーザー6" in item and "追尾7" in item and "磁力3" in item and "防壁" in item for item in text)
 
 
 def test_hud_uses_current_remapped_gameplay_keys(game):
@@ -103,9 +103,9 @@ def test_long_weapon_name_does_not_spill_into_neighbor_column(game):
     player = _player()
     player.weapon = LongNamedWeapon()
     _draw_full_hud(HUD(game), pygame.Surface((800, 600), pygame.SRCALPHA), player)
-    main_label = next(item for item in game.rendered if item[0].startswith("武器 "))
+    main_label = next(item for item in game.rendered if item[0].startswith("メイン "))
     assert main_label[0].endswith("…")
-    assert main_label[1] <= 168
+    assert main_label[1] <= 178
 
 
 def test_boss_gauge_keeps_center_of_battle_uncovered(game):

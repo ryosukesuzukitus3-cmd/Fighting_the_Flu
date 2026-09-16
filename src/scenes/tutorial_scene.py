@@ -22,6 +22,7 @@ from src.entities.player import Player
 from src.entities.bullet import Bullet
 from src.entities.particle import ParticleSystem
 from src.scenes.dialogue_panel import draw_combat_panel, COMBAT_RED_STYLE, COMBAT_BLUE_STYLE
+from src.scenes.meta_ui import draw_meta_panel, draw_meta_footer, wrap_text
 from src.story import script
 from src.story.speakers import KARONARU
 
@@ -128,8 +129,10 @@ class TutorialScene(Scene):
         self._targets: pygame.sprite.Group = pygame.sprite.Group()  # ホーミング候補
         self._dummy: _DummyTarget | None = None
         self._buf = pygame.Surface(self.game.screen.get_size())
-        self._banner_font = self.game.resources.pixelfont(20)
-        self._tag_font    = self.game.resources.pixelfont(16)
+        self._banner_font = self.game.resources.pixelfont(24)
+        self._instruction_font = self.game.resources.pixelfont(20)
+        self._tag_font    = self.game.resources.pixelfont(18)
+        self._completed = False
 
         self._phase = "move"
         self._moved_h = self._moved_v = False
@@ -213,11 +216,39 @@ class TutorialScene(Scene):
 
     def _start_outro(self) -> None:
         self._phase = "outro"
-        self._say(script.TUTORIAL["outro"], then=self._on_complete)
+        self._say(script.TUTORIAL["outro"], then=self._finish)
+
+    def _finish(self) -> None:
+        if not self._completed:
+            self._completed = True
+            self._on_complete()
+
+    def _exit_key(self) -> int | None:
+        # A shared gameplay/back binding must not end practice while shooting.
+        settings = self.game.settings
+        used = {settings.get_key(action) for action in
+                ("fire", "laser", "move_left", "move_right", "move_up", "move_down")}
+        back = settings.get_key("ui_back")
+        if back not in used:
+            return back
+        return pygame.K_ESCAPE if pygame.K_ESCAPE not in used else None
+
+    def _exit_hint(self) -> str:
+        key = self._exit_key()
+        if key is None:
+            return ""
+        name = self.game.settings.key_display("ui_back") if key == self.game.settings.get_key("ui_back") else "ESC"
+        return f"{name}: 準備運動を終了"
 
     # ── 更新 ──────────────────────────────────────────────────────
     def update(self, dt: float) -> None:
         inp = self.game.input
+        if self._completed:
+            return
+        exit_key = self._exit_key()
+        if exit_key is not None and inp.is_just_pressed(exit_key):
+            self._finish()
+            return
         self.camera.update(dt)
         self.particles.update(dt)
 
@@ -232,7 +263,7 @@ class TutorialScene(Scene):
                 if self._choice == 0:
                     self._say(script.TUTORIAL["accept"], then=self._start_move)
                 else:
-                    self._say(script.TUTORIAL["skip"], then=self._on_complete)
+                    self._say(script.TUTORIAL["skip"], then=self._finish)
             return
 
         if self._in_dialogue:
@@ -320,14 +351,8 @@ class TutorialScene(Scene):
         screen.blit(buf, (ox, oy))
 
         # ── UI（シェイクしない）──
-        tag = self._tag_font.render("PRACTICE", True, (120, 160, 130))
-        screen.blit(tag, (SCREEN_WIDTH - tag.get_width() - 16, 12))
         if self._banner:
             self._draw_banner(screen)
-        if self._phase == "fight":
-            pips = "".join("●" if i < self._hits else "○" for i in range(_LOSE_HITS))
-            hp = self._tag_font.render(f"被弾 {pips}", True, (220, 160, 160))
-            screen.blit(hp, (16, 12))
 
         if self._choosing:
             self._draw_choice(screen)
@@ -335,37 +360,62 @@ class TutorialScene(Scene):
             self._draw_panel(screen, self._dialogue[self._dialogue_idx], blocking=True)
         elif self._hint is not None:
             self._draw_panel(screen, self._hint, blocking=False)
+        if self._exit_hint():
+            draw_meta_footer(screen, self._tag_font, self._exit_hint())
 
     def _draw_banner(self, screen: pygame.Surface) -> None:
-        fire = self.game.settings.key_display("fire")
-        extra = {"準備運動：移動": "← ↑ ↓ → で動け",
-                 "準備運動：射撃": f"{fire}キーで撃て（押しっぱなしで連射）",
-                 "準備運動：実戦": "撃って倒せ／弾は避けろ"}.get(self._banner, "")
-        surf = self._banner_font.render(f"── {self._banner} ──   {extra}", True, (255, 220, 120))
-        x = SCREEN_WIDTH // 2 - surf.get_width() // 2
-        bg = pygame.Surface((surf.get_width() + 28, surf.get_height() + 12), pygame.SRCALPHA)
-        bg.fill((0, 0, 0, 150))
-        screen.blit(bg, (x - 14, 30))
-        screen.blit(surf, (x, 36))
+        heading, instruction, progress = self._practice_labels()
+        lines = wrap_text(self._instruction_font, instruction, SCREEN_WIDTH - 96)
+        height = 94 + len(lines) * self._instruction_font.get_linesize()
+        rect = pygame.Rect(24, 20, SCREEN_WIDTH - 48, height)
+        draw_meta_panel(screen, rect, accent=(138, 211, 174))
+        title = self._banner_font.render(heading, True, (240, 219, 158))
+        screen.blit(title, (48, 30))
+        y = 70
+        for line in lines:
+            screen.blit(self._instruction_font.render(line, True, (230, 236, 248)), (48, y))
+            y += self._instruction_font.get_linesize()
+        screen.blit(self._tag_font.render(progress, True, (172, 222, 198)), (48, y + 5))
+
+    def _practice_labels(self) -> tuple[str, str, str]:
+        key = self.game.settings.key_display
+        if self._phase == "move":
+            instruction = f'{key("move_left")} / {key("move_right")}：左右　{key("move_up")} / {key("move_down")}：上下'
+            progress = f'左右の移動：{"完了" if self._moved_h else "未完了"}　上下の移動：{"完了" if self._moved_v else "未完了"}'
+            return "準備運動  1 / 3  移動", instruction, progress
+        if self._phase == "shoot":
+            return ("準備運動  2 / 3  射撃", f'{key("fire")} を長押しして連射',
+                    f"発射した回数：{min(self._shots, _TARGET_SHOTS)} / {_TARGET_SHOTS}")
+        hp = self._dummy.hp if self._dummy is not None else _DUMMY_HP
+        return ("準備運動  3 / 3  実戦", f'{key("fire")} で人形を撃つ。弾を避けながら動こう',
+                f"人形のHP：{hp} / {_DUMMY_HP}　被弾：{self._hits} / {_LOSE_HITS}（失敗しても進めます）")
 
     def _draw_choice(self, screen: pygame.Surface) -> None:
         cx = SCREEN_WIDTH // 2
-        cy = SCREEN_HEIGHT // 2 + 10
+        cy = SCREEN_HEIGHT // 2
+        veil = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        veil.fill((3, 7, 16, 190))
+        screen.blit(veil, (0, 0))
+        draw_meta_panel(screen, pygame.Rect(64, 172, SCREEN_WIDTH - 128, 224), accent=(138, 211, 174))
         # 直前の offer 台詞（問い）を選択肢の上に残して文脈を保つ
         prompt = script.TUTORIAL["offer"][-1].lines[0]
-        q = self._banner_font.render(prompt, True, (235, 235, 245))
-        screen.blit(q, (cx - q.get_width() // 2, cy - 58))
-        for i, label in enumerate(("はい、する", "いや、いい")):
+        for row, text in enumerate(wrap_text(self._banner_font, prompt, SCREEN_WIDTH - 192)):
+            q = self._banner_font.render(text, True, (235, 239, 249))
+            screen.blit(q, (cx - q.get_width() // 2, 190 + row * self._banner_font.get_linesize()))
+        for i, label in enumerate(("準備運動する", "そのまま進む")):
             sel = (i == self._choice)
-            surf = self._banner_font.render(label, True,
+            surf = self._instruction_font.render(label, True,
                                             (255, 235, 150) if sel else (170, 170, 180))
-            bw, bh = surf.get_width() + 40, surf.get_height() + 20
-            bx = cx + (i * 2 - 1) * 130 - bw // 2
+            bw, bh = 260, 52
+            bx = cx + (i * 2 - 1) * 142 - bw // 2
             box = pygame.Surface((bw, bh), pygame.SRCALPHA)
-            box.fill((30, 24, 44, 220) if sel else (16, 14, 24, 200))
+            box.fill((33, 57, 83, 245) if sel else (12, 20, 37, 235))
             pygame.draw.rect(box, (255, 220, 120) if sel else (90, 90, 110), box.get_rect(), 3)
             screen.blit(box, (bx, cy))
-            screen.blit(surf, (bx + 20, cy + 10))
+            if sel:
+                pygame.draw.polygon(screen, (255, 235, 150),
+                                    [(bx + 14, cy + 18), (bx + 14, cy + 34), (bx + 23, cy + 26)])
+            screen.blit(surf, (bx + 34, cy + 10))
 
         fire = self.game.settings.key_display("fire")
         accept = self.game.settings.key_display("ui_accept")
@@ -382,7 +432,9 @@ class TutorialScene(Scene):
             total = len(self._dialogue)
             idx = self._dialogue_idx
             accept = self.game.settings.key_display("ui_accept")
-            hint = f"{accept}: 次へ" if idx < total - 1 else f"{accept}: 続ける"
+            fire = self.game.settings.key_display("fire")
+            keys = accept if accept == fire else f"{accept} / {fire}"
+            hint = f"{keys}: 次へ" if idx < total - 1 else f"{keys}: 続ける"
         else:
             total = None
             idx = None

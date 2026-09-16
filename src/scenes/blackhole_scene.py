@@ -345,7 +345,6 @@ class BlackholeScene(Scene):
         # 顔アイコンは出すが、渦を隠す大型の立ち絵は使わない。ノイズ演出は維持。
         from src.scenes.dialogue_panel import (
             COMBAT_BLUE_STYLE,
-            COMBAT_PANEL_RECT,
             draw_combat_panel,
         )
         noisy = pg.speaker == KARONARU and self._noise_level > 0.1
@@ -356,7 +355,7 @@ class BlackholeScene(Scene):
             hint = f"{accept}: 次へ   {back}: スキップ"
         else:
             hint = f"{accept}: 続ける   {back}: スキップ"
-        draw_combat_panel(
+        body_rect = draw_combat_panel(
             screen, self.game.resources, pg.speaker, pg.lines,
             style=COMBAT_BLUE_STYLE, chars=int(self._chars),
             complete=self._is_text_complete(),
@@ -365,7 +364,8 @@ class BlackholeScene(Scene):
             text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
         )
         if self._noise_level > 0.03:
-            self._draw_signal_noise(screen, COMBAT_PANEL_RECT)
+            # Follow the expanded text layout, keeping controls and portraits clear.
+            self._draw_signal_noise(screen, body_rect)
 
     def _draw_signal_noise(self, screen: pygame.Surface, rect: pygame.Rect) -> None:
         noise = max(0.0, min(1.0, self._noise_level))
@@ -380,7 +380,7 @@ class BlackholeScene(Scene):
             w = random.randrange(1, 8)
             alpha = int(45 + 130 * noise * random.random())
             pygame.draw.rect(layer, (230, 230, 255, alpha), (x, y, w, 1))
-        screen.blit(layer, rect.topleft, special_flags=pygame.BLEND_RGBA_ADD)
+        screen.blit(layer, rect.topleft)
 
     def _noisy_text(self, text: str, noise: float) -> str:
         keep = max(0.0, min(0.28, noise * 0.28))

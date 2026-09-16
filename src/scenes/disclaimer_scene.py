@@ -10,6 +10,9 @@ import pygame
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.story.script import BOOT_DISCLAIMER
+from src.scenes.meta_ui import (
+    TEXT, draw_meta_background, draw_meta_footer, draw_meta_panel, draw_meta_title, wrap_text,
+)
 
 _FADE_IN  = 0.7   # 秒
 _HOLD     = 3.4   # 秒（フェードイン後の保持）
@@ -19,6 +22,8 @@ _FADE_OUT = 0.7   # 秒
 class DisclaimerScene(Scene):
     def on_enter(self) -> None:
         self._font_body  = self.game.resources.pixelfont(22)
+        self._font_title = self.game.resources.pixelfont(32)
+        self._font_hint = self.game.resources.pixelfont(18)
         self._timer      = 0.0
         self._leave_t    = -1.0   # 負＝まだ退場していない
 
@@ -46,11 +51,25 @@ class DisclaimerScene(Scene):
         else:
             alpha = min(255, int(255 * (self._timer / _FADE_IN)))
 
-        line_h = self._font_body.get_linesize() + 10
-        total_h = line_h * len(BOOT_DISCLAIMER)
-        y = (SCREEN_HEIGHT - total_h) // 2
+        layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        accent = (132, 225, 194)
+        draw_meta_background(layer, accent=accent)
+        draw_meta_title(layer, self._font_title, "この作品について", accent=accent, y=124)
+        draw_meta_panel(layer, pygame.Rect(60, 204, 680, 226), accent=accent)
+        lines = []
         for line in BOOT_DISCLAIMER:
-            surf = self._font_body.render(line, True, (215, 210, 200))
-            surf.set_alpha(alpha)
-            screen.blit(surf, (SCREEN_WIDTH // 2 - surf.get_width() // 2, y))
+            lines.extend(wrap_text(self._font_body, line, 624))
+            lines.append("")
+        lines.pop()
+        line_h = self._font_body.get_linesize() + 6
+        y = 316 - line_h * len(lines) // 2
+        for line in lines:
+            surf = self._font_body.render(line, True, TEXT)
+            layer.blit(surf, surf.get_rect(centerx=SCREEN_WIDTH // 2, y=y))
             y += line_h
+        accept = self.game.settings.key_display("ui_accept")
+        back = self.game.settings.key_display("ui_back")
+        keys = " / ".join(dict.fromkeys((accept, back, "ESC")))
+        draw_meta_footer(layer, self._font_hint, f"{keys}: 進む   まもなく自動で進みます")
+        layer.set_alpha(alpha)
+        screen.blit(layer, (0, 0))

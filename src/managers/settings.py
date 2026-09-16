@@ -144,7 +144,8 @@ class SettingsManager:
         if key in _MENU_NAV_KEYS:
             return True
         if action == "ui_accept":
-            return key in {self.get_key("ui_back"), self.get_key("pause")}
+            # Escape always leaves a menu; accepting on it would make settings unusable.
+            return key in {pygame.K_ESCAPE, self.get_key("ui_back"), self.get_key("pause")}
         return key == self.get_key("ui_accept")
 
     def _repair_menu_binding_conflicts(self) -> None:

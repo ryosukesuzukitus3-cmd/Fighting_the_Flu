@@ -5,20 +5,25 @@ from src.core.constants import SCREEN_WIDTH
 from src.core.balance import PLAYER_MAX_HP
 from src.story.script import GAMEOVER_LINES
 from src.scenes.meta_ui import (
+    ACCENT_GOLD,
     TEXT,
+    TEXT_MUTED,
     draw_meta_background,
     draw_meta_footer,
     draw_meta_panel,
     draw_meta_title,
     draw_selection_marker,
+    fit_text,
+    wrap_text,
 )
 
 
 class GameOverScene(Scene):
     def on_enter(self) -> None:
-        self._title_font = self.game.resources.pixelfont(90)
-        self._info_font  = self.game.resources.pixelfont(30)
-        self._mono_font  = self.game.resources.pixelfont(22)
+        self._title_font = self.game.resources.pixelfont(46)
+        self._info_font  = self.game.resources.pixelfont(24)
+        self._mono_font  = self.game.resources.pixelfont(20)
+        self._hint_font  = self.game.resources.pixelfont(18)
         # 台本 §8 のプールからランダムに 1 セット選ぶ
         self._mono_lines = random.choice(GAMEOVER_LINES) if GAMEOVER_LINES else ["力尽きた…"]
         self._score = self.game.shared.score
@@ -87,34 +92,49 @@ class GameOverScene(Scene):
             self._do_title()
 
     def draw(self, screen: pygame.Surface) -> None:
-        accent = (220, 58, 58)
+        accent = (241, 145, 139)
         draw_meta_background(screen, accent=accent)
         cx = SCREEN_WIDTH // 2
-        draw_meta_title(screen, self._title_font, "YOU DIED", accent=accent, y=72)
-        panel = pygame.Rect(118, 205, 564, 300)
+        draw_meta_title(screen, self._title_font, "力尽きた…", accent=accent, y=24)
+        y = 112
+        for line in self._mono_lines:
+            for part in wrap_text(self._mono_font, line, 660):
+                surf = self._mono_font.render(part, True, TEXT_MUTED)
+                screen.blit(surf, surf.get_rect(centerx=cx, y=y))
+                y += 27
+
+        panel = pygame.Rect(70, 190, 660, 110 + len(self._options) * 72)
         draw_meta_panel(screen, panel, accent=accent)
-
-        for i, line in enumerate(self._mono_lines):
-            surf = self._mono_font.render(line, True, (180, 160, 150))
-            screen.blit(surf, (cx - surf.get_width() // 2, 225 + i * 27))
-
-        score = self._info_font.render(f"SCORE : {self._score}", True, (200, 200, 200))
-        screen.blit(score, (cx - score.get_width() // 2, 295))
-
+        label = self._hint_font.render(f"第{self._stage}章まで到達", True, TEXT_MUTED)
+        screen.blit(label, (94, 210))
+        score = self._info_font.render(
+            fit_text(self._info_font, f"スコア {self._score:,}", 400), True, TEXT,
+        )
+        screen.blit(score, score.get_rect(right=706, y=205))
+        life_text = f"残り有給 {self._lives}日" if self._lives else "有給は残っていません"
+        life = self._hint_font.render(fit_text(self._hint_font, life_text, 612), True, accent)
+        screen.blit(life, (94, 247))
         labels = {
-            "continue": f"有給をもう1日使う（残り{self._lives}日）",
-            "retry": "ステージ1からやり直す",
+            "continue": "有給を1日使って続ける",
+            "retry": "最初からやり直す",
             "title": "タイトルへ戻る",
         }
-        y0 = 350
+        details = {
+            "continue": "今の章をHP全回復・章開始時の強化で再開",
+            "retry": "スコア・強化・有給を初期状態にして第一章へ",
+            "title": "このプレイを終えてタイトルへ",
+        }
         for i, option in enumerate(self._options):
             selected = i == self._cursor
-            rect = pygame.Rect(150, y0 + i * 45, 500, 37)
-            draw_selection_marker(screen, rect, selected=selected, accent=(255, 210, 100))
-            color = (255, 225, 135) if selected else TEXT
-            surf = self._info_font.render(("> " if selected else "  ") + labels[option], True, color)
-            screen.blit(surf, (cx - surf.get_width() // 2, rect.y + 5))
+            rect = pygame.Rect(86, 284 + i * 72, 628, 66)
+            draw_selection_marker(screen, rect, selected=selected, accent=ACCENT_GOLD)
+            color = ACCENT_GOLD if selected else TEXT
+            surf = self._info_font.render(labels[option], True, color)
+            screen.blit(surf, (108, rect.y + 3))
+            detail = self._hint_font.render(fit_text(self._hint_font, details[option], 584), True, TEXT_MUTED)
+            screen.blit(detail, (108, rect.y + 36))
 
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
-        draw_meta_footer(screen, self._mono_font, f"↑↓: 選択   {accept}: 決定   {back} / ESC: タイトルへ")
+        back_keys = " / ".join(dict.fromkeys((back, "ESC")))
+        draw_meta_footer(screen, self._hint_font, f"↑↓: 選択   {accept}: 決定   {back_keys}: タイトルへ")

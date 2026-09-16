@@ -1,0 +1,224 @@
+"""Real-font layout and configurable input checks for narrative screens."""
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pygame
+import pytest
+
+from src.managers.input import InputManager
+from src.managers.resource import ResourceManager
+from src.managers.settings import SettingsManager
+from src.scenes import dialogue_panel as panels
+from src.scenes.credits_roll import CreditsRollScene
+from src.scenes.blackhole_scene import BlackholeScene
+from src.scenes.cutscene_scene import CutsceneScene
+from src.scenes.tutorial_scene import TutorialScene
+from src.story import script
+from src.story.lines import Line, page
+from src.story.speakers import NARRATION
+
+
+@pytest.fixture
+def game(monkeypatch, tmp_path):
+    import src.managers.settings as settings_module
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    monkeypatch.setattr(settings_module, "_SETTINGS_PATH", tmp_path / "settings.json")
+    pygame.init()
+    screen = pygame.display.set_mode((800, 600))
+    settings = SettingsManager()
+    yield SimpleNamespace(screen=screen, resources=ResourceManager(), settings=settings,
+                          input=InputManager(settings), sound=Mock(), change_scene=Mock())
+    pygame.quit()
+
+
+def test_authored_story_text_stays_inside_its_panel(game):
+    # Includes the four-row prologue that previously drew below the panel.
+    background = (231, 21, 187)
+    for beat in script.STORY_BEATS:
+        if beat.scene == "credits":
+            continue
+        for index, pg in enumerate(beat.pages):
+            game.screen.fill(background)
+            panels.draw_story_panel(game.screen, game.resources, pg.speaker, pg.lines,
+                                    page_index=index, total_pages=len(beat.pages),
+                                    show_portrait=False, hint_next="ENTER: 次へ　X: 会話を省略",
+                                    hint_last="ENTER: 続ける　X: 会話を省略")
+            below = game.screen.subsurface((0, 566, 800, 34))
+            unchanged = pygame.mask.from_threshold(below, background, (1, 1, 1, 255))
+            assert unchanged.count() == 800 * 34, (beat.key, index)
+            wrapped = panels._wrap_lines(game.resources.pixelfont(26), pg.lines, 668)
+            assert "".join(wrapped) == "".join(pg.lines)
+            assert all(game.resources.pixelfont(26).size(line)[0] <= 668 for line in wrapped)
+
+
+def test_long_key_hints_reserve_space_beside_page_counter(game):
+    rect = pygame.Rect(40, 382, 720, 184)
+    hint = "RIGHTBRACKET: 全文表示（長押し可）　PRINTSCREEN: 会話を省略"
+    label, lines, height = panels._footer_layout(game.resources, rect, 29, 31, hint, 66, 18)
+    font = game.resources.pixelfont(18)
+    assert label == "30/31"
+    assert "".join(lines) == hint
+    assert all(font.size(line)[0] <= 760 - 46 - 66 - font.size(label)[0] - 22 for line in lines)
+    assert height >= len(lines) * font.get_height() + 16
+    body = game.resources.pixelfont(26)
+    text = panels._wrap_lines(body, script.story_beat("prologue").pages[12].lines, 668)
+    expanded = panels._panel_for_text(rect, body, text, height)
+    assert expanded.top > 100
+    assert expanded.top + 18 + len(text) * (body.get_height() + 2) - 2 <= expanded.bottom - height
+
+
+def test_authored_combat_dialogue_stays_above_boss_gauges(game):
+    def dialogue_lines(value):
+        if isinstance(value, Line):
+            yield value
+        elif isinstance(value, dict):
+            for child in value.values():
+                yield from dialogue_lines(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                yield from dialogue_lines(child)
+
+    background = (231, 21, 187)
+    for name, value in vars(script).items():
+        if not name.isupper():
+            continue
+        for line in dialogue_lines(value):
+            game.screen.fill(background)
+            panels.draw_combat_panel(game.screen, game.resources, line.speaker, line.lines,
+                                     page_index=0, total_pages=3, hint_text="ENTER / Z: 次へ")
+            below = game.screen.subsurface((0, 544, 800, 56))
+            unchanged = pygame.mask.from_threshold(below, background, (1, 1, 1, 255))
+            assert unchanged.count() == 800 * 56, (name, line.lines)
+
+
+def test_cutscene_hint_matches_typewriter_state_and_custom_keys(game, monkeypatch):
+    game.settings.set_key_binding("ui_accept", pygame.K_q)
+    game.settings.set_key_binding("ui_back", pygame.K_w)
+    scene = CutsceneScene(game, [page(NARRATION, "一文字ずつ表示する会話")], lambda: None)
+    scene.on_enter()
+    draw = Mock()
+    monkeypatch.setattr("src.scenes.cutscene_scene.draw_story_panel", draw)
+    scene.draw(game.screen)
+    hint = draw.call_args.kwargs["hint_last"]
+    assert "Q: 全文表示" in hint and "W: 会話を省略" in hint
+    scene._chars = scene._total_chars()
+    scene.draw(game.screen)
+    assert "Q: 続ける" in draw.call_args.kwargs["hint_last"]
+
+
+def test_practice_instruction_uses_movement_bindings_and_progress(game):
+    for action, key in (("move_left", pygame.K_a), ("move_right", pygame.K_d),
+                        ("move_up", pygame.K_w), ("move_down", pygame.K_s)):
+        game.settings.set_key_binding(action, key)
+    scene = TutorialScene(game)
+    scene.on_enter()
+    scene._moved_h = True
+    title, instruction, progress = scene._practice_labels()
+    assert "1 / 3" in title
+    assert "A / D" in instruction and "W / S" in instruction
+    assert "左右の移動：完了" in progress and "上下の移動：未完了" in progress
+    scene._start_shoot()
+    scene._shots = 3
+    assert "3 / 6" in scene._practice_labels()[2]
+
+
+def test_practice_back_conflict_does_not_exit_while_firing(game):
+    game.settings.set_key_binding("fire", pygame.K_x)
+    done = Mock()
+    scene = TutorialScene(game, done)
+    scene.on_enter()
+    scene.player._entering = False
+    scene._start_shoot()
+    game.input.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x))
+    scene.update(0.1)
+    done.assert_not_called()
+    assert scene._shots == 1
+    assert "ESC:" in scene._exit_hint()
+    game.input.pre_update()
+    game.input.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE))
+    scene.update(0.1)
+    scene.update(0.1)
+    done.assert_called_once()
+
+
+def test_practice_does_not_assign_an_exit_over_another_gameplay_key(game):
+    game.settings.set_key_binding("fire", pygame.K_x)
+    game.settings.set_key_binding("move_up", pygame.K_ESCAPE)
+    scene = TutorialScene(game)
+    scene.on_enter()
+    assert scene._exit_key() is None
+    assert scene._exit_hint() == ""
+
+
+def test_credits_wrap_preserves_text_and_readable_font(game):
+    text = "長い名前やクレジットも読みやすい文字の大きさで表示します。" * 3
+    scene = CreditsRollScene(game, [page(NARRATION, text)], lambda: None)
+    scene.on_enter()
+    rows = [(value, kind) for value, kind, _ in scene._entries if value]
+    assert len(rows) > 1
+    assert "".join(value for value, _ in rows) == text
+    assert all(kind == "body" for _, kind in rows)
+    assert all(scene._font_for(kind, value).size(value)[0] <= 656 for value, kind in rows)
+
+
+def test_credits_background_rays_respect_opacity(game):
+    scene = CreditsRollScene(game, [], lambda: None)
+    scene._timer = 0.0
+    game.screen.fill("black")
+    scene._draw_slow_rays(game.screen)
+    pixels = pygame.image.tobytes(game.screen, "RGB")
+    assert 0 < max(pixels) < 30
+
+
+def test_blackhole_scanlines_change_brightness_with_noise_strength(game, monkeypatch):
+    import src.scenes.blackhole_scene as blackhole
+    monkeypatch.setattr(blackhole.random, "random", lambda: 0.5)
+    monkeypatch.setattr(blackhole.random, "randrange", lambda start, stop: start)
+    scene = BlackholeScene(game, [], lambda: None)
+    values = []
+    for strength in (0.04, 0.95):
+        surface = pygame.Surface((100, 40))
+        surface.fill("black")
+        scene._noise_level = strength
+        scene._draw_signal_noise(surface, surface.get_rect())
+        values.append(surface.get_at((30, 3)).r)
+    assert 0 < values[0] < values[1] < 50
+
+
+@pytest.mark.parametrize("long_page", [False, True])
+def test_blackhole_noise_only_touches_body_even_when_panel_grows(game, monkeypatch, long_page):
+    from src.story.speakers import SAWAGUCHI
+    import src.scenes.blackhole_scene as blackhole
+    monkeypatch.setattr(blackhole.random, "random", lambda: 0.5)
+    monkeypatch.setattr(blackhole.random, "randrange", lambda start, stop: start)
+    monkeypatch.setattr(blackhole.random, "randint", lambda start, stop: 0)
+    monkeypatch.setattr(panels, "_arrow_visible", lambda arrow_on: True)
+    rows = ("長い会話も操作欄と重ならないように本文だけにノイズを重ねます。",) * 4 if long_page else ("おめえ！",)
+    scene = BlackholeScene(game, [page(SAWAGUCHI, *rows)], lambda: None)
+    scene._page = 0
+    scene._chars = sum(map(len, rows))
+    game.screen.fill("black")
+    scene._noise_level = 0.0
+    scene._draw_dialogue(game.screen)
+    clean = game.screen.copy()
+    body = []
+    original = scene._draw_signal_noise
+
+    def record(screen, rect):
+        body.append(rect)
+        original(screen, rect)
+
+    monkeypatch.setattr(scene, "_draw_signal_noise", record)
+    game.screen.fill("black")
+    scene._noise_level = 0.95
+    scene._draw_dialogue(game.screen)
+    rect = body[0]
+    assert rect.bottom <= 496  # Footer starts above the stable panel bottom at 544.
+    if long_page:
+        assert rect.top < panels.COMBAT_PANEL_RECT.top
+    # Every pixel outside the returned body bounds, including controls, is intact.
+    restored = game.screen.copy()
+    restored.blit(clean, rect.topleft, rect)
+    assert pygame.image.tobytes(restored, "RGB") == pygame.image.tobytes(clean, "RGB")
+    assert pygame.image.tobytes(game.screen.subsurface(rect), "RGB") != pygame.image.tobytes(clean.subsurface(rect), "RGB")
