@@ -299,7 +299,7 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, complete=
     # 立ち絵（ウィンドウより先に描いて、ウィンドウ下部が重なる＝奥行き感）
     if show_portrait:
         size = 300                       # 少し小さく
-        base_y = rect.y - size + 108
+        base_y = rect.y - size + 48
         if left_speaker is None and right_speaker is None:
             left_speaker, right_speaker = story_sides(speaker, None)
         if left_speaker:

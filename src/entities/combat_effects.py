@@ -78,7 +78,7 @@ class FinalBeam(Bullet):
         self.age = 0.0
         self.image = pygame.Surface((1, 1), pygame.SRCALPHA)
         self.rect = pygame.Rect(round(origin[0]), round(origin[1]), 1, 1)
-        self.game.sound.play_se(f"{SOUND_ROOT}/forceField_002.ogg", volume=0.5)
+        self.game.sound.play_se(f"{SOUND_ROOT}/forceField_002.ogg", volume=0.35)
 
     @property
     def reached_target(self):
@@ -88,7 +88,7 @@ class FinalBeam(Bullet):
         before = self.age
         self.age += dt
         if before < self.CHARGE <= self.age:
-            self.game.sound.play_se(f"{SOUND_ROOT}/laserLarge_002.ogg", volume=0.75)
+            self.game.sound.play_se(f"{SOUND_ROOT}/laserLarge_002.ogg", volume=0.55)
         progress = max(0.0, min(1.0, (self.age - self.CHARGE) / self.TRAVEL))
         head = self.origin.lerp(self.target, progress)
         self.rect.center = (round(head.x), round(head.y))

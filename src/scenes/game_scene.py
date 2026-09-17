@@ -1191,11 +1191,12 @@ class GameScene(
                             self.particles.spawn_hit(bx, by)
                             self.particles.spawn_spark(bx, by, count=3)
                             self.camera.shake(1.5)
-                        self.game.sound.play_se(hit_se, volume=0.3)
+                        if not getattr(bullet, "final_strike", False):
+                            self.game.sound.play_se(hit_se, volume=0.3)
                     if self._combo_count > 0:
                         self._combo_timer = COMBO_WINDOW
                     if getattr(bullet, "final_strike", False):
-                        self.game.sound.play_se("music/se/kenney/lowFrequency_explosion_000.ogg", volume=0.8)
+                        self.game.sound.play_se("music/se/kenney/lowFrequency_explosion_000.ogg", volume=0.55)
                         self.camera.shake(14.0)
                     bullet.kill()
                     stance_pts = STANCE_HOMING if isinstance(bullet, HomingBullet) else STANCE_MAIN
