@@ -1195,7 +1195,8 @@ class GameScene(
         for bullet in list(self.enemy_bullets):
             if getattr(bullet, "_terrain_bounced", False) or getattr(bullet, "warning_only", False):
                 continue
-            if self.player.hit_rect.colliderect(bullet.rect):
+            collides = getattr(bullet, "collides_with_rect", bullet.rect.colliderect)
+            if collides(self.player.hit_rect):
                 hit_bullet = bullet
                 break
         if hit_bullet is not None:

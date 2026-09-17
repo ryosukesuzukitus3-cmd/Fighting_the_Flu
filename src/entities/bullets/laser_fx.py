@@ -76,6 +76,23 @@ class LaserBeamSprite(EnemyBullet):
 
     persistent = True
 
+    def collides_with_rect(self, target: pygame.Rect) -> bool:
+        """Intersect the target with this frame's visible pixels, not its padding.
+
+        Keep every nonzero-alpha pixel, including the faint outer glow. The
+        image dimensions and damage are unchanged; only transparent space is
+        excluded. Build the mask only when a target reaches the image bounds.
+        """
+        overlap = self.rect.clip(target)
+        if not overlap or self.image.get_alpha() == 0:
+            return False
+        if self._collision_mask is None:
+            self._collision_mask = pygame.mask.from_surface(self.image, threshold=0)
+        target_mask = pygame.mask.Mask(overlap.size, fill=True)
+        return self._collision_mask.overlap(
+            target_mask, (overlap.x - self.rect.x, overlap.y - self.rect.y),
+        ) is not None
+
     def __init__(
         self,
         cx: float,
@@ -201,6 +218,8 @@ class LaserBeamSprite(EnemyBullet):
         return vscale, alpha, flash
 
     def _render(self) -> None:
+        # Animation, resizing and fading can all change the occupied pixels.
+        self._collision_mask = None
         if self._frames:
             self._render_frames()
             return

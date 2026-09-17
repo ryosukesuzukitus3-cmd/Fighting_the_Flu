@@ -6,7 +6,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pytest
 
-from tools.agent_campaign import Campaign
+from tools.agent_campaign import Campaign, _escape_distance
 from tools.agent_playtest import Session
 from src.scenes.game_scene import GameScene
 
@@ -67,3 +67,48 @@ def test_return_to_title_on_last_budgeted_batch_counts_as_complete(tmp_path, mon
         assert result["reason"] == "completed campaign and returned to title"
     finally:
         session.close()
+
+
+@pytest.mark.parametrize("danger,center,obstacles", [
+    ((0, 310, 800, 286), (190, 540), ()),
+    # Down would fit on screen but requires crossing the floor.
+    ((0, 200, 800, 290), (190, 460), ((0, 505, 800, 95),)),
+])
+def test_broad_lower_beam_prefers_reachable_upper_exit(danger, center, obstacles):
+    import pygame
+
+    bounds = pygame.Rect(0, 0, 800, 600)
+    hit = pygame.Rect(0, 0, 22, 28)
+    hit.center = center
+    beam = pygame.Rect(danger)
+    walls = [pygame.Rect(rect) for rect in obstacles]
+    costs = {direction: _escape_distance(hit.move(dx, dy), beam, bounds, walls)
+             for direction, dx, dy in (("up", 0, -30), ("down", 0, 30),
+                                       ("left", -30, 0), ("right", 30, 0))}
+    assert min(costs, key=costs.get) == "up"
+
+
+def test_beam_reaching_left_edge_cannot_be_escaped_through_screen_border():
+    import pygame
+
+    bounds = pygame.Rect(0, 0, 800, 600)
+    beam = pygame.Rect(0, 200, 700, 160)
+    hit = pygame.Rect(2, 266, 22, 28)
+    stay = _escape_distance(hit, beam, bounds)
+    up = _escape_distance(hit.move(0, -30), beam, bounds)
+    down = _escape_distance(hit.move(0, 30), beam, bounds)
+    # The two-pixel gap to the screen edge must not win over either exit.
+    assert up == down < stay
+    assert stay > hit.right
+
+
+def test_small_bullet_still_allows_nearest_clear_exit_without_mutating_inputs():
+    import pygame
+
+    bounds = pygame.Rect(0, 0, 800, 600)
+    hit = pygame.Rect(190, 250, 22, 28)
+    bullet = pygame.Rect(206, 256, 12, 12)
+    originals = (hit.copy(), bullet.copy(), bounds.copy())
+    assert _escape_distance(hit.move(-12, 0), bullet, bounds) == 0
+    assert 0 < _escape_distance(hit, bullet, bounds) < _escape_distance(hit.move(4, 0), bullet, bounds)
+    assert (hit, bullet, bounds) == originals

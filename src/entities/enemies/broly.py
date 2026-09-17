@@ -16,7 +16,7 @@ _APPROACH_TIME  = 0.9   # 秒：突進準備までの助走時間
 _WINDUP_TIME    = 0.95  # 秒：射線を固定した予告。基本速度で上下に回避できる猶予
 _FIRE_HOLD_TIME = 1.30  # 秒：停止して発射。ビームの寿命もこの長さに揃える
 _BEAM_TAPER     = 0.48  # 秒：終端で徐々に細くなって消える
-_BEAM_H         = 286   # 可視ビームと当たり判定の高さ
+_BEAM_H         = 286   # ビーム画像の描画高さ（当たり判定は非透明画素）
 _FIRE_SHAKE     = 4.5
 _STATS        = enemy_stats("EnemyBroly")
 

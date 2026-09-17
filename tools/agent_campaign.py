@@ -22,6 +22,33 @@ from tools.agent_playtest import Session
 from tools.playtest_state import boundary, mode
 
 
+def _escape_distance(hit, danger, bounds, obstacles=()):
+    """Distance to a clear cardinal exit inside the playable area.
+
+    A nearby edge of a beam is useless if reaching it needs leaving the screen
+    or crossing solid terrain. Positions and rectangles are read-only inputs.
+    """
+    if not hit.colliderect(danger):
+        return 0
+    offsets = ((danger.left - hit.right - 2, 0),
+               (danger.right - hit.left + 2, 0),
+               (0, danger.top - hit.bottom - 2),
+               (0, danger.bottom - hit.top + 2))
+    distances = []
+    for dx, dy in offsets:
+        destination = hit.move(dx, dy)
+        if not bounds.contains(destination):
+            continue
+        path = hit.union(destination)
+        if any(destination.colliderect(wall) or
+               (not hit.colliderect(wall) and path.colliderect(wall))
+               for wall in obstacles):
+            continue
+        distances.append(abs(dx) + abs(dy))
+    # All cardinal exits can be blocked. Do not invent an offscreen escape.
+    return min(distances, default=bounds.width + bounds.height)
+
+
 class Campaign:
     def __init__(self, session, interval=12, max_frames=72000):
         if type(interval) is not int or not 12 <= interval <= 600:
@@ -184,6 +211,7 @@ class Campaign:
         return self.pulse("ui_accept")
 
     def movement(self, scene):
+        from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
         from src.entities.terrain_query import iter_collidable_terrain
 
         player = scene.player
@@ -245,29 +273,34 @@ class Campaign:
         best = None
         best_cost = float("inf")
         period = self.interval / 60
+        # Keep the whole player sprite on screen, even when scoring its smaller
+        # collision rectangle. Terrain is projected using the same horizon.
+        hit_bounds = player.rect.__class__(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        hit_bounds = hit_bounds.inflate(player.hit_rect.width - player.rect.width,
+                                        player.hit_rect.height - player.rect.height)
+        predictions = [(horizon,
+                        [(rect.move(int(vx * horizon), int(vy * horizon)), weight)
+                         for rect, vx, vy, weight in hazards],
+                        [obj.rect.move(int(-scroll * horizon), 0) for obj in terrain])
+                       for horizon in (period / 4, period / 2, period, period * 2)]
         for dx, dy in ((0, 0), (0, -1), (0, 1), (-1, 0), (1, 0),
                        (-1, -1), (-1, 1), (1, -1), (1, 1)):
             scale = math.sqrt(0.5) if dx and dy else 1
             cost = 0.0
-            for horizon in (period / 4, period / 2, period, period * 2):
-                px = max(player.rect.width / 2, min(800 - player.rect.width / 2,
+            for horizon, predicted_hazards, predicted_terrain in predictions:
+                px = max(player.rect.width / 2, min(SCREEN_WIDTH - player.rect.width / 2,
                      center[0] + dx * speed * scale * horizon))
-                py = max(player.rect.height / 2, min(570 - player.rect.height / 2,
+                py = max(player.rect.height / 2, min(SCREEN_HEIGHT - player.rect.height / 2,
                      center[1] + dy * speed * scale * horizon))
                 hit = player.hit_rect.copy()
                 hit.center = int(px), int(py)
-                for rect, vx, vy, weight in hazards:
-                    predicted = rect.move(int(vx * horizon), int(vy * horizon))
+                for predicted, weight in predicted_hazards:
                     gap_x = max(predicted.left - hit.right, hit.left - predicted.right, 0)
                     gap_y = max(predicted.top - hit.bottom, hit.top - predicted.bottom, 0)
                     distance = math.hypot(gap_x, gap_y)
                     if distance < 1:
-                        # Equal penalties for all overlapping candidates made the
-                        # old controller stay inside broad beams. Prefer the
-                        # direction with the shortest remaining exit distance.
-                        depth = min(hit.right - predicted.left, predicted.right - hit.left,
-                                    hit.bottom - predicted.top, predicted.bottom - hit.top)
-                        cost += (14000 + max(0, depth) * 350) * weight
+                        depth = _escape_distance(hit, predicted, hit_bounds, predicted_terrain)
+                        cost += (14000 + depth * 350) * weight
                     elif distance < 70:
                         cost += 220 * weight / (distance + 3)
                 cost += (abs(px - target_x) * 0.18 + abs(py - target_y) * 0.42) / 4
