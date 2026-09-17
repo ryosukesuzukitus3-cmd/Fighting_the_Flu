@@ -1,7 +1,7 @@
 """バトルシステムv2 の純ロジック（pygame 非依存・ユニットテスト対象）。
 
-- HeatSystem   : 射撃で体温が上がり、放置と先輩（解熱弾Lv）で冷える。
-                 39.9℃到達で「熱暴走」＝一定時間メイン/レーザー射撃不可。
+- HeatSystem   : レーザーで発熱し、通常射撃へ切り替えると冷える。
+                 39.9℃到達で「熱暴走」＝一定時間レーザーのみ停止。
 - award_pieces : コンボ閾値の通過判定で持ち駒（歩/金/龍）を獲得する。
 - enrage_mult  : ボスフェーズ経過時間 → 症状悪化（攻撃間隔短縮）倍率。
 
@@ -47,7 +47,8 @@ class HeatSystem:
             return True
         return False
 
-    def update(self, dt: float, karonaru_lv: int = 0, boss_down: bool = False) -> None:
+    def update(self, dt: float, karonaru_lv: int = 0, boss_down: bool = False,
+               laser_active: bool = False) -> None:
         if self._lock_timer > 0.0:
             self._lock_timer -= dt
             if self._lock_timer <= 0.0:
@@ -57,7 +58,10 @@ class HeatSystem:
         cool = HEAT_COOL_RATE + max(0, karonaru_lv) * HEAT_COOL_KARONARU
         if boss_down:
             cool *= HEAT_BOSS_DOWN_MULT
-        self.heat = max(0.0, self.heat - cool * dt)
+        # Shooting the main weapon is the fallback, not a forced idle period.
+        # A boss break vents heat even while committing to a laser burst.
+        if not laser_active or boss_down:
+            self.heat = max(0.0, self.heat - cool * dt)
 
 
 def award_pieces(prev_combo: int, new_combo: int, held_count: int) -> list[str]:

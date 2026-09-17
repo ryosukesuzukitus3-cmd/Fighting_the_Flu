@@ -1,0 +1,54 @@
+{
+  "creator": "Kenney",
+  "license": "CC0-1.0",
+  "downloaded": "2026-09-17",
+  "source_urls": [
+    "https://kenney.nl/assets/particle-pack",
+    "https://kenney.nl/assets/sci-fi-sounds"
+  ],
+  "usage": "final beam, companion return light, fortress muzzle and weapon sounds",
+  "files": [
+    {
+      "path": "assets/graphic/effects/kenney/flare.png",
+      "pack": "Particle Pack 1.1",
+      "source_file": "flare_01.png",
+      "sha256": "254f5bd4f0548612bf29305d27899efdee8cb8d8306292761ebbddebd3e57935"
+    },
+    {
+      "path": "assets/graphic/effects/kenney/spark.png",
+      "pack": "Particle Pack 1.1",
+      "source_file": "star_04.png",
+      "sha256": "6485ac16c773663bd39346f3bedae04465ac14c661eb47cc5cfa935cdbf6c2ec"
+    },
+    {
+      "path": "assets/music/se/kenney/forceField_000.ogg",
+      "pack": "Sci-Fi Sounds 1.0",
+      "source_file": "forceField_000.ogg",
+      "sha256": "c2916f2a062c8ddd1aca2826d134fe90847037db31342726ffb0f9097afe339c"
+    },
+    {
+      "path": "assets/music/se/kenney/forceField_002.ogg",
+      "pack": "Sci-Fi Sounds 1.0",
+      "source_file": "forceField_002.ogg",
+      "sha256": "051b0eafc479695af4ca3607d41fd4be41bae7c21f4f9508d004722b09f1bd63"
+    },
+    {
+      "path": "assets/music/se/kenney/laserLarge_002.ogg",
+      "pack": "Sci-Fi Sounds 1.0",
+      "source_file": "laserLarge_002.ogg",
+      "sha256": "e5e0b6ccc4d5720c8174a3e5b7cc6f9be3057352a89cbb2e99a00efc6fe5cc11"
+    },
+    {
+      "path": "assets/music/se/kenney/laserSmall_001.ogg",
+      "pack": "Sci-Fi Sounds 1.0",
+      "source_file": "laserSmall_001.ogg",
+      "sha256": "ab87913aba9790a0c5fa173d086267ba521ad522fcad2252271db49988313cf5"
+    },
+    {
+      "path": "assets/music/se/kenney/lowFrequency_explosion_000.ogg",
+      "pack": "Sci-Fi Sounds 1.0",
+      "source_file": "lowFrequency_explosion_000.ogg",
+      "sha256": "3cb48d86dab63140cfb9aaeea4d4a6846abaca5831d157d8adbec0490da26343"
+    }
+  ]
+}

@@ -795,6 +795,9 @@ CREDITS: list[Page] = [
     page(SYS, "動画FX: nc68226 / nc95306 / nc97528"),
     page(SYS, "/ 提供", "ニコニ・コモンズ"),
 
+    page(SYS, "/ エフェクト・効果音", "Kenney (kenney.nl)"),
+    page(SYS, "Particle Pack / Sci-Fi Sounds"),
+
     page(SYS, "■ SPECIAL THANKS"),
     page(SYS, "澤口修平"),
     page(SYS, "/ そして、この夜に付き合ってくれた あなたへ。", last=True),

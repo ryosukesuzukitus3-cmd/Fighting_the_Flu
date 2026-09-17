@@ -235,7 +235,8 @@ def test_game_scene_final_shot_bypasses_heat_and_rejects_companion_hits(monkeypa
         assert actual._boss is boss and boss.hp == 1
         assert not actual._post_boss
 
-        retry.rect.center = boss.rect.center
+        retry.advance(retry.CHARGE + retry.TRAVEL)
+        assert retry.collides_with_rect(boss.rect)
         actual.player_bullets.add(retry)
         actual._process_collisions()
         assert actual._post_boss

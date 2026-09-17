@@ -198,7 +198,8 @@ class Campaign:
                           laser=scene.laser.state,
                           weapon=player.weapon.snapshot(), companion=scene._companion is not None,
                           boss=({"hp": boss.hp, "form2": boss._form2, "form3": boss._form3,
-                                 "act": boss._form3_act} if boss is not None else None))
+                                 "act": boss._form3_act, "pattern": boss._phase[1],
+                                 "volley": boss._shot_variant} if boss is not None else None))
         if current_boundary != self._previous_boundary:
             record["boundary"] = True
             if dialogue:
@@ -442,10 +443,12 @@ class Campaign:
                 self._cooling = True
             elif heat.heat <= 48:
                 self._cooling = False
-        if not self._cooling and self._attack_target:
+        if self._attack_target:
             actions.append("fire")
         if not (heat and heat.overheated) and scene.player.weapon.has_laser:
-            if scene.laser.state == "charging" and scene.laser.charge_ratio < 0.85:
+            if self._cooling and scene.laser.is_active and "laser" not in self.session.held_actions:
+                actions.append("laser")  # Stop the beam while main fire keeps pressure.
+            elif scene.laser.state == "charging" and scene.laser.charge_ratio < 0.85:
                 actions.append("laser")
             elif (scene.laser.state == "ready" and self._laser_target
                   and (heat is None or heat.heat < 66)):

@@ -108,9 +108,9 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
 
 # ステージ別ボス設定: (image_path, scale, max_hp)
 _BOSS_CONFIG = {
-    1: ("graphic/enemy_バイキンマン68x80.png", 1.0,  80),
-    2: ("graphic/enemy_ブロリー.png",          2.0, 200),
-    3: ("graphic/boss_matching_zero_body.png", 0.25, 200),
+    1: ("graphic/enemy_バイキンマン68x80.png", 1.0, 180),
+    2: ("graphic/boss_broly_hires.png",      0.20, 280),
+    3: ("graphic/boss_matching_zero_body.png", 0.25, 340),
     4: ("graphic/enemy_fujii4dan.png",         1.2, 250),
 }
 
@@ -119,12 +119,8 @@ _FORM2_CONFIG = {
     4: ("graphic/藤井四段第二形態_もう一度.png", 0.2266, 300),
 }
 
-# Stage 2's former source was a small enemy sprite enlarged as a boss.  Use
-# the dedicated high-resolution portrait for the opening form instead.
-_BOSS_CONFIG[2] = ("graphic/boss_broly_hires.png", 0.20, 200)
-
 # 超サイヤ人ブロリー（ステージ2 第二形態）: 通常HPを削り切ると変身する最終ゲージ
-_SSJ_HP    = 170
+_SSJ_HP    = 300
 _SSJ_SCALE = 2.25   # 通常ブロリー(2.0)より一回り大きい
 
 # 第三形態（頑固王サワグチ）: max_hp（スプライトはダミー生成）
@@ -208,7 +204,7 @@ class Boss(pygame.sprite.Sprite):
 
         self._state:        str   = "enter"
         self._vy:           float = _MOVE_SPEED_Y
-        self._shoot_timer:  float = 2.0
+        self._shoot_timer:  float = 0.8 if stage_id <= 3 else 2.0
         self._spiral_angle: float = 0.0
         self._shot_variant: int   = 0
         self._time:         float = 0.0
@@ -229,6 +225,8 @@ class Boss(pygame.sprite.Sprite):
         self._stun_timer: float = 0.0
         self._shot_se_t:  float = -1.0   # 攻撃SEの再生間隔制御
         self._shoot_delay_override: float | None = None
+        self._beam_charge_pattern: str | None = None
+        self._beam_charge_y = 0.0
         # game_scene が注入。巨大レーザー発射時の画面シェイク用（None 可）。
         self.camera: "Camera | None" = None
         # game_scene が注入。攻撃判定とは独立した動画エフェクトの再生口。
@@ -418,9 +416,9 @@ class Boss(pygame.sprite.Sprite):
             if self._shoot_timer <= 0 and not suppress:
                 self._shoot_delay_override = None
                 self._shoot(enemy_bullets, player)
-                interval = self._shoot_delay_override or self._phase[2]
-                # 症状悪化: フェーズ長期化で攻撃間隔を圧縮（Form3 対象外）
-                self._shoot_timer = interval / self._enrage_mult()
+                # Keep authored warning/recovery durations intact, even when enraged.
+                self._shoot_timer = (self._shoot_delay_override if self._shoot_delay_override is not None
+                                     else self._phase[2] / self._enrage_mult())
 
         self.rect.center = (int(self.sx), int(self.sy))
 
@@ -448,7 +446,9 @@ class Boss(pygame.sprite.Sprite):
 
     def _update_movement(self, dt: float, player: "Player", pattern: str) -> None:
         # 超サイヤ人レーザーのチャージ中は静止（予告線＝着弾位置を固定する）。
-        if self.suction_active:
+        if self._beam_charge_pattern != pattern:
+            self._beam_charge_pattern = None
+        if self.suction_active or self._beam_charge_pattern is not None:
             return
         style = _MOVE_STYLES.get(self._form_key())
         mid_y = SCREEN_HEIGHT / 2.0
@@ -762,6 +762,8 @@ class Boss(pygame.sprite.Sprite):
     def _shoot(self, enemy_bullets: pygame.sprite.Group, player: "Player") -> None:
         nx, ny  = self._aimed_dir(player)
         pattern = self._phase[1]
+        if self._beam_charge_pattern != pattern:
+            self._beam_charge_pattern = None
         bx, by  = self.sx, self.sy
         spd     = _BULLET_SPEED
         variant = self._shot_variant
@@ -917,12 +919,16 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
         elif pattern == "mega_laser":
-            if variant % 2 == 0:
+            if self._beam_charge_pattern is None:
+                self._beam_charge_pattern = pattern
+                self._beam_charge_y = by
                 enemy_bullets.add(self._charge_beam(by, 0.62, 210))
                 for off in (-56, 56):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
                 self._shoot_delay_override = 0.62
             else:
+                by = self._beam_charge_y
+                self._beam_charge_pattern = None
                 enemy_bullets.add(self._mega_beam(by))
                 if self.video_effect_fn is not None:
                     self.video_effect_fn("angel_flash", center=(bx - 120.0, by), size=(520, 293))
@@ -941,7 +947,9 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage2 第二形態: 超サイヤ人の極太レーザー。チャージ中は自機を吸引。
         elif pattern == "super_laser":
-            if variant % 2 == 0:
+            if self._beam_charge_pattern is None:
+                self._beam_charge_pattern = pattern
+                self._beam_charge_y = by
                 # チャージ: 粒子砲チャージ相（特大）＋自機吸引（heavy_laserを停止）。
                 charge_t = 1.5
                 self.suction_y = by
@@ -953,6 +961,7 @@ class Boss(pygame.sprite.Sprite):
                     self.camera.shake(2.5)
                 self._shoot_delay_override = charge_t
             else:
+                self._beam_charge_pattern = None
                 fire_y = self.suction_y          # チャージ位置＝着弾位置（テレグラフ一致）
                 self.suction_active = False
                 self._suction_timer = 0.0
@@ -971,10 +980,11 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage3: 砲台/子機の射線と交差する狙撃。
         elif pattern == "drone_cross":
-            if self.video_effect_fn is not None:
-                self.video_effect_fn("retro_lasers", center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),
-                                     size=(SCREEN_WIDTH, 450), opacity=210)
-            for origin_y in (by - 70.0, by + 70.0):
+            from src.entities.combat_effects import EnergyMuzzle
+            self.game.sound.play_se("music/se/kenney/laserSmall_001.ogg", volume=0.3)
+            bx = self.rect.left - 8.0
+            for origin_y in (by - 20.0, by + 20.0):
+                enemy_bullets.add(EnergyMuzzle(self.game.resources, bx, origin_y))
                 dx = player.sx - bx
                 dy = player.sy - origin_y
                 d = math.hypot(dx, dy) or 1.0
@@ -1089,10 +1099,14 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Form3: 巨大破壊光線。チャージ警告 → 極太レーザー。
         elif pattern == "mega_beam":
-            if variant % 2 == 0:
+            if self._beam_charge_pattern is None:
+                self._beam_charge_pattern = pattern
+                self._beam_charge_y = by
                 enemy_bullets.add(self._charge_beam(by, 0.85, 160))
                 self._shoot_delay_override = 0.85
             else:
+                by = self._beam_charge_y
+                self._beam_charge_pattern = None
                 enemy_bullets.add(self._mega_beam(by, height=128, damage=24, lifetime=0.58))
                 enemy_bullets.add(LaserMuzzleFlash(
                     self.sx - self.rect.width * 0.28, by,
@@ -1109,9 +1123,6 @@ class Boss(pygame.sprite.Sprite):
         # ── Form3: 時空破壊。外周から収縮する弾＋中心から拡散する弾。
         elif pattern == "void_break":
             cx, cy = SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5
-            if self.video_effect_fn is not None:
-                self.video_effect_fn("rupture_laser", center=(cx, cy),
-                                     size=(SCREEN_WIDTH, 450), opacity=210)
             for i in range(16):
                 a = math.radians(i * 22.5 + self._spiral_angle)
                 rx = cx + math.cos(a) * 360.0
@@ -1250,7 +1261,7 @@ class Boss(pygame.sprite.Sprite):
         self.rect   = self.image.get_rect(center=(int(self.sx), int(self.sy)))
         self.hp     = _SSJ_HP
         self.max_hp = _SSJ_HP
-        self._shoot_timer  = 1.4   # 変身直後はひと溜め
+        self._shoot_timer  = 0.5   # 予告の溜め自体が回避準備の時間になる
         self._spiral_angle = 0.0
         self._shot_variant = 0     # 必ず super_laser のチャージ(variant0)から始める
         self._shield_active = False

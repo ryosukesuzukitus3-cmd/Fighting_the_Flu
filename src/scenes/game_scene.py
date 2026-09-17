@@ -48,7 +48,7 @@ from src.story.script import (
 from src.core.balance import (
     PLAYER_DMG_ENEMY, PLAYER_DMG_BULLET, PLAYER_DMG_BOSS, PLAYER_DMG_TERRAIN,
     KARONARU_CONTACT_DMG,
-    BATTLE_V2_ENABLED, HEAT_PER_LASER, HEAT_PER_SHOT, PIECE_EFFECTS,
+    BATTLE_V2_ENABLED, HEAT_PER_LASER, HEAT_PER_SHOT, HEAT_LASER_PER_SEC, PIECE_EFFECTS,
     STANCE_HOMING, STANCE_MAIN,
 )
 from src.core.battle_systems import HeatSystem, award_pieces
@@ -489,8 +489,11 @@ class GameScene(
         _panel_open = self._is_debug_stage and self._debug_panel is not None and self._debug_panel._open
         self._player_prev_rect = self.player.rect.copy()
         if not _panel_open:
-            self.player.update(dt)
-            self._apply_boss_suction(dt)
+            if self._final.final_strike_active:
+                self.player.shoot_requested = inp.is_action_just_pressed("fire")
+            else:
+                self.player.update(dt)
+                self._apply_boss_suction(dt)
         if self._companion:
             self._companion.update(dt, self.player, self.player_bullets, self.camera,
                                    self.enemies, self.enemy_bullets, self.terrain,
@@ -544,13 +547,14 @@ class GameScene(
         # バトルv2: 体温の冷却と熱暴走ロック（ボスダウン中は冷却2倍＝放出推奨）
         if self._heat is not None and not self._final.final_strike_active:
             if self._heat.overheated:
-                self.player.shoot_requested = False
                 self.player.laser_fire_held = False
+                self.laser.state = "ready"
             boss_down = (self._boss is not None
                          and getattr(self._boss, "is_stance_down", False))
             k_lv = (self._companion.lv_shot
                     if self._companion is not None and self._companion.is_active else 0)
-            self._heat.update(dt, karonaru_lv=k_lv, boss_down=boss_down)
+            self._heat.update(dt, karonaru_lv=k_lv, boss_down=boss_down,
+                              laser_active=self.laser.is_active)
 
         # The final cue accepts a fresh fire press even during cooldown/overheat.
         if self._final.consume_final_shot_request():
@@ -561,14 +565,15 @@ class GameScene(
             if self.player.shoot_requested:
                 from src.entities.bullets.player_bullet import HomingBullet
                 wx, wy = self.player.muzzle_world(self.camera)
-                new_bullets = list(self.player.weapon.get_bullets(
-                        wx, wy, self.enemies, game=self.game, boss=self._boss))
+                new_bullets = (self._final.create_final_beam() if self._final.final_strike_active
+                               else list(self.player.weapon.get_bullets(
+                                   wx, wy, self.enemies, game=self.game, boss=self._boss)))
                 self._final.mark_final_shot(new_bullets)
                 for bullet in new_bullets:
                     self.player_bullets.add(bullet)
                 if any(isinstance(b, HomingBullet) for b in new_bullets):
                     self.game.sound.play_se("music/se/ウェポン：missile_shot.mp3", volume=0.5)
-                if any(not isinstance(b, HomingBullet) for b in new_bullets):
+                if not self._final.final_strike_active and any(not isinstance(b, HomingBullet) for b in new_bullets):
                     self.game.sound.play_se_alias("SE_NORMALSHOT", volume=0.4)
                 if (self._heat is not None and not self._final.final_strike_active
                         and self._heat.add(HEAT_PER_SHOT)):
@@ -588,8 +593,12 @@ class GameScene(
                     self.game.sound.play_se(se, volume=0.225)
                     self.camera.shake(6.0)
                     self._laser_flash_timer = 0.08
-                    if self._heat is not None and self._heat.add(HEAT_PER_LASER * 0.45):
+                    if self._heat is not None and self._heat.add(HEAT_PER_LASER):
                         self._on_overheat_started()
+                if self._heat is not None and self.laser.is_active:
+                    if self._heat.add(HEAT_LASER_PER_SEC * dt):
+                        self._on_overheat_started()
+                        self.laser.state = "ready"
                 if just_ended:
                     self.particles.spawn_hit(int(msx), int(msy))
                 laser_killed, laser_hit, laser_boss_killed = self.laser.hit_check(
@@ -865,6 +874,7 @@ class GameScene(
             self.laser.laser_level = self.player.weapon.laser_level
             self.laser.draw(buf, msx, msy)
 
+        self._final.draw_final_beam(buf)
         ox, oy = (0, 0) if quiet_effects else self.camera.shake_offset
         screen.blit(buf, (ox, oy))
         self._video_fx.draw(screen)
@@ -1007,7 +1017,8 @@ class GameScene(
             return
 
         for bullet in list(self.player_bullets):
-            if getattr(bullet, "_terrain_bounced", False):
+            if (getattr(bullet, "_terrain_bounced", False)
+                    or getattr(bullet, "terrain_passthrough", False)):
                 continue
             ter = terrain_collideany(bullet, self.terrain)
             if ter is None:
@@ -1165,7 +1176,8 @@ class GameScene(
                     continue
                 if getattr(bullet, "_terrain_bounced", False):
                     continue
-                if bullet.rect.colliderect(self._boss.rect):
+                collides = getattr(bullet, "collides_with_rect", bullet.rect.colliderect)
+                if collides(self._boss.rect):
                     hit_se = "music/se/ウェポン：missile_hit.mp3" if isinstance(bullet, HomingBullet) \
                              else "music/se/ウェポン：normalshot_hit.mp3"
                     bx, by = bullet.rect.centerx, bullet.rect.centery
@@ -1182,6 +1194,9 @@ class GameScene(
                         self.game.sound.play_se(hit_se, volume=0.3)
                     if self._combo_count > 0:
                         self._combo_timer = COMBO_WINDOW
+                    if getattr(bullet, "final_strike", False):
+                        self.game.sound.play_se("music/se/kenney/lowFrequency_explosion_000.ogg", volume=0.8)
+                        self.camera.shake(14.0)
                     bullet.kill()
                     stance_pts = STANCE_HOMING if isinstance(bullet, HomingBullet) else STANCE_MAIN
                     was_form2 = self._boss._form2
