@@ -338,6 +338,10 @@ class Boss(pygame.sprite.Sprite):
                 self._armor = 0
             else:
                 self._down_timer = STANCE_DOWN_DUR * 0.65
+                # A stagger cancels charging; recovery must show a fresh warning.
+                self._beam_charge_pattern = None
+                self.suction_active = False
+                self._suction_timer = 0.0
                 if gimmick == "shield":
                     self._shield_active = False
 

@@ -211,3 +211,29 @@ def test_boss_beams_always_warn_at_the_firing_position(stage, stage_id, ratio, w
     assert beams and beams[0].rect.centery == y
     assert elapsed >= warning_duration
     assert boss.sy == pytest.approx(y, abs=1)
+
+
+def test_staggered_broly_cancels_charge_and_warns_again_after_recovery(stage):
+    from src.entities.enemies.boss import Boss
+    from src.entities.bullets.laser_fx import LaserBeamSprite
+    game, scene = stage
+    boss = Boss(game, 2)
+    boss._transform_super_saiyan()
+    boss._state = "fight"
+    boss.sx, boss.sy = 610, 300
+    boss.rect.center = (610, 300)
+    shots = pygame.sprite.Group()
+    boss._shoot(shots, scene.player)
+    assert boss.suction_active
+    boss.add_stance(boss._stance_max)
+    assert boss.is_stance_down
+    assert not boss.suction_active
+    for _ in range(180):
+        shots.update(1/60)
+        boss.update(1/60, shots, scene.player)
+    # Old warning has expired. The next volley must start a new charge.
+    shots.empty()
+    boss._shoot(shots, scene.player)
+    beams = [b for b in shots if isinstance(b, LaserBeamSprite)]
+    assert beams and all(b.warning_only for b in beams)
+    assert boss.suction_active
