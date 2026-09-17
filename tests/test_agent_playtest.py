@@ -463,6 +463,67 @@ def test_visible_replay_close_reports_last_completed_frame(session, monkeypatch)
     assert pygame.image.tobytes(saved, "RGB") == pygame.image.tobytes(rendered[-1], "RGB")
 
 
+@pytest.mark.parametrize("already_held, completed_frames", [
+    (False, 0), (True, 0), (True, 1),
+])
+def test_visible_replay_close_during_tap_stops_remaining_steps(
+    session, monkeypatch, already_held, completed_frames,
+):
+    probe = install_probe(session)
+    if already_held:
+        session.command({"step": 1, "actions": ["ui_accept"]})
+    baseline_frame, baseline_draws = session.frame, probe.draw_count
+    rendered = [session.game.screen.copy()]
+    original_draw = probe.draw
+
+    def remember(screen):
+        original_draw(screen)
+        rendered.append(screen.copy())
+
+    monkeypatch.setattr(probe, "draw", remember)
+    original_get = pygame.event.get
+    calls = 0
+
+    def close_between_tap_steps():
+        nonlocal calls
+        if calls == completed_frames:
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+        calls += 1
+        return original_get()
+
+    monkeypatch.setattr(pygame.event, "get", close_between_tap_steps)
+    session.visible = True  # The fixture still uses SDL dummy, never a GUI.
+    response = session.command({"tap": "ui_accept"})
+    assert response["type"] == "closed"
+    assert response["frame"] == baseline_frame + completed_frames
+    assert response["advanced"] == completed_frames
+    assert probe.draw_count == baseline_draws + completed_frames
+    assert response["held_actions"] == []
+    assert session.held_actions == session._held_keys == session.game.input._pressed == set()
+    assert calls == completed_frames + 1
+    saved = pygame.image.load(response["image"])
+    assert pygame.image.tobytes(saved, "RGB") == pygame.image.tobytes(rendered[-1], "RGB")
+
+
+def test_visible_replay_cancelled_during_recorded_tap(session, tmp_path, monkeypatch):
+    from tools.agent_playtest import replay
+
+    session.command({"tap": "ui_accept"})
+    source = session.output_dir
+    session.close()
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    original_get = pygame.event.get
+
+    def request_close():
+        pygame.event.post(pygame.event.Event(pygame.QUIT))
+        return original_get()
+
+    monkeypatch.setattr(pygame.event, "get", request_close)
+    result = replay(source, tmp_path / "cancelled-replay", visible=True)
+    assert result == {"type": "replay_cancelled", "commands": 1, "frame": 1}
+
+
 def test_session_close_restores_callers_environment(tmp_path, monkeypatch):
     from tools.agent_playtest import Session
 

@@ -118,6 +118,8 @@ class Session:
         return fixed[action] if action in fixed else self.game.settings.get_key(action)
 
     def _advance(self, actions, frames, stop_on_boundary=True):
+        if self.closed:
+            return 0
         before = boundary(self.game._scene)
         keys = {self._key(action) for action in actions}
         events = [self.pygame.event.Event(self.pygame.KEYUP, key=k, mod=0, unicode='')
@@ -206,7 +208,8 @@ class Session:
         if self.closed:
             return
         self.closed = True
-        for key in sorted(self._held_keys):
+        # QUIT can arrive before the pending KEYUP events reach InputManager.
+        for key in sorted(self._held_keys | self.game.input._pressed):
             self.game.input.handle_event(self.pygame.event.Event(
                 self.pygame.KEYUP, key=key, mod=0, unicode=''))
         self.held_actions.clear()
