@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import pygame
 
 from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
+from src.core.frame_clock import ticks_ms
 from src.scenes.meta_ui import BG, TEXT, TEXT_MUTED
 from src.story.speakers import (
     speaker_color,
@@ -140,7 +141,7 @@ def _footer_layout(resources, rect, hint_text, text_x, font_size):
 def _arrow_visible(arrow_on):
     if arrow_on is not None:
         return arrow_on
-    return (pygame.time.get_ticks() // 480) % 2 == 0
+    return (ticks_ms() // 480) % 2 == 0
 
 
 def _draw_window(screen, rect, style, alpha):

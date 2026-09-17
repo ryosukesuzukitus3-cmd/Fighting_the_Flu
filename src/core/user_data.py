@@ -5,6 +5,7 @@ r"""
 - インストール版 / パッケージ実行時: %APPDATA%\InfuruToNoShito\ (Windows) を使用
 
 判定ロジック:
+  FLU_USER_DATA_DIR が設定されていれば、その絶対パスを最優先で使用する。
   PyInstaller 実行時は常に OS の標準ユーザーデータディレクトリを使用する。
   プロジェクトルートの data/ が書き込み可能なら開発モード扱い。
   それ以外は OS の標準ユーザーデータディレクトリを使用する。
@@ -41,6 +42,16 @@ def user_data_dir() -> Path:
     ディレクトリは存在しない場合自動作成する。
     """
     global _cached_dir
+    override = os.environ.get("FLU_USER_DATA_DIR")
+    if override is not None:
+        path = Path(override)
+        if not path.is_absolute():
+            raise ValueError("FLU_USER_DATA_DIR must be an absolute path")
+        path = path.resolve()
+        # Overrides are session-specific; do not replace the normal-path cache.
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     if _cached_dir is not None:
         return _cached_dir
 

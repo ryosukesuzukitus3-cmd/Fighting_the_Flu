@@ -6,11 +6,11 @@ state（フェーズ・各種タイマー・カロナール帰還モーション
 へは `self.scene` 経由でアクセスする。
 
 呼び出し側（GameScene）が触れる公開 API は以下のみ：
-- 読み取り: `phase` / `seq` / `dialogue_active` / `input_gate_active` / `final_strike_active`
-- 更新: `update_timers` / `update_dialogue` / `update_return_join` / `update_combat` / `update_input_gate`
+- 読み取り: `phase` / `seq` / `dialogue_active` / `reaction_active` / `input_gate_active` / `final_strike_active`
+- 更新: `update_timers` / `update_dialogue` / `update_reaction` / `update_return_join` / `update_combat` / `update_input_gate`
 - 終局射撃: `consume_final_shot_request` / `mark_final_shot` / `allows_final_hit`
 - 遷移: `on_form2_transition` / `on_form3_transition`
-- 描画: `draw_arrival_trail` / `draw_overlays`
+- 描画: `draw_arrival_trail` / `draw_overlays` / `draw_boss_reaction`
 """
 from __future__ import annotations
 import math
@@ -23,6 +23,8 @@ from src.scenes.meta_ui import TEXT, TEXT_MUTED, draw_meta_panel
 from src.story.aliases import bgm_path
 from src.story.script import BOSS_MID, BOSS_FORM3_INTRO, FINAL_SEQ, FINAL_BANNERS
 from src.story.script import FINAL_INPUT_PROMPTS
+
+_FAKEOUT_REACTION_DURATION = 0.7
 
 
 class FinalBattleDirector:
@@ -48,6 +50,7 @@ class FinalBattleDirector:
         self._f3_act1_mid_shown:    bool = False
         self._f3_act2_mid_shown:    bool = False
         self._fakeout_triggered:    bool = False
+        self._fakeout_reaction_timer = 0.0
         self._final_sengen_triggered: bool = False
         self._karonaru_return_timer: float = 0.0
         self._karonaru_return_from: tuple[float, float] = (0.0, 0.0)
@@ -73,6 +76,10 @@ class FinalBattleDirector:
     @property
     def dialogue_active(self) -> bool:
         return self._final_dialogue_active
+
+    @property
+    def reaction_active(self) -> bool:
+        return self._final_seq == "fakeout_reaction"
 
     @property
     def input_gate_active(self) -> bool:
@@ -157,6 +164,15 @@ class FinalBattleDirector:
                 if cb is not None:
                     cb()
 
+    def update_reaction(self, dt: float) -> None:
+        """Let the apparent collapse register before the first spoken line."""
+        if not self.reaction_active:
+            return
+        self._fakeout_reaction_timer = max(0.0, self._fakeout_reaction_timer - dt)
+        if self._fakeout_reaction_timer <= 0:
+            self._final_seq = "fakeout"
+            self._play_final_dialogue(FINAL_SEQ["fakeout"], on_done=self._start_sengen)
+
     def update_return_join(self, dt: float) -> None:
         companion = self.scene._companion
         if companion is None:
@@ -203,6 +219,7 @@ class FinalBattleDirector:
             if not self._f3_act1_mid_shown and ratio <= 0.6:
                 self.scene._start_combat_cutin(BOSS_MID.get("4f3mid", []))
                 self._f3_act1_mid_shown = True
+                return  # Finish this beat before a large hit also starts fakeout.
             if not self._fakeout_triggered and ratio <= 0.3:
                 self._fakeout_triggered = True
                 self._start_fakeout()
@@ -268,10 +285,10 @@ class FinalBattleDirector:
 
     # ── 内部: フェイクアウト → 宣言 → 帰還 シーケンス ────────────────
     def _start_fakeout(self) -> None:
-        self._final_seq = "fakeout"
+        self._final_seq = "fakeout_reaction"
+        self._fakeout_reaction_timer = _FAKEOUT_REACTION_DURATION
         self.scene.enemy_bullets.empty()
         self.scene.camera.shake(16.0)
-        self._play_final_dialogue(FINAL_SEQ["fakeout"], on_done=self._start_sengen)
 
     def _start_sengen(self) -> None:
         scene = self.scene
@@ -489,6 +506,28 @@ class FinalBattleDirector:
         self._begin_input_gate("final_ready")
 
     # ── 公開/内部: 最終決戦 描画 ──────────────────────────────────
+    def draw_boss_reaction(self, screen: pygame.Surface) -> bool:
+        """Draw a collapsed pose without changing HP, collision rect or attacks.
+
+        Hold it through the player's first line; the boss's reply reveals that
+        it was only an apparent defeat.
+        """
+        first_line = (self._final_seq == "fakeout" and self.dialogue_active
+                      and self._final_dialogue_idx == 0)
+        boss = self.scene._boss
+        if boss is None or not (self.reaction_active or first_line):
+            return False
+        progress = 1.0 - self._fakeout_reaction_timer / _FAKEOUT_REACTION_DURATION
+        ease = 1.0 - (1.0 - progress) ** 2
+        image = boss.image.copy()
+        shade = int(255 - 100 * ease)
+        image.fill((shade, shade, shade), special_flags=pygame.BLEND_RGB_MULT)
+        image = pygame.transform.rotate(image, -68 * ease)
+        rect = image.get_rect(center=(boss.rect.centerx + int(10 * ease),
+                                      boss.rect.centery + int(32 * ease)))
+        screen.blit(image, rect)
+        return True
+
     def draw_overlays(self, screen: pygame.Surface) -> None:
         if self._sengen_overlay_timer > 0:
             self._draw_sengen_overlay(screen)

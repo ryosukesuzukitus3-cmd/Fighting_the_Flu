@@ -179,6 +179,7 @@ def test_boss_break_is_subdued_and_explained_only_once() -> None:
         _hitstop_timer=0.0,
         _boss_break_flash_timer=0.0,
         _enqueue_boss_dialogue=Mock(),
+        _companion_can_speak=Mock(return_value=True),
         _play_shogi_snap=Mock(),
         game=SimpleNamespace(
             shared=shared,

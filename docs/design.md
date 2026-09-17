@@ -107,7 +107,7 @@ MEDICは3方向の貫通弾を発射する。
 | EnemyShogiPawn | 直進して成り弾 | Stage 4 固有: 横一列の回避筋を作る |
 | EnemyVirus | 直進 | — |
 | EnemyTakeshi | 波状移動 | — |
-| EnemyBroly | プレイヤーへ突進 | — |
+| EnemyBroly | 接近→射線固定の予告→粒子砲→突進 | — |
 | EnemyPachemon | ジグザグ＋狙い撃ち | 中強度、弾を撃つ |
 | EnemyCoughSprayer | 右前方に滞空（hover/sweep/zigzagを巡回） | 大型中ボス（約2倍）。扇・リング・螺旋・連射を時間で巡回射撃 |
 | EnemySporeSplitter | 右前方に滞空（drift/wide/quiverを巡回） | 大型中ボス（約2倍）。胞子弾を吐き、撃破で胞子ポッドに分裂 |

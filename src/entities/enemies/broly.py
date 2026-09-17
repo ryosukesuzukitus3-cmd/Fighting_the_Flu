@@ -11,23 +11,13 @@ if TYPE_CHECKING:
     from src.entities.player import Player
 
 _CHARGE_SPEED   = 520.0
+_ENH_CHARGE     = 650.0
 _APPROACH_TIME  = 0.9   # 秒：突進準備までの助走時間
-_WINDUP_TIME    = 0.55  # 秒：チャージ（充電球＋かすかな予告線）を見せてから突進
-
-_BEAM_FADE_TIME = 1.05  # 秒：発射継続。最後の _BEAM_TAPER 秒で徐々に細くなって消える
-_BEAM_TAPER     = 0.42
-_BEAM_H         = 200   # 画面上のビーム高さ（粒子砲フレームの発光まで見せる）
-
-_FIRE_SHAKE     = 4.5    # 発射時の画面シェイク強度
-
-_ENH_CHARGE   = 650.0
-# Particle cannon tuning: a clearly telegraphed, stationary firing pose with
-# a collision band that follows the visible glow.
-_WINDUP_TIME = 0.82
-_FIRE_HOLD_TIME = 1.30
-_BEAM_FADE_TIME = _FIRE_HOLD_TIME
-_BEAM_TAPER = 0.48
-_BEAM_H = 286
+_WINDUP_TIME    = 0.95  # 秒：射線を固定した予告。基本速度で上下に回避できる猶予
+_FIRE_HOLD_TIME = 1.30  # 秒：停止して発射。ビームの寿命もこの長さに揃える
+_BEAM_TAPER     = 0.48  # 秒：終端で徐々に細くなって消える
+_BEAM_H         = 286   # 可視ビームと当たり判定の高さ
+_FIRE_SHAKE     = 4.5
 _STATS        = enemy_stats("EnemyBroly")
 
 
@@ -75,9 +65,10 @@ class EnemyBroly(Enemy):
                 self._timer = 0.0
                 self._fire_warning()
         elif self._state == "windup":
+            # Lock world_y where the warning began. Retain the latest target
+            # only for the subsequent body charge, not for steering the cannon.
             if self._player is not None:
                 self._target_y = float(self._player.sy)
-            self.world_y += (self._target_y - self.world_y) * min(1.0, dt * 6.5)
             if self._timer >= _WINDUP_TIME:
                 self._state = "charge"
                 self._timer = 0.0
@@ -110,8 +101,8 @@ class EnemyBroly(Enemy):
         )
 
         self._warning_fired = True
-        # チャージ相（ZUNDA粒子砲 冒頭の細いビーム収束→発光核）をブロリー銃口に追従表示。
-        # warning_only＝見た目専用の予告。windup 進捗でフレームを進める。
+        # 固定した射線でチャージ相を表示。銃口のスクロール位置だけ追従する。
+        # warning_only=True の予告は無害。高さ・中心Yは発射ビームと同じ。
         mx = self._muzzle_x()
         self._enemy_bullets.add(LaserBeamSprite(
             max(80, int(mx)) / 2, self.world_y, max(80, int(mx)), _BEAM_H,
@@ -132,8 +123,8 @@ class EnemyBroly(Enemy):
         )
 
         self._beam_fired = True
-        # 銃口から左へ伸びる粒子砲ビーム（本体→放電まで1周）。warning_only＝
-        # 当たり判定は突進本体が担う。寿命進捗でフレームを進め、終端でアルファが抜ける。
+        # 予告と同じ射線に有害なビームを発射（通常12・強化16ダメージ）。
+        # 寿命進捗で本体→放電を1周し、終端でアルファが抜ける。
         mx = self._muzzle_x()
         width = max(80, int(mx))
         beam = LaserBeamSprite(
@@ -142,7 +133,7 @@ class EnemyBroly(Enemy):
             width,
             _BEAM_H,
             palette=ZUNDA_PALETTE,
-            lifetime=_BEAM_FADE_TIME,
+            lifetime=_FIRE_HOLD_TIME,
             damage=16 if self.enhanced else 12,
             warning_only=False,
             taper_time=_BEAM_TAPER,

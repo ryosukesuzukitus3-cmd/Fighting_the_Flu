@@ -4,9 +4,9 @@
 雑魚／ボス共通の「チャージ → フラッシュ → 太い本体 → 放電 → 先細りで消滅」を
 ここに集約する（弾の見た目を `EnemyBullet` の静止画像で持たせる方式の置き換え）。
 
-すべて `warning_only` / `terrain_passthrough` を持つので、当たり判定が必要な
-ボス本体ビームだけ `damage`>0・`warning_only=False` を指定し、それ以外
-（雑魚ビーム＝突進が本体ダメージ・チャージ球・マズルフラッシュ）は当たらない。
+各スプライトは `warning_only` / `terrain_passthrough` を持つ。
+ブロリー砲やボスの実弾ビームには `damage`>0・`warning_only=False` を指定する。
+予告・チャージ球・マズルフラッシュは `warning_only=True` のため接触ダメージを与えない。
 """
 from __future__ import annotations
 

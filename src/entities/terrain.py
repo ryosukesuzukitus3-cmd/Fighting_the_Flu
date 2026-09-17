@@ -6,6 +6,7 @@
 from __future__ import annotations
 import math
 import random
+from zlib import crc32
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 import pygame
@@ -397,7 +398,7 @@ class Terrain(pygame.sprite.Sprite):
         pygame.draw.rect(surf, base, (0, 0, w, h), border_radius=radius)
         pygame.draw.rect(surf, edge, (0, 0, w, h), 2, border_radius=radius)
         # ざらつき（決定的擬似ランダムの斑点）
-        rng = random.Random((w * 73856093) ^ (h * 19349663) ^ hash(kind))
+        rng = random.Random((w * 73856093) ^ (h * 19349663) ^ crc32(kind.encode("utf-8")))
         for _ in range(max(3, (w * h) // 900)):
             sx = rng.randint(2, max(2, w - 3))
             sy = rng.randint(2, max(2, h - 3))

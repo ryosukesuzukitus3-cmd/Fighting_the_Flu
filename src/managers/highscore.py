@@ -3,19 +3,21 @@ from pathlib import Path
 
 from src.core.user_data import user_data_dir
 
-_HIGHSCORE_PATH = user_data_dir() / "highscore.json"
+# Optional override for embedders/tests; resolve the normal path per instance.
+_HIGHSCORE_PATH: Path | None = None
 _MAX_ENTRIES = 10
 
 
 class HighScoreManager:
     def __init__(self) -> None:
+        self._path = _HIGHSCORE_PATH or user_data_dir() / "highscore.json"
         self._scores: list[dict] = []
         self._load()
 
     def _load(self) -> None:
-        if _HIGHSCORE_PATH.exists():
+        if self._path.exists():
             try:
-                with open(_HIGHSCORE_PATH, encoding="utf-8") as f:
+                with open(self._path, encoding="utf-8") as f:
                     loaded = json.load(f)
             except (json.JSONDecodeError, OSError):
                 self._scores = []  # 破損ファイルは空スコアで継続
@@ -30,7 +32,7 @@ class HighScoreManager:
 
     def save(self) -> None:
         try:
-            with open(_HIGHSCORE_PATH, "w", encoding="utf-8") as f:
+            with open(self._path, "w", encoding="utf-8") as f:
                 json.dump(self._scores, f, ensure_ascii=False, indent=2)
         except OSError:
             pass

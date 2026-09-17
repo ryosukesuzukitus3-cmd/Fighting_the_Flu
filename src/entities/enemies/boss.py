@@ -223,6 +223,7 @@ class Boss(pygame.sprite.Sprite):
         self._weak_timer: float = 0.0
         # turrets（game_scene が summon_turret_fn を注入。呼ぶと砲台リストを返す）
         self.summon_turret_fn = None           # Callable[[int], list] | None
+        self.rear_drone_exposed_just_now = None  # one-shot scene feedback
         self._summoned: list   = []
         self._summon_cd:  float = 3.0
         self._stun_timer: float = 0.0
@@ -282,8 +283,9 @@ class Boss(pygame.sprite.Sprite):
         return _GIMMICKS.get(self._form_key())
 
     def _summoned_alive(self) -> int:
-        self._summoned = [t for t in self._summoned if t.alive()]
-        return len(self._summoned)
+        # Keep the wave until _update_gimmick observes its defeat. Rendering
+        # and damage queries must not erase the all-destroyed transition.
+        return sum(t.alive() for t in self._summoned)
 
     def suppresses_hit_feedback(self) -> bool:
         """Return True when the current gimmick should absorb normal hit feedback."""
@@ -533,6 +535,10 @@ class Boss(pygame.sprite.Sprite):
                 self._stun_timer -= dt
                 return True   # スタン中は射撃停止
             alive = self._summoned_alive()
+            if self._stage_id == 3 and alive == 1:
+                for drone in self._summoned:
+                    if drone.alive() and drone.release_shield():
+                        self.rear_drone_exposed_just_now = drone
             if alive == 0:
                 if self._summoned:
                     # 直前まで居た砲台が全滅 → スタン突入

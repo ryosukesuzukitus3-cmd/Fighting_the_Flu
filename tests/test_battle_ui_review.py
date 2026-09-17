@@ -116,6 +116,17 @@ def test_upgrade_draw_explains_locks_and_keeps_long_key_hints_on_screen(scene):
     assert all(width <= 752 for _, width in scene.game.records)
 
 
+def test_laser_explanation_uses_bound_key_and_keeps_release_and_stop_instructions(scene):
+    scene._open_upgrade_ui()
+    scene._upg_top_cursor = 2  # laser
+    scene.game.displays["laser"] = "RIGHT CTRL"
+    scene._draw_upgrade_ui(pygame.Surface((800, 600), pygame.SRCALPHA))
+    text = "".join(text for text, _ in scene.game.records)
+    assert "[RIGHT CTRL] 長押しでため、離して発射。" in text
+    assert "発射中の再押下で停止。" in text
+    assert all(width <= 752 for _, width in scene.game.records)
+
+
 def test_empty_hud_omits_unavailable_actions_and_stays_in_top_band(scene):
     scene.player.weapon.weapon_stock = 0
     surface = pygame.Surface((800, 600), pygame.SRCALPHA)

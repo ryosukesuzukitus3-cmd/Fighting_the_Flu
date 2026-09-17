@@ -10,7 +10,7 @@ import pygame
 from src.scenes.game.config import UPGRADE_SLOTS, COMPANION_SLOTS, MAIN_NEXT_NAMES
 from src.scenes.meta_ui import (
     ACCENT_CORAL, ACCENT_MINT, BG, TEXT, TEXT_MUTED,
-    draw_meta_footer, draw_pixel_cursor, fit_text,
+    draw_meta_footer, draw_pixel_cursor, fit_text, wrap_text,
 )
 
 _KT_MAX_LEVEL = 3   # 先輩系統の最大Lv（companion._KT_MAX_LEVEL と一致）
@@ -226,7 +226,8 @@ class GameSceneUpgradeMixin:
         descriptions = {
             "weapon_main": "連射・弾の広がりを強化。主砲を2回強化すると追加装備が解放。",
             "speed": "移動を速くして弾や地形を避けやすくします。",
-            "laser": "専用キーを押し続けて強力なビーム。体温の上昇に注意。",
+            "laser": (f"[{self.game.settings.key_display('laser')}] 長押しでため、離して発射。"
+                      "発射中の再押下で停止。体温の上昇に注意。"),
             "homing": "敵を追う弾を通常射撃に追加します。",
             "kt_hp": "先輩の耐久力を上げ、その場で回復します。",
             "kt_shot": "先輩の解熱弾を強化し、自機の体温も下がりやすくします。",
@@ -251,8 +252,9 @@ class GameSceneUpgradeMixin:
                 else "現在、強化できる項目はありません。在庫は残ります。")
         else:
             explanation = descriptions[key]
-        detail = small.render(fit_text(small, explanation, screen.get_width() - 96), False, TEXT_MUTED)
-        screen.blit(detail, (cx - detail.get_width() // 2, 423))
+        for row, text in enumerate(wrap_text(small, explanation, screen.get_width() - 96)):
+            detail = small.render(text, False, TEXT_MUTED)
+            screen.blit(detail, (cx - detail.get_width() // 2, 419 + row * 22))
         complete = ((not self._top_available_indices() or self._upg_top_choice is not None)
                     and (not self._bottom_available_indices() or self._upg_bottom_choice is not None))
         has_choice = self._upg_top_choice is not None or self._upg_bottom_choice is not None
