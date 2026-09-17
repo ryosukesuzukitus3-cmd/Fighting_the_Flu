@@ -4,9 +4,9 @@
 雑魚／ボス共通の「チャージ → フラッシュ → 太い本体 → 放電 → 先細りで消滅」を
 ここに集約する（弾の見た目を `EnemyBullet` の静止画像で持たせる方式の置き換え）。
 
-すべて `warning_only` / `terrain_passthrough` を持つので、当たり判定が必要な
-ボス本体ビームだけ `damage`>0・`warning_only=False` を指定し、それ以外
-（雑魚ビーム＝突進が本体ダメージ・チャージ球・マズルフラッシュ）は当たらない。
+各スプライトは `warning_only` / `terrain_passthrough` を持つ。
+ブロリー砲やボスの実弾ビームには `damage`>0・`warning_only=False` を指定する。
+予告・チャージ球・マズルフラッシュは `warning_only=True` のため接触ダメージを与えない。
 """
 from __future__ import annotations
 
@@ -75,6 +75,23 @@ class LaserBeamSprite(EnemyBullet):
     """
 
     persistent = True
+
+    def collides_with_rect(self, target: pygame.Rect) -> bool:
+        """Intersect the target with this frame's visible pixels, not its padding.
+
+        Keep every nonzero-alpha pixel, including the faint outer glow. The
+        image dimensions and damage are unchanged; only transparent space is
+        excluded. Build the mask only when a target reaches the image bounds.
+        """
+        overlap = self.rect.clip(target)
+        if not overlap or self.image.get_alpha() == 0:
+            return False
+        if self._collision_mask is None:
+            self._collision_mask = pygame.mask.from_surface(self.image, threshold=0)
+        target_mask = pygame.mask.Mask(overlap.size, fill=True)
+        return self._collision_mask.overlap(
+            target_mask, (overlap.x - self.rect.x, overlap.y - self.rect.y),
+        ) is not None
 
     def __init__(
         self,
@@ -201,6 +218,8 @@ class LaserBeamSprite(EnemyBullet):
         return vscale, alpha, flash
 
     def _render(self) -> None:
+        # Animation, resizing and fading can all change the occupied pixels.
+        self._collision_mask = None
         if self._frames:
             self._render_frames()
             return

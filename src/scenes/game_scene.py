@@ -42,7 +42,7 @@ from src.scenes.game.config import (
 from src.story.script import (
     BOSS_INTRO, BOSS_MID, STAGE_BG_TEXT,
     BILLY_SPAWN_BARKS, BILLY_KILL_BARKS, SAKURA_LAST_WORDS, OVERHEAT_BARKS,
-    BOSS_BREAK_TUTORIAL,
+    BOSS_BREAK_TUTORIAL, BOSS_BREAK_TUTORIAL_SOLO, SAKURA_SHIELD_RELEASED,
 )
 # 被ダメージ／反撃ダメージ定数
 from src.core.balance import (
@@ -309,8 +309,27 @@ class GameScene(
         return (self._combat_active and not self._paused and not self._upgrading
                 and not self._post_boss and not self._cutin_active
                 and not self._final.dialogue_active
+                and not self._final.reaction_active
                 and not self._final.input_gate_active
                 and self._final.seq != "return_join")
+
+    @property
+    def _accepts_upgrade_input(self) -> bool:
+        """Allow stock use in combat or after a non-final defeat's dialogue."""
+        if self._post_boss:
+            return (not self._paused and not self._upgrading
+                    and self._post_boss_next_id is not None
+                    and self._defeat_dialogue_delay <= 0
+                    and not self._defeat_dialogue_active)
+        return self._accepts_combat_input
+
+    @property
+    def _quiet_combat_effects(self) -> bool:
+        """Keep the frozen battlefield readable while a narrative beat owns it."""
+        return (self._cutin_active or self._final.dialogue_active
+                or self._final.reaction_active or self._final.input_gate_active
+                or self._final.seq == "return_join" or self._defeat_dialogue_active
+                or self._boss_intro_state == "boss_dialogue")
 
     @property
     def _gameplay_frozen(self) -> bool:
@@ -373,13 +392,13 @@ class GameScene(
             self._update_upgrade_ui()
             return
         comp_stock = self._companion.stock if self._companion is not None else 0
-        if (self._accepts_combat_input
+        if (self._accepts_upgrade_input
                 and inp.is_action_just_pressed("weapon_select")
                 and (self.player.weapon.weapon_stock > 0 or comp_stock > 0)):
             self._open_upgrade_ui()
             return
 
-        if __debug__:
+        if __debug__ and getattr(self.game, "allow_debug", True):
             dt = self._debug_apply_time_scale(dt)
 
         # Hitstop slows movement updates for a short impact moment.
@@ -428,6 +447,11 @@ class GameScene(
         # Freeze gameplay during combat cut-in dialogue (UI accept to advance).
         if self._cutin_active:
             self._update_combat_cutin()
+            self.particles.update(dt)
+            return
+
+        if self._final.reaction_active:
+            self._final.update_reaction(dt)
             self.particles.update(dt)
             return
 
@@ -508,6 +532,10 @@ class GameScene(
             if getattr(self._boss, "down_just_started", False):
                 self._boss.down_just_started = False
                 self._on_boss_break()
+            exposed_drone = getattr(self._boss, "rear_drone_exposed_just_now", None)
+            if exposed_drone is not None:
+                self._boss.rear_drone_exposed_just_now = None
+                self._on_rear_drone_exposed(exposed_drone)
             if getattr(self._boss, "enrage_just_started", False):
                 self._boss.enrage_just_started = False
                 ebx, eby = self._boss.rect.center
@@ -673,13 +701,14 @@ class GameScene(
             self._final.update_combat(dt)
 
         # A narrative transition can begin above; its first visible frame is frozen too.
-        if self._cutin_active or self._final.dialogue_active or self._final.input_gate_active:
+        if (self._cutin_active or self._final.dialogue_active
+                or self._final.reaction_active or self._final.input_gate_active):
             return
 
         if self._process_collisions():
             return
 
-        if __debug__:
+        if __debug__ and getattr(self.game, "allow_debug", True):
             if self._debug_handle_input():
                 return
 
@@ -785,6 +814,7 @@ class GameScene(
     # ── draw ──────────────────────────────────────────────────────
     def draw(self, screen: pygame.Surface) -> None:
         buf = self._buf
+        quiet_effects = self._quiet_combat_effects
         buf.fill((0, 0, 0))
         self.bg.draw(buf, self.camera.x)
         if self._matrix_rain is not None:
@@ -802,29 +832,40 @@ class GameScene(
         ):
             buf.blit(terrain.image, terrain.rect)
         self.items.draw(buf)
-        self.player_bullets.draw(buf)
-        self.enemy_bullets.draw(buf)
+        if quiet_effects:
+            # Preserve visible projectile positions without frozen beams
+            # obscuring the speakers. Their gameplay state remains untouched.
+            projectiles = pygame.Surface(buf.get_size(), pygame.SRCALPHA)
+            self.player_bullets.draw(projectiles)
+            self.enemy_bullets.draw(projectiles)
+            projectiles.set_alpha(65)
+            buf.blit(projectiles, (0, 0))
+        else:
+            self.player_bullets.draw(buf)
+            self.enemy_bullets.draw(buf)
         self.enemies.draw(buf)
-        if self._boss is not None:
+        boss_reaction = self._final.draw_boss_reaction(buf)
+        if self._boss is not None and not boss_reaction:
             buf.blit(self._boss.image, self._boss.rect)
             # Draw boss hit flash.
-            if getattr(self._boss, "hit_flash_timer", 0.0) > 0:
+            if not quiet_effects and getattr(self._boss, "hit_flash_timer", 0.0) > 0:
                 tint = self._boss.image.copy()
                 tint.fill((170, 170, 170), special_flags=pygame.BLEND_RGB_ADD)
                 buf.blit(tint, self._boss.rect)
-        self._draw_boss_gimmick(buf)
+        if not boss_reaction:
+            self._draw_boss_gimmick(buf)
         self.particles.draw(buf)
         self._final.draw_arrival_trail(buf)
         if self._companion:
             self._companion.draw(buf)
         self.player.draw(buf)
 
-        if self.player.weapon.has_laser:
+        if self.player.weapon.has_laser and not quiet_effects:
             msx, msy = self.player.muzzle_screen()
             self.laser.laser_level = self.player.weapon.laser_level
             self.laser.draw(buf, msx, msy)
 
-        ox, oy = self.camera.shake_offset
+        ox, oy = (0, 0) if quiet_effects else self.camera.shake_offset
         screen.blit(buf, (ox, oy))
         self._video_fx.draw(screen)
 
@@ -846,7 +887,7 @@ class GameScene(
         self._draw_combo(screen)
 
         # Draw laser fire flash.
-        if self._laser_flash_timer > 0:
+        if self._laser_flash_timer > 0 and not quiet_effects:
             alpha = int(160 * (self._laser_flash_timer / 0.08))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
             lv = self.player.weapon.laser_level
@@ -854,21 +895,21 @@ class GameScene(
             flash.fill((*fc, alpha))
             screen.blit(flash, (0, 0))
 
-        if self._form2_flash_timer > 0:
+        if self._form2_flash_timer > 0 and not quiet_effects:
             alpha = int(220 * (self._form2_flash_timer / 0.5))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
             flash.fill((255, 255, 255, alpha))
             screen.blit(flash, (0, 0))
 
         # Draw boss-kill flash.
-        if self._boss_kill_flash_timer > 0:
+        if self._boss_kill_flash_timer > 0 and not quiet_effects:
             _FLASH_DUR = 1.2
             alpha = int(255 * (self._boss_kill_flash_timer / _FLASH_DUR))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
             flash.fill((255, 255, 255, alpha))
             screen.blit(flash, (0, 0))
 
-        if self._boss_break_flash_timer > 0:
+        if self._boss_break_flash_timer > 0 and not quiet_effects:
             _BREAK_FLASH_DUR = 0.34
             alpha = int(230 * (self._boss_break_flash_timer / _BREAK_FLASH_DUR))
             flash = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
@@ -1164,7 +1205,8 @@ class GameScene(
         for bullet in list(self.enemy_bullets):
             if getattr(bullet, "_terrain_bounced", False) or getattr(bullet, "warning_only", False):
                 continue
-            if self.player.hit_rect.colliderect(bullet.rect):
+            collides = getattr(bullet, "collides_with_rect", bullet.rect.colliderect)
+            if collides(self.player.hit_rect):
                 hit_bullet = bullet
                 break
         if hit_bullet is not None:
@@ -1413,13 +1455,26 @@ class GameScene(
                               color=(255, 235, 170), life=1.6)
             self._play_shogi_snap(px + 24, py - 30)
 
+    def _companion_can_speak(self) -> bool:
+        return (self.game.story.karonaru_available
+                and self._companion is not None and self._companion.is_active)
+
+    def _on_rear_drone_exposed(self, drone) -> None:
+        """Show the escape route without interrupting combat or using an absent speaker."""
+        x, y = drone.rect.center
+        self.particles.spawn_spark(x, y, color=(139, 205, 177), count=18, speed=140.0)
+        self._spawn_popup("奥の子機：盾解除", x, y - 30,
+                          color=(139, 205, 177), life=2.5)
+        self._enqueue_boss_dialogue(SAKURA_SHIELD_RELEASED, 4.0)
+
     def _on_overheat_started(self) -> None:
         """熱暴走の開始演出（ポップアップ＋湯気＋初回のみ先輩バーク）。"""
         px, py = int(self.player.sx), int(self.player.sy)
         self._spawn_popup("熱暴走！！", px + 20, py - 26, color=(255, 90, 50), life=1.6)
         self.particles.spawn_glow(px + 24, py, color=(255, 120, 80), count=10, speed=60.0)
         self.game.sound.play_se_alias("SE_ALERT", volume=0.3)
-        if not self._overheat_barked and self._boss_dialogue_timer <= 0:
+        if (self._companion_can_speak() and not self._overheat_barked
+                and self._boss_dialogue_timer <= 0):
             self._overheat_barked = True
             self._enqueue_boss_dialogue([random.choice(OVERHEAT_BARKS)], BOSS_MID_LINE_DURATION)
 
@@ -1440,7 +1495,8 @@ class GameScene(
         self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.16)
         if not self.game.shared.boss_break_tutorial_shown:
             self.game.shared.boss_break_tutorial_shown = True
-            self._enqueue_boss_dialogue(BOSS_BREAK_TUTORIAL, BOSS_MID_LINE_DURATION)
+            lines = BOSS_BREAK_TUTORIAL if self._companion_can_speak() else BOSS_BREAK_TUTORIAL_SOLO
+            self._enqueue_boss_dialogue(lines, BOSS_MID_LINE_DURATION)
         if self._boss_stage_id() == 4:
             self._play_shogi_snap(bx, by)
         else:

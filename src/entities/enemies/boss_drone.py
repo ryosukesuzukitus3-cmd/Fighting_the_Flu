@@ -29,6 +29,7 @@ _DRONE_HP = 22
 _DRONE_SCALE = 0.25
 _SHOT_INTERVAL = 1.10
 _SHOT_SPEED = 290.0
+_EXPOSE_MOVE_DURATION = 0.65
 
 
 class MatchingZeroDrone(pygame.sprite.Sprite):
@@ -50,6 +51,7 @@ class MatchingZeroDrone(pygame.sprite.Sprite):
         self._boss = boss
         self._index = index % len(_DRONE_IMAGES)
         self.requires_laser = self._index == 1
+        self._expose_progress = 0.0
         self._enemy_bullets = enemy_bullets
         self._player = player
         self.hp = _DRONE_HP
@@ -62,7 +64,8 @@ class MatchingZeroDrone(pygame.sprite.Sprite):
         raw = self._game.resources.image(_DRONE_IMAGES[self._index])
         w = max(24, int(raw.get_width() * _DRONE_SCALE))
         h = max(24, int(raw.get_height() * _DRONE_SCALE))
-        self._base_image = pygame.transform.smoothscale(raw, (w, h))
+        self._unshielded_image = pygame.transform.smoothscale(raw, (w, h))
+        self._base_image = self._unshielded_image
         if self.requires_laser:
             self._base_image = self._make_laser_lock_image(self._base_image)
         self.image = self._base_image
@@ -82,6 +85,8 @@ class MatchingZeroDrone(pygame.sprite.Sprite):
     def update(self, dt: float, camera: "Camera") -> None:
         self._time += dt
         self._flash_timer = max(0.0, self._flash_timer - dt)
+        if self._index == 1 and not self.requires_laser:
+            self._expose_progress = min(1.0, self._expose_progress + dt / _EXPOSE_MOVE_DURATION)
         self.rect.center = self._target_center()
         self.world_x = camera.to_world_x(self.rect.centerx)
         self.world_y = float(self.rect.centery)
@@ -91,6 +96,12 @@ class MatchingZeroDrone(pygame.sprite.Sprite):
     def _target_center(self) -> tuple[int, int]:
         bx, by = self._boss.rect.center
         ox, oy = _DRONE_OFFSETS[self._index]
+        if self._index == 1:
+            # Once the front pair falls, bring the rear drone into a normal
+            # shot's path. Removing its shield alone would leave the boss
+            # physically blocking the player's bullets.
+            ox += (-210.0 - ox) * self._expose_progress
+            oy *= 1.0 - self._expose_progress
         sx = bx + ox + math.sin(self._time * 1.6 + self._index) * 9.0
         sy = by + oy + math.cos(self._time * 2.1 + self._index * 0.6) * 11.0
         sx = max(46.0, min(SCREEN_WIDTH - 46.0, sx))
@@ -129,6 +140,15 @@ class MatchingZeroDrone(pygame.sprite.Sprite):
 
     def blocks_projectile_damage(self, bullet) -> bool:
         return self.requires_laser
+
+    def release_shield(self) -> bool:
+        """Expose the rear drone once; laser can still bypass it beforehand."""
+        if not self.requires_laser:
+            return False
+        self.requires_laser = False
+        self._base_image = self._unshielded_image
+        self._flash_timer = 0.18
+        return True
 
     def take_damage(self, amount: int) -> bool:
         if self.requires_laser:

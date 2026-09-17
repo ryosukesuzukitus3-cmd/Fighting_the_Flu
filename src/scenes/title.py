@@ -89,7 +89,7 @@ class TitleScene(Scene):
                 self._idle_timer = _IDLE_DELAY
                 self._idle_index = (self._idle_index + 1) % len(TITLE_IDLE)
         # デバッグジャンプ（python -O で除去）
-        if __debug__ and not moved:
+        if __debug__ and getattr(self.game, "allow_debug", True) and not moved:
             if inp.is_just_pressed(pygame.K_d):
                 from src.scenes.game_scene import GameScene
                 self.game.change_scene(GameScene(self.game, stage_id=99))

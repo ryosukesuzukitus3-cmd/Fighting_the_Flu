@@ -4,7 +4,8 @@ import pygame
 
 from src.core.user_data import user_data_dir
 
-_SETTINGS_PATH = user_data_dir() / "settings.json"
+# Optional override for embedders/tests; resolve the normal path per instance.
+_SETTINGS_PATH: Path | None = None
 
 KEY_BINDING_DISPLAY_NAMES: dict[str, str] = {
     "move_up": "上へ移動",
@@ -60,6 +61,7 @@ _MENU_ACTIONS = ("ui_accept", "ui_back", "pause")
 
 class SettingsManager:
     def __init__(self) -> None:
+        self._path = _SETTINGS_PATH or user_data_dir() / "settings.json"
         self._data: dict = {
             k: (v.copy() if isinstance(v, dict) else v)
             for k, v in _DEFAULTS.items()
@@ -67,9 +69,9 @@ class SettingsManager:
         self._load()
 
     def _load(self) -> None:
-        if _SETTINGS_PATH.exists():
+        if self._path.exists():
             try:
-                with open(_SETTINGS_PATH, encoding="utf-8") as f:
+                with open(self._path, encoding="utf-8") as f:
                     loaded = json.load(f)
                 if not isinstance(loaded, dict):
                     return
@@ -96,7 +98,7 @@ class SettingsManager:
 
     def save(self) -> None:
         try:
-            with open(_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            with open(self._path, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
         except OSError:
             pass

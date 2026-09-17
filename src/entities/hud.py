@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import pygame
+from src.core.frame_clock import ticks_ms
 from src.scenes.meta_ui import ACCENT_CORAL, ACCENT_MINT, BG, TEXT, TEXT_MUTED, draw_pixel_cursor
 
 if TYPE_CHECKING:
@@ -139,7 +140,7 @@ class HUD:
 
             # 体幹ゲージ（バトルv2）: HPバー直上。ダウン中は点滅表示に切替
             if getattr(boss, "is_stance_down", False):
-                blink = (pygame.time.get_ticks() // 150) % 2 == 0
+                blink = (ticks_ms() // 150) % 2 == 0
                 if blink:
                     self._text(screen, "ダウン中・ダメージ増", bx + 118, by - 19, 282, ACCENT_MINT, 14)
             else:

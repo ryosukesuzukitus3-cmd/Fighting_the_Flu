@@ -41,7 +41,7 @@ ENEMY_DEFS: list[EnemyDef] = [
     EnemyDef("EnemyShogiPawn", "歩兵駒", "music/se/game_explosion9.mp3", 0.6, drop_chance=0.14, stats=EnemyStats(6, 115.0, 12, 150.0), doc_movement="直進して成り弾", doc_notes="Stage 4 固有: 横一列の回避筋を作る"),
     EnemyDef("EnemyVirus",    "直進型",             "music/se/game_explosion9.mp3",   0.9, drop_chance=0.10, stats=EnemyStats(1, 160.0, 3, 210.0, "直進"), doc_movement="直進"),
     EnemyDef("EnemyTakeshi",  "波状移動型",          "music/se/お前ら人間じゃねぇ!.mp3", 0.45, drop_chance=0.10, stats=EnemyStats(2, 110.0, 6, 145.0, "sin波"), doc_movement="波状移動"),
-    EnemyDef("EnemyBroly",    "突進型",              "music/se/ブロリー_ヘェア！.mp3",   0.9, drop_chance=0.10, stats=EnemyStats(5, 80.0, 14, 100.0, "突進(charge:520→650)"), doc_movement="プレイヤーへ突進"),
+    EnemyDef("EnemyBroly",    "突進型",              "music/se/ブロリー_ヘェア！.mp3",   0.9, drop_chance=0.10, stats=EnemyStats(5, 80.0, 14, 100.0, "突進(charge:520→650)"), doc_movement="接近→射線固定の予告→粒子砲→突進"),
     EnemyDef("EnemyPachemon", "ジグザグ＋狙い撃ち型", "music/se/でたぁ.mp3",              0.45, drop_chance=0.10, stats=EnemyStats(3, 130.0, 8, 170.0, "ジグザグ+狙撃"), doc_movement="ジグザグ＋狙い撃ち", doc_notes="中強度、弾を撃つ"),
     EnemyDef("EnemyCoughSprayer", "咳スプレー中ボス", "music/se/game_explosion9.mp3",     0.75, drop_chance=0.35, stats=EnemyStats(34, 260.0, 62, 310.0, "前方滞空+扇/リング/螺旋/連射"), doc_movement="右前方に滞空（hover/sweep/zigzagを巡回）", doc_notes="大型中ボス（約2倍）。扇・リング・螺旋・連射を時間で巡回射撃"),
     EnemyDef("EnemySporeSplitter", "胞子分裂中ボス",  "music/se/game_explosion9.mp3",     0.85, drop_chance=0.45, stats=EnemyStats(46, 230.0, 82, 285.0, "前方滞空+胞子弾+撃破で分裂"), doc_movement="右前方に滞空（drift/wide/quiverを巡回）", doc_notes="大型中ボス（約2倍）。胞子弾を吐き、撃破で胞子ポッドに分裂"),

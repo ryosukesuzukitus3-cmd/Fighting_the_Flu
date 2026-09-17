@@ -7,13 +7,16 @@ if TYPE_CHECKING:
 
 
 class InputManager:
-    def __init__(self, settings: SettingsManager | None = None) -> None:
+    def __init__(
+        self, settings: SettingsManager | None = None, *, physical_input: bool = True
+    ) -> None:
         self._pressed:       set[int] = set()
         self._just_pressed:  set[int] = set()
         self._just_released: set[int] = set()
         self._dt:    float = 0.0
         self._repeat_timers: dict[int, float] = {}
         self._settings = settings
+        self._physical_input = physical_input
 
     def pre_update(self) -> None:
         """フレーム先頭で just_pressed / just_released をクリア"""
@@ -39,7 +42,9 @@ class InputManager:
     def is_pressed(self, key: int) -> bool:
         """押しっぱなし（イベント駆動 + pygame.key.get_pressed() のハイブリッド）
         KEYUP の取りこぼしによる斜め移動不能バグを防ぐ。"""
-        return key in self._pressed or bool(pygame.key.get_pressed()[key])
+        return key in self._pressed or (
+            self._physical_input and bool(pygame.key.get_pressed()[key])
+        )
 
     def is_just_pressed(self, key: int) -> bool:
         """押した瞬間のみ True"""
@@ -56,7 +61,7 @@ class InputManager:
         repeat_interval: float = 0.07,
     ) -> bool:
         """長押し時に repeat_interval 間隔で True を返す（ゲーム向け連射制御）"""
-        if key not in self._pressed and not pygame.key.get_pressed()[key]:
+        if not self.is_pressed(key):
             return False
         if key in self._just_pressed:
             self._repeat_timers[key] = initial_delay
