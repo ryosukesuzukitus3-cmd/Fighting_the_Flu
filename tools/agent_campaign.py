@@ -299,6 +299,23 @@ class Campaign:
                 target_x = min(200, max(80, target.rect.left - 220))
             elif getattr(scene, "_post_boss", False):
                 target_x = 785
+        # Ordinary shots take time to arrive. Aim from observed motion instead
+        # of chasing the target's current height and missing a moving boss.
+        # The laser is immediate, so retain direct aim when preparing/using it.
+        use_projectile_aim = (not player.weapon.has_laser or self._cooling
+                              or bool(scene._heat and scene._heat.overheated))
+        if use_projectile_aim and target is not None and (target is boss or target in enemies):
+            previous = self._previous_position.get(id(target))
+            elapsed = ((self.session.frame - self._last_plan_frame) / 60
+                       if self._last_plan_frame is not None else 0)
+            if previous and elapsed > 0:
+                from src.entities.bullets.player_bullet import _SPEED
+                vx = (target.rect.centerx - previous[0]) / elapsed
+                vy = (target.rect.centery - previous[1]) / elapsed
+                factor = .85 if player.weapon.main_level >= 5 else (.9 if player.weapon.main_level >= 3 else 1)
+                flight = max(0, min(1.2, (target.rect.centerx - player.rect.right)
+                                    / max(60, _SPEED * factor - scroll - vx)))
+                target_y += max(-350, min(350, vy)) * flight
         target_y = max(40, min(540, target_y))
         bullets = [b for b in getattr(scene, "enemy_bullets", ())
                    if type(b).__name__ not in ("LaserMuzzleFlash", "LaserChargeOrb")
