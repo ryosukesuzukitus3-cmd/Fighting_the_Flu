@@ -3,20 +3,14 @@ import math
 from typing import TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.sprite_art import fit_character_art
+from src.story.speakers import SAWAGUCHI, speaker_portrait
 from src.entities.weapon import Weapon
 
 
-def _trim_and_scale(surf: pygame.Surface, scale: float) -> pygame.Surface:
-    """透明ピクセルをトリミングしてscale倍にリサイズ"""
-    mask   = pygame.mask.from_surface(surf)
-    rects  = mask.get_bounding_rects()
-    if not rects:
-        return surf
-    bounding = rects[0].unionall(rects)
-    trimmed  = surf.subsurface(bounding).copy()
-    new_w = max(1, int(trimmed.get_width()  * scale))
-    new_h = max(1, int(trimmed.get_height() * scale))
-    return pygame.transform.smoothscale(trimmed, (new_w, new_h))
+
+# Gameplay size is independent of the portrait resolution.
+_PLAYER_SIZE = (23, 31)
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -34,8 +28,8 @@ class Player(pygame.sprite.Sprite):
     def __init__(self, game: Game) -> None:
         super().__init__()
         self.game   = game
-        raw = game.resources.image("graphic/sawaguchi_49_64.png")
-        self.image  = _trim_and_scale(raw, scale=0.486)
+        raw = game.resources.image(speaker_portrait(SAWAGUCHI))
+        self.image  = fit_character_art(raw, _PLAYER_SIZE)
         self.rect   = self.image.get_rect()
         self.weapon = Weapon()
 

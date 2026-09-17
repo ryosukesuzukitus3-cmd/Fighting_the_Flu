@@ -12,6 +12,7 @@ import pygame
 
 from src.core.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from src.core.frame_clock import ticks_ms
+from src.core.sprite_art import fit_character_art
 from src.scenes.meta_ui import BG, TEXT, TEXT_MUTED
 from src.story.speakers import (
     speaker_color,
@@ -245,7 +246,7 @@ def draw_combat_panel(screen, resources, speaker, lines, *, hint_text=None, styl
     _draw_window(screen, rect, style, alpha)
     if portrait:
         size = _COMBAT_PORTRAIT_SIZE
-        img = pygame.transform.smoothscale(resources.image(portrait), (size, size)).convert_alpha()
+        img = fit_character_art(resources.image(portrait), (size, size))
         img.set_alpha(alpha)
         px, py = rect.x + 14, rect.y + (rect.h - size) // 2
         screen.blit(img, (px, py))
@@ -269,7 +270,7 @@ def _tachie_image(resources, speaker, size, *, flip, active):
     path = speaker_tachie(speaker) or speaker_portrait(speaker)  # 立ち絵が無ければ顔素材流用
     if not path:
         return None
-    img = pygame.transform.smoothscale(resources.image(path), (size, size)).convert_alpha()
+    img = fit_character_art(resources.image(path), (size, size), pixel_grid=2)
     if flip:
         img = pygame.transform.flip(img, True, False)
     if not active:

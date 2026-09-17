@@ -168,8 +168,16 @@ class _SoundStub:
     def play_se(self, *a, **k) -> None: ...
 
 
+class _ArtStub:
+    def image(self, _path):
+        image = pygame.Surface((20, 34), pygame.SRCALPHA)
+        image.fill((120, 230, 150, 255))
+        return image
+
+
 class _GameStub:
     sound = _SoundStub()
+    resources = _ArtStub()
 
 
 class _PlayerStub:

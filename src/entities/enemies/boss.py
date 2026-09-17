@@ -121,13 +121,13 @@ _FORM2_CONFIG = {
 
 # 超サイヤ人ブロリー（ステージ2 第二形態）: 通常HPを削り切ると変身する最終ゲージ
 _SSJ_HP    = 300
-_SSJ_SCALE = 2.25   # 通常ブロリー(2.0)より一回り大きい
+_SSJ_BODY_SIZE = (180, 146)  # 素材の解像度に依存せず、従来の当たり判定を保つ
 
 # 第三形態（頑固王サワグチ）: max_hp（スプライトはダミー生成）
 #   ※専用画像なし。台本「澤口の影が巨大化」に沿いプレイヤー画像を暗紫・拡大したダミー。
 _FORM3_MAX_HP   = 260   # Act1（反芻再生あり）
 _FORM3_ACT2_HP  = 240   # Act2（最終ゲージ・反芻再生なし）
-_FORM3_SCALE    = 2.4   # プレイヤー画像に対する拡大率（影が巨大化）
+_FORM3_BODY_SIZE = (117, 153)  # 本人素材の解像度から独立した従来の影サイズ
 
 _TARGET_SX    = 580.0
 _ENTER_SPEED  = 200.0
@@ -1238,11 +1238,12 @@ class Boss(pygame.sprite.Sprite):
         # SE なし（演出は game_scene 側の form2 検知で行う）
 
     def _make_super_saiyan_sprite(self) -> pygame.Surface:
-        """超サイヤ人ブロリー: 通常スプライトを金オーラ＋増感で生成（専用画像なし）。"""
-        raw = self.game.resources.image("graphic/enemy_ブロリー.png")
-        w = int(raw.get_width()  * _SSJ_SCALE)
-        h = int(raw.get_height() * _SSJ_SCALE)
-        big = pygame.transform.smoothscale(raw, (w, h))
+        """高品質な通常素材を再利用。キャンバスと当たり判定の大きさは変えない。"""
+        from src.core.sprite_art import fit_character_art
+
+        raw = self.game.resources.image("graphic/boss_broly_hires.png")
+        w, h = _SSJ_BODY_SIZE
+        big = fit_character_art(raw, (w, h), pixel_grid=2)
         pad = 18
         canvas = pygame.Surface((w + pad * 2, h + pad * 2), pygame.SRCALPHA)
         # 金色オーラ: マスク外周を金色で多重描き＋柔らかいグロー。
@@ -1255,7 +1256,7 @@ class Boss(pygame.sprite.Sprite):
         canvas.blit(glow, (pad // 2, pad // 2))
         # 本体を金寄りに増感（黄を加算）。
         body = big.copy()
-        body.fill((120, 88, 0), special_flags=pygame.BLEND_RGB_ADD)
+        body.fill((32, 22, 0), special_flags=pygame.BLEND_RGB_ADD)
         canvas.blit(body, (pad, pad))
         return canvas
 
@@ -1283,10 +1284,12 @@ class Boss(pygame.sprite.Sprite):
 
         台本「澤口の影が巨大化」に沿い、プレイヤー画像を暗紫シルエット化＋拡大。
         """
-        raw = self.game.resources.image("graphic/sawaguchi_49_64.png")
-        w = int(raw.get_width()  * _FORM3_SCALE)
-        h = int(raw.get_height() * _FORM3_SCALE)
-        big = pygame.transform.smoothscale(raw, (w, h))
+        from src.core.sprite_art import fit_character_art
+        from src.story.speakers import BOSS_SAWAGUCHI, speaker_portrait
+
+        raw = self.game.resources.image(speaker_portrait(BOSS_SAWAGUCHI))
+        w, h = _FORM3_BODY_SIZE
+        big = fit_character_art(raw, (w, h), pixel_grid=2)
         shadow = pygame.Surface((w, h), pygame.SRCALPHA)
         # 赤い縁取り（自己否定の発光）をマスクから生成し、上下左右にずらして描く
         outline = pygame.mask.from_surface(big).to_surface(

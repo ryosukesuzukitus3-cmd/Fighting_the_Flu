@@ -1,8 +1,8 @@
 """カロナール先輩 — 澤口の後を追従する随伴スプライト。
 
 台本 §6: 微解熱弾を自動発射し、被弾→撤退→復帰のサイクルを持つ。
-薬効最大形態（§7）は Phase 3 で追加予定。
-ダミースプライト（緑丸 + "カ" 表示）を使用。後で差し替え予定。
+薬効最大形態（§7）では白金のカプセルへ変化する。
+画像を替えても通常／最大形態の当たり判定は維持する。
 """
 from __future__ import annotations
 import math
@@ -10,7 +10,9 @@ import random
 from typing import Callable, TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.sprite_art import fit_character_art
 from src.entities.terrain_query import terrain_collideany
+from src.story.speakers import KARONARU, KARONARU_MAX, speaker_portrait
 
 if TYPE_CHECKING:
     from src.core.game import Game
@@ -35,33 +37,15 @@ _HP_BY_LEVEL  = [1, 10, 30, 50]       # lv_hp 0..3 → 最大HP
 _SUPPLY_INTERVAL = [0.0, 9.0, 6.5, 4.0]
 # マグネット: lv 0=無効, 1〜3 で (引き寄せ半径px, 速度px/s)
 _MAGNET_BY_LEVEL = [(0.0, 0.0), (150.0, 90.0), (280.0, 150.0), (9999.0, 240.0)]
-_SPRITE_R         = 16    # ダミースプライト半径（px）
+_NORMAL_SIZE = (34, 34)
+_MAX_SIZE = (56, 56)
 
 
-def _make_dummy_sprite() -> pygame.Surface:
-    """ダミー緑丸スプライト（後で差し替え前提）。"""
-    size = _SPRITE_R * 2 + 2
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.circle(surf, (60, 190, 90), (_SPRITE_R + 1, _SPRITE_R + 1), _SPRITE_R)
-    pygame.draw.circle(surf, (150, 255, 170), (_SPRITE_R + 1, _SPRITE_R + 1), _SPRITE_R, 2)
-    return surf
-
-
-_MAX_SPRITE_R = 24   # 薬効最大形態の半径（大型化）
-
-
-def _make_max_sprite() -> pygame.Surface:
-    """薬効最大形態のダミースプライト（大型・白発光・後で差し替え前提）。"""
-    r = _MAX_SPRITE_R
-    size = r * 2 + 8
-    c = size // 2
-    surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    # 白い外周グロー
-    for gr, ga in ((r + 6, 40), (r + 3, 70)):
-        pygame.draw.circle(surf, (255, 255, 255, ga), (c, c), gr)
-    pygame.draw.circle(surf, (120, 230, 150), (c, c), r)
-    pygame.draw.circle(surf, (235, 255, 240), (c, c), r, 3)
-    return surf
+def _make_sprite(resources, *, maximum=False) -> pygame.Surface:
+    """A legible capsule in the original, fixed collision envelope."""
+    speaker = KARONARU_MAX if maximum else KARONARU
+    size = _MAX_SIZE if maximum else _NORMAL_SIZE
+    return fit_character_art(resources.image(speaker_portrait(speaker)), size)
 
 
 class Karonaru(pygame.sprite.Sprite):
@@ -79,7 +63,7 @@ class Karonaru(pygame.sprite.Sprite):
         self._spawn_heal_fn = spawn_heal_fn
 
         self.mode: str = "normal"   # "normal" | "max"（薬効最大）
-        self.image = _make_dummy_sprite()
+        self.image = _make_sprite(self.game.resources)
         self.rect  = self.image.get_rect()
 
         # 画面座標
@@ -331,7 +315,7 @@ class Karonaru(pygame.sprite.Sprite):
     def set_max(self) -> None:
         """薬効最大形態へ移行（大型・白発光・高威力弾・撤退しない）。"""
         self.mode    = "max"
-        self.image   = _make_max_sprite()
+        self.image   = _make_sprite(self.game.resources, maximum=True)
         self.rect    = self.image.get_rect(center=self.rect.center)
         self.max_hp  = 1
         self.hp      = self.max_hp

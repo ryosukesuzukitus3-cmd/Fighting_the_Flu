@@ -1,35 +1,46 @@
 from __future__ import annotations
 
 import math
-import random
 from typing import Callable
 
 import pygame
 
 from src.core.scene import Scene
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
-from src.entities.background import ScrollingBackground
+from src.core.sprite_art import fit_character_art
 from src.entities.companion import Karonaru
 from src.entities.player import Player
-from src.entities.video_effect import VideoEffectLayer
 from src.story.aliases import bgm_path
 from src.story.lines import Page
-from src.story.speakers import (
-    DEFAULT_TEXT_COLOR,
-    KARONARU,
-    speaker_color,
-    speaker_name,
-    speaker_portrait,
-)
+from src.story.speakers import SAWAGUCHI, KARONARU, speaker_portrait
 
 _TYPEWRITER_SPEED = 34.0
 _TYPE_SE_INTERVAL = 0.045
-_TYPE_SE_VOLUME = 0.16
-_CENTER = (SCREEN_WIDTH * 0.64, SCREEN_HEIGHT * 0.46)
+_TYPE_SE_VOLUME = 0.12
+_CENTER = (566.0, 181.0)
+_HORIZON = (470.0, 216.0)
+_PHASE_TAGS = {
+    "bh_balance": "balance", "bh_pull": "pull", "bh_resolve": "resolve",
+    "bh_push": "push", "bh_fall": "fall", "bh_hold": "hold",
+    "bh_farewell": "farewell", "bh_gone": "gone", "bh_silence": "silence",
+}
+_MIN_PHASE_TIME = {"push": 0.9, "fall": 1.6, "gone": 1.1, "silence": 0.8}
+_MOTION_TIME = {
+    "balance": 1.5, "pull": 2.0, "resolve": 1.0, "push": 0.9,
+    "fall": 2.5, "hold": 0.7, "farewell": 0.45, "gone": 1.1, "silence": 0.8,
+}
+
+
+def _lerp(a: tuple[float, float], b: tuple[float, float], t: float) -> tuple[float, float]:
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+
+def _curve(start, control, end, t):
+    return _lerp(_lerp(start, control, t), _lerp(control, end, t), t)
 
 
 class BlackholeScene(Scene):
-    """Stage3 after-boss event with in-stage actors and a blackhole."""
+    """A rescue and farewell, timed by authored cues rather than page counts."""
 
     def __init__(self, game, pages: list[Page], on_complete: Callable[[], None]) -> None:
         super().__init__(game)
@@ -37,110 +48,132 @@ class BlackholeScene(Scene):
         self._on_complete = on_complete
 
     def on_enter(self) -> None:
-        # 承認欲求ブラックホールは宇宙空間の演出。ステージ3（労働要塞）の
-        # 街並み背景ではなく、テーマ無しの星空下地（宇宙）を使う。
-        self._bg = ScrollingBackground(0)
+        raw = self.game.resources.image("graphic/cinematics/blackhole.png")
+        self._background = pygame.transform.scale(raw, (400, 300))
         self._player = Player(self.game)
-        self._player.sx = 150.0
-        self._player.sy = 300.0
-        self._player.rect.topleft = (int(self._player.sx), int(self._player.sy))
-
+        self._player.image = fit_character_art(
+            self.game.resources.image(speaker_portrait(SAWAGUCHI)), (74, 96), pixel_grid=2,
+        )
+        self._player.rect = self._player.image.get_rect()
         self._karonaru = Karonaru(self.game)
-        self._karonaru.sx = 95.0
-        self._karonaru.sy = 330.0
-        self._karonaru.rect.center = (int(self._karonaru.sx), int(self._karonaru.sy))
-
-        self._font_name = self.game.resources.pixelfont(20)
-        self._font_body = self.game.resources.pixelfont(25)
-        self._font_hint = self.game.resources.pixelfont(16)
+        self._karonaru.image = fit_character_art(
+            self.game.resources.image(speaker_portrait(KARONARU)), (66, 100), pixel_grid=2,
+        )
+        self._karonaru.rect = self._karonaru.image.get_rect()
         self._page = 0
         self._chars = 0.0
         self._type_se_cooldown = 0.0
         self._time = 0.0
-        self._phase = self._phase_for_page()
+        self._phase = ""
         self._phase_time = 0.0
-        self._noise_level = 0.0
-        self._player_pos = (150.0, 300.0)
-        self._karonaru_pos = (95.0, 330.0)
+        self._player_pos = (196.0, 244.0)
+        self._karonaru_pos = (126.0, 256.0)
         self._karonaru_alpha = 255.0
+        self._karonaru_scale = 1.0
         self._shake_t = 0.0
-        self._flash_t = 0.0
-        self._fade_in_t = 0.45
+        self._fade_in_t = 0.6
         self._fade_out_t = 0.0
         self._fade_out = False
         self._finished = False
+        self._quiet = False
+        self._advance_queued = False
         self._buf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        self._video_fx = VideoEffectLayer(self.game.resources)
-        # 承認欲求ブラックホールはインターステラー系の重い空気で包む（仮配線）。
-        self.game.sound.play_bgm(bgm_path("BGM_BLACKHOLE"), volume=0.55)
-        self._enter_page()
+        self._sky = pygame.Surface((400, 300), pygame.SRCALPHA)
+        if self._pages:
+            self.game.sound.play_bgm(bgm_path("BGM_BLACKHOLE"), volume=0.48)
+            self._enter_page()
+        else:
+            self._set_phase("silence")
+            self._begin_finish()
 
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
 
     def update(self, dt: float) -> None:
+        if self._finished:
+            return
         self._time += dt
         self._phase_time += dt
-        self._video_fx.update(dt)
-        previous_chars = min(int(self._chars), self._total_chars())
-        self._chars += _TYPEWRITER_SPEED * dt
-        self._tick_type_sound(dt, previous_chars)
         self._shake_t = max(0.0, self._shake_t - dt)
-        self._flash_t = max(0.0, self._flash_t - dt)
         self._fade_in_t = max(0.0, self._fade_in_t - dt)
         self._update_actor_motion(dt)
-
         if self._fade_out:
             self._fade_out_t += dt
-            if self._fade_out_t >= 1.25 and not self._finished:
+            if self._fade_out_t >= 1.2:
                 self._finished = True
                 self._on_complete()
             return
 
+        previous_chars = min(int(self._chars), self._total_chars())
+        self._chars += _TYPEWRITER_SPEED * dt
+        self._tick_type_sound(dt, previous_chars)
         inp = self.game.input
+        if inp.is_action_just_pressed("ui_back"):
+            self._begin_finish()
+            return
         advance = inp.is_action_held_with_repeat(
             "ui_accept", initial_delay=0.25, repeat_interval=0.12,
         )
-        if advance:
-            if not self._is_text_complete():
-                self._chars = float(self._total_chars() + 1)
-            elif self._page < len(self._pages) - 1:
-                self._page += 1
-                self._enter_page()
+        if advance and not self._is_text_complete():
+            self._chars = float(self._total_chars())
+        elif advance or self._advance_queued:
+            if self._phase_time < _MIN_PHASE_TIME.get(self._phase, 0.0):
+                self._advance_queued = True
             else:
-                self._begin_finish()
-        if inp.is_action_just_pressed("ui_back"):
-            self._begin_finish()
+                self._advance_queued = False
+                if self._page < len(self._pages) - 1:
+                    self._page += 1
+                    self._enter_page()
+                else:
+                    self._begin_finish()
 
     def _enter_page(self) -> None:
         self._chars = 0.0
         self._type_se_cooldown = 0.0
+        self._advance_queued = False
         if not self._pages:
             return
         new_phase = self._phase_for_page()
         if new_phase != self._phase:
-            self._phase = new_phase
-            self._phase_time = 0.0
-            if new_phase == "fall":
-                # 相棒が吸い込まれる崩落。重低音のズゴゴを重ね、揺れを一段強める。
-                self.game.sound.play_se_alias("SE_BLACKHOLE", volume=0.7)
-                self._shake_t = max(self._shake_t, 0.7)
+            self._set_phase(new_phase)
         pg = self._cur()
-        if pg.se:
-            self.game.sound.play_se_alias(pg.se)
-        # 「ズゴゴ」＝ブラックホール示現は重い揺れ、通常 shake は軽め。
-        if "blackhole" in pg.fx:
-            self._shake_t = max(self._shake_t, 0.8)
-        elif "shake" in pg.fx:
-            self._shake_t = max(self._shake_t, 0.5)
-        if "white_particle" in pg.fx or "light" in pg.fx:
-            self._flash_t = 0.35
+        if pg.se and not self._quiet:
+            self.game.sound.play_se_alias(pg.se, volume=0.55)
+        if not self._quiet and ("blackhole" in pg.fx or "shake" in pg.fx):
+            self._shake_t = 0.45
+
+    def _set_phase(self, phase: str) -> None:
+        self._phase = phase
+        self._phase_time = 0.0
+        self._motion_start_player = self._player_pos
+        self._motion_start_karonaru = self._karonaru_pos
+        self._motion_start_alpha = self._karonaru_alpha
+        self._motion_start_scale = self._karonaru_scale
+        if phase == "push":
+            self._shake_t = 0.4
+        if phase in {"gone", "silence"}:
+            self._enter_quiet()
+
+    def _enter_quiet(self) -> None:
+        self._shake_t = 0.0
+        if not self._quiet:
+            self._quiet = True
+            self.game.sound.stop_bgm(fadeout_ms=850)
+
+    def _phase_for_page(self) -> str:
+        # Carry the last cue across ordinary dialogue pages. Inserting a line
+        # cannot accidentally move the rescue or make the companion disappear.
+        for pg in reversed(self._pages[:self._page + 1]):
+            for tag in reversed(pg.fx):
+                if tag in _PHASE_TAGS:
+                    return _PHASE_TAGS[tag]
+        return "balance"
 
     def _cur(self) -> Page:
         return self._pages[self._page]
 
     def _total_chars(self) -> int:
-        return sum(len(line) for line in self._cur().lines)
+        return sum(len(line) for line in self._cur().lines) if self._pages else 0
 
     def _is_text_complete(self) -> bool:
         return int(self._chars) >= self._total_chars()
@@ -148,244 +181,135 @@ class BlackholeScene(Scene):
     def _tick_type_sound(self, dt: float, previous_chars: int) -> None:
         self._type_se_cooldown = max(0.0, self._type_se_cooldown - dt)
         current_chars = min(int(self._chars), self._total_chars())
-        if current_chars > previous_chars and self._type_se_cooldown <= 0.0:
+        if not self._quiet and current_chars > previous_chars and self._type_se_cooldown <= 0.0:
             self.game.sound.play_se_alias("SE_TYPE", volume=_TYPE_SE_VOLUME)
             self._type_se_cooldown = _TYPE_SE_INTERVAL
 
     def _begin_finish(self) -> None:
-        if not self._fade_out:
+        if not self._fade_out and not self._finished:
             self._fade_out = True
             self._fade_out_t = 0.0
-            self._video_fx.play(
-                "light_arrow_tunnel", size=(SCREEN_WIDTH, 450), opacity=235,
-            )
-
-    def _event_ratio(self) -> float:
-        if not self._pages:
-            return 1.0
-        return self._page / max(1, len(self._pages) - 1)
-
-    def _phase_for_page(self) -> str:
-        r = self._event_ratio()
-        if r < 0.52:
-            return "balance"
-        if r < 0.68:
-            return "reaction"
-        if r < 0.88:
-            return "fall"
-        return "silence"
+            self._enter_quiet()
 
     def _update_actor_motion(self, dt: float) -> None:
-        wobble = math.sin(self._time * 4.5) * 2.2
-        if self._phase == "balance":
-            p_target = (164.0, 306.0 + wobble)
-            k_target = (130.0, 334.0 - wobble * 0.4)
-            alpha_target = 255.0
-            noise_target = 0.0
-            rate = 0.55
-        elif self._phase == "reaction":
-            pulse = min(1.0, self._phase_time / 0.45)
-            p_target = (126.0 - 10.0 * pulse, 326.0 + wobble)
-            k_target = (222.0 + 20.0 * pulse, 306.0 - wobble * 0.3)
-            alpha_target = 255.0
-            noise_target = 0.12
-            rate = 1.9
-        elif self._phase == "fall":
-            fall = min(1.0, self._phase_time / 5.8)
-            p_target = (122.0, 334.0 + wobble * 0.35)
-            k_target = (
-                self._karonaru_pos[0] + (_CENTER[0] - self._karonaru_pos[0]) * 0.06,
-                self._karonaru_pos[1] + (_CENTER[1] - self._karonaru_pos[1]) * 0.06,
+        phase = self._phase
+        progress = min(1.0, self._phase_time / _MOTION_TIME.get(phase, 1.0))
+        eased = progress * progress * (3.0 - 2.0 * progress)
+        player_target = {
+            "balance": (200.0, 244.0), "pull": (274.0, 240.0),
+            "resolve": (280.0, 240.0),
+        }.get(phase, (154.0, 258.0))
+        companion_target = {
+            "balance": (130.0, 256.0), "pull": (192.0, 248.0),
+            "resolve": (336.0, 230.0), "push": (366.0, 222.0),
+            "fall": _HORIZON, "hold": (474.0, 212.0),
+            "farewell": (478.0, 208.0),
+        }.get(phase, _CENTER)
+        self._player_pos = _lerp(self._motion_start_player, player_target, eased)
+        if phase in {"resolve", "fall", "gone"}:
+            sx, sy = self._motion_start_karonaru
+            ex, ey = companion_target
+            bend = -40.0 if phase == "resolve" else 25.0
+            self._karonaru_pos = _curve(
+                (sx, sy), ((sx + ex) * 0.5, (sy + ey) * 0.5 + bend), (ex, ey), eased,
             )
-            alpha_target = 255.0 * (1.0 - fall)
-            noise_target = 0.20 + 0.75 * fall
-            rate = 1.15
         else:
-            p_target = (122.0, 336.0)
-            k_target = _CENTER
-            alpha_target = 0.0
-            noise_target = 1.0
-            rate = 1.8
+            self._karonaru_pos = _lerp(self._motion_start_karonaru, companion_target, eased)
+        # Reading time never consumes the farewell. Only the authored 'gone'
+        # cue lets the body cross the horizon and dissolve.
+        alpha = {"fall": 215.0, "hold": 200.0, "farewell": 190.0,
+                 "gone": 0.0, "silence": 0.0}.get(phase, 255.0)
+        scale = {"fall": 0.65, "hold": 0.61, "farewell": 0.58,
+                 "gone": 0.06, "silence": 0.06}.get(phase, 1.0)
+        self._karonaru_alpha = self._motion_start_alpha + (alpha - self._motion_start_alpha) * eased
+        self._karonaru_scale = self._motion_start_scale + (scale - self._motion_start_scale) * eased
 
-        blend = 1.0 - math.exp(-rate * dt)
+    def _shake_offset(self) -> tuple[int, int]:
+        if self._quiet or self._shake_t <= 0.0:
+            return (0, 0)
+        strength = 3.0 * min(1.0, self._shake_t / 0.4)
+        return (round(math.sin(self._time * 47.0) * strength),
+                round(math.cos(self._time * 39.0) * strength))
+
+    def _draw_blackhole(self, screen: pygame.Surface) -> None:
+        sky = self._sky
+        sky.blit(self._background, (0, 0))
+        if not self._quiet:
+            # Near dust travels faster than distant stars, with restrained gold
+            # fragments along the disk. The event horizon stays entirely dark.
+            cx, cy = _CENTER[0] * 0.5, _CENTER[1] * 0.5
+            for i in range(36):
+                angle = i * 2.39996 + self._time * (0.07 + i % 3 * 0.018)
+                radius = 51.0 + i % 11 * 5.7
+                dx, dy = math.cos(angle) * radius, math.sin(angle) * radius * 0.18
+                x, y = cx + dx, cy + dy - dx * 0.09
+                if math.hypot(x - cx, y - cy) > 44.0:
+                    color = (167 + i % 4 * 15, 123 + i % 4 * 15, 88 + i % 3 * 14)
+                    pygame.draw.rect(sky, color, (round(x), round(y), 1 + (i % 9 == 0), 1))
+            for i in range(12):
+                x = (i * 71 + self._time * (0.17 + i % 3 * 0.1)) % 390
+                y = 12 + (i * 37) % 137
+                if math.hypot(x - cx, y - cy) > 70:
+                    pygame.draw.rect(sky, (105, 116, 143), (int(x), y, 1, 1))
+        screen.blit(pygame.transform.scale(sky, (SCREEN_WIDTH, SCREEN_HEIGHT)), (0, 0))
+
+    def _draw_actors(self, screen: pygame.Surface) -> None:
         px, py = self._player_pos
+        self._player.rect.center = (round(px), round(py))
+        screen.blit(self._player.image, self._player.rect)
+        if self._karonaru_alpha <= 0.5:
+            return
         kx, ky = self._karonaru_pos
-        self._player_pos = (
-            px + (p_target[0] - px) * blend,
-            py + (p_target[1] - py) * blend,
-        )
-        self._karonaru_pos = (
-            kx + (k_target[0] - kx) * blend,
-            ky + (k_target[1] - ky) * blend,
-        )
-        self._karonaru_alpha += (alpha_target - self._karonaru_alpha) * blend
-        self._noise_level += (noise_target - self._noise_level) * blend
+        scale = self._karonaru_scale
+        alpha = round(self._karonaru_alpha)
+        light = pygame.Surface((400, 300), pygame.SRCALPHA)
+        glow_x, glow_y = round(kx / 2), round(ky / 2)
+        if self._phase in {"push", "fall", "hold", "farewell", "gone"}:
+            for radius, opacity in ((19, 12), (12, 22), (7, 34)):
+                pygame.draw.circle(light, (100, 245, 202, round(opacity * alpha / 255)),
+                                   (glow_x, glow_y), max(2, round(radius * scale)))
+            # The last few motes follow the companion, never cover the words.
+            for i in range(8):
+                age = (self._phase_time * 0.32 + i / 8) % 1.0
+                x = glow_x - 5 - age * 29
+                y = glow_y + 6 + math.sin(i * 2.0) * 7 * age
+                pygame.draw.rect(light, (159, 255, 220, round((1 - age) * alpha * 0.55)),
+                                 (round(x), round(y), 1, 1))
+        screen.blit(pygame.transform.scale(light, (SCREEN_WIDTH, SCREEN_HEIGHT)), (0, 0))
+        image = pygame.transform.scale(self._karonaru.image,
+                                       (max(2, round(66 * scale)), max(2, round(100 * scale))))
+        image.set_alpha(alpha)
+        self._karonaru.rect = image.get_rect(center=(round(kx), round(ky)))
+        screen.blit(image, self._karonaru.rect)
 
     def draw(self, screen: pygame.Surface) -> None:
-        buf = self._buf
-        buf.fill((0, 0, 0))
-        self._bg.draw(buf, self._time * 42.0)
-        self._draw_blackhole(buf)
-
-        px, py = self._player_pos
-        kx, ky = self._karonaru_pos
-        karonaru_alpha = max(0.0, min(255.0, self._karonaru_alpha))
-        self._player.sx = px
-        self._player.sy = py
-        self._player.rect.topleft = (int(px), int(py))
-        self._player.draw(buf)
-
-        if karonaru_alpha > 0:
-            self._karonaru.sx = kx
-            self._karonaru.sy = ky
-            self._karonaru.rect.center = (int(kx), int(ky))
-            if karonaru_alpha < 255:
-                img = self._karonaru.image.copy()
-                img.set_alpha(int(karonaru_alpha))
-                buf.blit(img, self._karonaru.rect)
-            else:
-                self._karonaru.draw(buf)
-
-        # ワールドはブラックホールの重力で震える。会話・フェードは震わせない。
-        ox, oy = self._shake_offset()
+        self._draw_blackhole(self._buf)
+        self._draw_actors(self._buf)
         screen.fill((0, 0, 0))
-        screen.blit(buf, (ox, oy))
-        self._video_fx.draw(screen)
-
+        screen.blit(self._buf, self._shake_offset())
         self._draw_dialogue(screen)
-
-        if self._flash_t > 0:
-            a = int(210 * self._flash_t / 0.35)
-            flash = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            flash.fill((255, 255, 255, a))
-            screen.blit(flash, (0, 0))
-
         fade_a = 0
-        if self._fade_in_t > 0:
-            fade_a = int(255 * self._fade_in_t / 0.45)
-        elif self._fade_out:
-            fade_a = int(255 * min(1.0, max(0.0, self._fade_out_t - 0.70) / 0.55))
+        if self._fade_out:
+            fade_a = int(255 * min(1.0, max(0.0, self._fade_out_t - 0.35) / 0.85))
+        elif self._fade_in_t > 0:
+            fade_a = int(255 * self._fade_in_t / 0.6)
         if fade_a:
             fade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
             fade.set_alpha(fade_a)
             fade.fill((0, 0, 0))
             screen.blit(fade, (0, 0))
 
-    def _shake_offset(self) -> tuple[int, int]:
-        """離散シェイク（ページfx）＋崩落の進行に応じた連続微振動。"""
-        disc = 13.0 * (self._shake_t / 0.8) if self._shake_t > 0 else 0.0
-        cont = 0.0
-        if self._phase in ("fall", "silence"):
-            strength = min(1.0, 0.28 + self._event_ratio() * 0.9)
-            cont = 3.6 * strength
-        amp = disc + cont
-        if amp <= 0.3:
-            return (0, 0)
-        a = int(amp)
-        return (random.randint(-a, a), random.randint(-a, a))
-
-    def _draw_blackhole(self, screen: pygame.Surface) -> None:
-        cx, cy = int(_CENTER[0]), int(_CENTER[1])
-        r = self._event_ratio()
-        t = self._time
-        strength = min(1.0, 0.28 + r * 0.9)
-        disk = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-
-        vignette = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i in range(9, 0, -1):
-            rr = int((72 + i * 44) * strength)
-            alpha = max(0, 34 - i * 2)
-            pygame.draw.circle(vignette, (20, 5, 38, alpha), (cx, cy), rr)
-        screen.blit(vignette, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-
-        for i in range(14):
-            rx = int((86 + i * 10) * strength)
-            ry = max(12, int(rx * (0.25 + i * 0.006)))
-            rect = pygame.Rect(cx - rx, cy - ry, rx * 2, ry * 2)
-            start = (t * (1.2 + i * 0.03) + i * 0.37) % math.tau
-            span = math.pi * (0.34 + (i % 3) * 0.05)
-            color = (
-                120 + min(95, i * 8),
-                70 + min(95, i * 5),
-                185 + min(55, i * 3),
-                max(18, 112 - i * 5),
-            )
-            pygame.draw.arc(disk, color, rect, start, start + span, 3)
-            pygame.draw.arc(disk, (230, 180, 255, max(10, 60 - i * 3)), rect,
-                            start + math.pi, start + math.pi + span * 0.72, 2)
-
-        for n in range(110):
-            seed = n * 0.611
-            phase = (t * (0.16 + (n % 9) * 0.012) + seed) % 1.0
-            ang = t * (0.7 + (n % 5) * 0.08) + seed * math.tau
-            rad = (1.0 - phase) * (310 - 95 * strength) + 18
-            squash = 0.42 + 0.18 * math.sin(seed * 4.0)
-            alpha = int((34 + 180 * phase) * strength)
-            x = int(cx + math.cos(ang) * rad)
-            y = int(cy + math.sin(ang) * rad * squash)
-            pygame.draw.circle(disk, (230, 220, 255, alpha), (x, y), 1 + (n % 2))
-
-        screen.blit(disk, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-
-        core_r = int(30 + 25 * strength)
-        core = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i in range(5, 0, -1):
-            rr = core_r + i * 6
-            pygame.draw.circle(core, (130, 80, 180, 26), (cx, cy), rr)
-        screen.blit(core, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-        pygame.draw.circle(screen, (0, 0, 4), (cx, cy), core_r)
-        pygame.draw.circle(screen, (205, 165, 255), (cx, cy), core_r + 4, 2)
-        pygame.draw.circle(screen, (60, 20, 100), (cx, cy), core_r + 12, 1)
-
     def _draw_dialogue(self, screen: pygame.Surface) -> None:
         if not self._pages:
             return
+        from src.scenes.dialogue_panel import draw_story_panel
         pg = self._cur()
-        # 戦闘中と同じコンバットパネルに統一（フィールド演出と地続きにする）。
-        # 顔アイコンは出すが、渦を隠す大型の立ち絵は使わない。ノイズ演出は維持。
-        from src.scenes.dialogue_panel import (
-            COMBAT_BLUE_STYLE,
-            draw_combat_panel,
-        )
-        noisy = pg.speaker == KARONARU and self._noise_level > 0.1
-        transform = (lambda s: self._noisy_text(s, self._noise_level)) if noisy else None
         accept = self.game.settings.key_display("ui_accept")
         back = self.game.settings.key_display("ui_back")
         advance = "次へ" if self._is_text_complete() else "全文表示"
         hint = f"{accept}: {advance}（長押し可）　{back}: 会話を省略"
-        body_rect = draw_combat_panel(
+        draw_story_panel(
             screen, self.game.resources, pg.speaker, pg.lines,
-            style=COMBAT_BLUE_STYLE, chars=int(self._chars),
-            complete=self._is_text_complete(),
-            hint_text=hint,
-            text_transform=transform,
-            text_jitter=int(3 * self._noise_level) if self._noise_level > 0.1 else 0,
+            chars=int(self._chars), complete=self._is_text_complete(),
+            hint_text=hint, show_portrait=False,
         )
-        if self._noise_level > 0.03:
-            # Follow the expanded text layout, keeping controls and portraits clear.
-            self._draw_signal_noise(screen, body_rect)
-
-    def _draw_signal_noise(self, screen: pygame.Surface, rect: pygame.Rect) -> None:
-        noise = max(0.0, min(1.0, self._noise_level))
-        layer = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        for y in range(3, rect.height, 9):
-            alpha = int(16 + 40 * noise * random.random())
-            pygame.draw.line(layer, (210, 190, 255, alpha), (0, y), (rect.width, y), 1)
-        specks = int(10 + 42 * noise)
-        for _ in range(specks):
-            x = random.randrange(0, rect.width)
-            y = random.randrange(0, rect.height)
-            w = random.randrange(1, 8)
-            alpha = int(45 + 130 * noise * random.random())
-            pygame.draw.rect(layer, (230, 230, 255, alpha), (x, y, w, 1))
-        screen.blit(layer, rect.topleft)
-
-    def _noisy_text(self, text: str, noise: float) -> str:
-        keep = max(0.0, min(0.28, noise * 0.28))
-        out: list[str] = []
-        for ch in text:
-            if ch.isspace() or random.random() > keep:
-                out.append(ch)
-            else:
-                out.append(random.choice(("#", ".", "…")))
-        return "".join(out)

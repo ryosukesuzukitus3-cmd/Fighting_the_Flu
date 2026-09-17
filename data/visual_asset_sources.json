@@ -1,0 +1,41 @@
+{
+  "created": "2026-09-18",
+  "generator": "OpenAI built-in image generation",
+  "files": [
+    {
+      "path": "assets/graphic/cinematics/blackhole.png",
+      "kind": "generated",
+      "usage": "Blackhole scene background",
+      "prompt": "Use case: stylized-concept. Asset type: finished 4:3 background art for an 800x600 Japanese pixel-art narrative action game, no interface baked in. Create a breathtaking but restrained cosmic black hole scene for a poignant companion sacrifice. Modern high-end pixel art, clearly deliberate square pixel clusters, sharp edges, limited refined midnight indigo / ink black / muted violet palette with a warm ivory and amber accretion disk, selective pale cyan rim. Composition: the black hole's perfectly dark circular core centered at 66 percent of image width and 35 percent of image height. Core diameter about 19 percent of image width. A luminous thin elliptical accretion disk crosses the core with a gravitationally lensed arc above it, extending from 38 to 94 percent of width. Strong contrast and convincing depth, a vast empty space surrounding the void. The left third remains dark, quiet and sparsely starred for two small game characters; the entire bottom third very dark and low detail for a separately rendered dialogue panel. A few delicate curved trails of luminous dust lead toward the horizon. The feeling is awe, danger, tenderness and separation, not a colorful arcade explosion. Artwork only, no characters, no spacecraft, no people, no words, no numbers, no UI, no border, no watermark, no photographic blur, no huge rainbow clouds. Output landscape 4:3 composition, as crisp 16-bit pixel art with modern cinematic art direction.",
+      "sha256": "4f958fe392e07ffcd697596eabf636ca395c063771d0977cdfec3c49c722cd61"
+    },
+    {
+      "path": "assets/graphic/characters/karonaru.png",
+      "kind": "generated",
+      "usage": "Companion sprite and dialogue portrait",
+      "prompt": "Use case: stylized-concept. Asset type: transparent full character sprite / dialogue portrait for a modern Japanese pixel-art action game. Design Karonaru-senpai, a tiny floating medicinal capsule companion with a dry, slightly smug senior personality but a dependable heart. Body IS one capsule pill: upper half deep emerald green, lower half warm ivory, clearly rounded oblong silhouette. Two narrow dark rectangular eyes in the ivory face region, one slightly raised eyebrow, small reserved mouth. Small dark green mitten-like hands folded calmly at the sides; no legs, no clothing, no weapons, no ornate armor, no halos. Three-quarter view facing slightly right. Strong, elegant silhouette readable at 36 pixels and charming enough for a 240-pixel dialogue portrait. Modern polished 16-bit pixel art, clean square pixel clusters, carefully limited green/ivory/charcoal palette, two or three discrete shade levels, a small mint highlight on the left, no blur, no vector-like smooth edges, no noisy texture. Entire character centered, occupies 75 percent height, generous clear transparent margin, no cropped parts. Genuine transparent alpha background, no checkerboard baked in, no shadow plane, no frame, no labels, no letters, no text, no watermark. One character only.",
+      "sha256": "0ee6cd3dcf3e9ee71831ecc834d26a046fc13f27df0fa58574a03d9a00833fab"
+    },
+    {
+      "path": "assets/graphic/characters/karonaru_max.png",
+      "kind": "generated-edit",
+      "reference": "assets/graphic/characters/karonaru.png",
+      "usage": "Maximum-effect companion sprite and dialogue portrait",
+      "prompt": "Use case: precise-object-edit. Asset type: alternate powered-up sprite / portrait of the SAME capsule companion. Edit this exact character. Preserve the exact silhouette, proportions, face, expression, hands, pose, pixel-art clusters, framing and genuine transparent alpha background. Change only the palette and a few highlights: emerald capsule cap becomes pale mint-white with a narrow warm gold seam, ivory lower capsule remains ivory, hands become muted mint, eyes and eyebrows remain dark and sharp. A very restrained thin ivory rim light indicates restored strength. The character should still look like the same modest, dependable pill, not an angel or a deity. No wings, crown, armor, cape, weapon, additional objects, large aura, text or symbols. Keep every part of the character fully in frame, transparent background, no solid backdrop.",
+      "sha256": "debc1c9e375dbbbb70b88f73c1a1ce5bbef08379cc2a17562efcda5d85b43f79"
+    },
+    {
+      "path": "assets/graphic/characters/sawaguchi.png",
+      "kind": "generated-edit",
+      "reference": "assets/graphic/sawaguchi_49_64.png",
+      "usage": "Player, dialogue portrait and final-boss self-shadow; collision dimensions unchanged",
+      "prompt": "Use case: style-transfer, identity-preserve. Asset type: transparent pixel-art head portrait for a Japanese indie game. Use the provided image as the exact character identity and pose reference. Repaint this recognizable young adult man's head and short neck as polished modern 16-bit pixel art. Preserve his distinctive thick black tousled rounded haircut, face shape, small mouth and dry neutral expression, blue-purple mirrored aviator sunglasses with a silver bridge, and the visible fingers touching the sunglasses at the left edge of the image. Preserve the exact direction of the face and overall crop; do not invent a different handsome hero, do not change age, do not add facial hair, do not enlarge the eyes, do not add costume or shoulders. Crisp square pixel clusters, deliberately low-resolution game portrait look, restrained warm skin tones with three discrete shades, dark charcoal hair with subtle cool highlights, clear blue lens reflections, no blur, no photoreal texture, no painterly strokes. One isolated head with the small visible hand detail, clean silhouette, fully inside the canvas with transparent padding. Genuine transparent alpha background, no backdrop, no checkerboard baked into the image, no text, no frame, no glow.",
+      "sha256": "4756c752f026f43483f6e296f420bd9a2d591dac94bc98a3a592314dfdb43087"
+    }
+  ],
+  "rendering": "Original generated PNGs retained. Pixel-grid scaling, alpha-aware fitting and colour treatment are performed by the game at runtime.",
+  "existing_art_reused": [
+    "assets/graphic/boss_broly_hires.png",
+    "assets/graphic/boss_matching_zero_body.png"
+  ]
+}

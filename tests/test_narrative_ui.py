@@ -144,10 +144,9 @@ def test_combat_dialogue_renderer_never_receives_sequence_progress(game, monkeyp
     else:
         scene = BlackholeScene(game, pages, lambda: None)
         scene._chars = sum(map(len, pages[0].lines))
-        scene._noise_level = 0
         index_field = "_page"
         render = lambda: scene._draw_dialogue(game.screen)
-        monkeypatch.setattr(panels, "draw_combat_panel", draw)
+        monkeypatch.setattr(panels, "draw_story_panel", draw)
     setattr(scene, index_field, 0)
     render()
     first = draw.call_args.kwargs.copy()
@@ -222,54 +221,42 @@ def test_credits_background_rays_respect_opacity(game):
     assert 0 < max(pixels) < 30
 
 
-def test_blackhole_scanlines_change_brightness_with_noise_strength(game, monkeypatch):
-    import src.scenes.blackhole_scene as blackhole
-    monkeypatch.setattr(blackhole.random, "random", lambda: 0.5)
-    monkeypatch.setattr(blackhole.random, "randrange", lambda start, stop: start)
-    scene = BlackholeScene(game, [], lambda: None)
-    values = []
-    for strength in (0.04, 0.95):
-        surface = pygame.Surface((100, 40))
-        surface.fill("black")
-        scene._noise_level = strength
-        scene._draw_signal_noise(surface, surface.get_rect())
-        values.append(surface.get_at((30, 3)).r)
-    assert 0 < values[0] < values[1] < 50
+def test_blackhole_farewell_keeps_original_words_in_every_render(game, monkeypatch):
+    pages = list(script.story_beat("3->4").pages)
+    scene = BlackholeScene(game, pages, lambda: None)
+    draw = Mock()
+    monkeypatch.setattr(panels, "draw_story_panel", draw)
+    for i, pg in enumerate(pages):
+        scene._page = i
+        scene._chars = sum(map(len, pg.lines))
+        for _ in range(3):
+            scene._draw_dialogue(game.screen)
+            assert draw.call_args.args[3] == pg.lines
+            assert "text_transform" not in draw.call_args.kwargs
+            assert not draw.call_args.kwargs.get("text_jitter", 0)
+            assert draw.call_args.kwargs["show_portrait"] is False
 
 
-@pytest.mark.parametrize("long_page", [False, True])
-def test_blackhole_noise_only_touches_body_even_when_panel_grows(game, monkeypatch, long_page):
-    from src.story.speakers import SAWAGUCHI
-    import src.scenes.blackhole_scene as blackhole
-    monkeypatch.setattr(blackhole.random, "random", lambda: 0.5)
-    monkeypatch.setattr(blackhole.random, "randrange", lambda start, stop: start)
-    monkeypatch.setattr(blackhole.random, "randint", lambda start, stop: 0)
-    monkeypatch.setattr(panels, "_arrow_visible", lambda arrow_on: True)
-    rows = ("長い会話も操作欄と重ならないように本文だけにノイズを重ねます。",) * 4 if long_page else ("おめえ！",)
-    scene = BlackholeScene(game, [page(SAWAGUCHI, *rows)], lambda: None)
-    scene._page = 0
-    scene._chars = sum(map(len, rows))
-    game.screen.fill("black")
-    scene._noise_level = 0.0
-    scene._draw_dialogue(game.screen)
-    clean = game.screen.copy()
-    body = []
-    original = scene._draw_signal_noise
+def test_blackhole_dialogue_window_and_text_origin_remain_fixed(game, monkeypatch):
+    scene = BlackholeScene(game, list(script.story_beat("3->4").pages), lambda: None)
+    windows, origins = [], []
+    original_window = panels._draw_window
+    original_text = panels._draw_text
 
-    def record(screen, rect):
-        body.append(rect)
-        original(screen, rect)
+    def record_window(screen, rect, *args, **kwargs):
+        windows.append(rect.copy())
+        return original_window(screen, rect, *args, **kwargs)
 
-    monkeypatch.setattr(scene, "_draw_signal_noise", record)
-    game.screen.fill("black")
-    scene._noise_level = 0.95
-    scene._draw_dialogue(game.screen)
-    rect = body[0]
-    assert rect.bottom <= 496  # Footer starts above the stable panel bottom at 544.
-    if long_page:
-        assert rect.top < panels.COMBAT_PANEL_RECT.top
-    # Every pixel outside the returned body bounds, including controls, is intact.
-    restored = game.screen.copy()
-    restored.blit(clean, rect.topleft, rect)
-    assert pygame.image.tobytes(restored, "RGB") == pygame.image.tobytes(clean, "RGB")
-    assert pygame.image.tobytes(game.screen.subsurface(rect), "RGB") != pygame.image.tobytes(clean.subsurface(rect), "RGB")
+    def record_text(screen, resources, rect, *args, **kwargs):
+        origins.append((rect.top, kwargs["text_x"], kwargs["name_height"]))
+        return original_text(screen, resources, rect, *args, **kwargs)
+
+    monkeypatch.setattr(panels, "_draw_window", record_window)
+    monkeypatch.setattr(panels, "_draw_text", record_text)
+    for i, pg in enumerate(scene._pages):
+        scene._page = i
+        for chars in (0, sum(map(len, pg.lines))):
+            scene._chars = chars
+            scene._draw_dialogue(game.screen)
+    assert windows and all(rect == pygame.Rect(40, 342, 720, 224) for rect in windows)
+    assert len(set(origins)) == 1
