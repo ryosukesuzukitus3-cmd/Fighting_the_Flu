@@ -77,7 +77,7 @@ class GameSceneBossFxMixin:
         # 体幹ゲージ本体は HUD（ボスHPバー直上）が描く。ここは頭上ラベルのみ。
         _ = (down_now, stance_ratio)
 
-        if label:
+        if label and not (BATTLE_V2_ENABLED and down_now):
             surf = self.game.resources.pixelfont(20).render(label, True, lcol)
             buf.blit(surf, (cx - surf.get_width() // 2, b.rect.top - 26))
 
@@ -151,8 +151,6 @@ class GameSceneBossFxMixin:
                     tx, ty = turret.rect.center
                     pygame.draw.aaline(buf, (110, 235, 255), (cx, cy), (tx, ty))
                     pygame.draw.circle(buf, (170, 255, 255), (tx, ty), 8, 2)
-            elif getattr(b, "_stun_timer", 0.0) > 0:
-                pygame.draw.circle(buf, (255, 225, 80), (cx, cy), r + 8, 4)
 
         if stage_id == 4 and not form2:
             grid = pygame.Surface((178, 250), pygame.SRCALPHA)

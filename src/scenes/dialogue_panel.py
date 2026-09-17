@@ -284,18 +284,22 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, complete=
                      style=DARK_STYLE, show_portrait=True, text_transform=None,
                      text_color=None, text_jitter=0, center=False, arrow_on=None,
                      left_speaker=None, right_speaker=None):
-    body = resources.pixelfont(26)
-    text_w = SCREEN_WIDTH - 132
-    wrapped = _wrap_lines(body, lines, text_w)
-    base_rect = pygame.Rect(40, SCREEN_HEIGHT - 218, SCREEN_WIDTH - 80, 184)
-    _, footer_height = _footer_layout(resources, base_rect, hint_text, base_rect.x + 26, 18)
-    name_height = _name_height(resources, speaker)
-    rect = _panel_for_text(base_rect, body, wrapped, footer_height, name_height)
+    # A stable stage for every page: portraits, speaker and footer never jump.
+    rect = pygame.Rect(40, SCREEN_HEIGHT - 258, SCREEN_WIDTH - 80, 224)
+    text_w = rect.w - 52
+    _, footer_height = _footer_layout(resources, rect, hint_text, rect.x + 26, 18)
+    name_height = resources.pixelfont(20).get_height() + 10
+    available = rect.h - _TEXT_TOP - name_height - max(footer_height, _TEXT_BOTTOM)
+    for body_size in (26, 24, 22, 20, 18, 16):
+        body = resources.pixelfont(body_size)
+        wrapped = _wrap_lines(body, lines, text_w)
+        if len(wrapped) * _line_height(body) - 2 <= available:
+            break
 
     # 立ち絵（ウィンドウより先に描いて、ウィンドウ下部が重なる＝奥行き感）
     if show_portrait:
         size = 300                       # 少し小さく
-        base_y = rect.y - size + 108
+        base_y = rect.y - size + 48
         if left_speaker is None and right_speaker is None:
             left_speaker, right_speaker = story_sides(speaker, None)
         if left_speaker:
@@ -311,9 +315,9 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, complete=
     text_x = rect.x + 26
     _draw_name(screen, resources, rect, speaker, 255, text_x)
     text_w = rect.w - 52
-    # 折返し位置・枠の高さは全文から決め、文字送り中にレイアウトを動かさない。
+    # 固定枠内の折返しと文字サイズは全文から決め、文字送り中も動かさない。
     _draw_text(screen, resources, rect, wrapped, style, chars=chars, center=center,
-               valign="center" if center else "top", body_size=26,
+               valign="center" if center else "top", body_size=body_size,
                text_x=text_x, text_w=text_w, alpha=255,
                text_transform=text_transform, text_color=text_color, text_jitter=text_jitter,
                reserved_bottom=max(0, footer_height - _TEXT_BOTTOM), name_height=name_height)

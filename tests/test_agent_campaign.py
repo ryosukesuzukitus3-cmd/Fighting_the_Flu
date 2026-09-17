@@ -143,7 +143,7 @@ def _movement_fixture(bullet, *, bounced=False, terrain=()):
     class FixturePlayer:
         rect = pygame.Rect(0, 383, 23, 31)
         hp = 100
-        weapon = SimpleNamespace(speed_multiplier=1.4)
+        weapon = SimpleNamespace(speed_multiplier=1.4, has_laser=False, main_level=2)
 
         @property
         def hit_rect(self):
@@ -392,3 +392,27 @@ def test_final_post_boss_waits_for_automatic_departure(post_boss_campaign):
     assert not scene._upgrading
     assert scene.player.weapon.weapon_stock == 1
     assert scene.player.rect == before
+
+
+def test_movement_leads_projectiles_but_aims_laser_at_current_target():
+    import pygame
+    from types import SimpleNamespace
+    bot, scene, _ = _movement_fixture((0, 0, 1, 1))
+    scene.enemy_bullets = []
+    scene.player.rect.center = (170, 300)
+    boss = scene._boss = SimpleNamespace(rect=pygame.Rect(600, 270, 60, 60))
+    original = boss.rect.copy()
+    bot.session.frame = 12
+    bot._last_plan_frame = 0
+    bot._previous_position = {id(boss): (630, 280)}
+    actions, _ = bot.movement(scene)
+    assert "move_down" in actions
+    assert boss.rect == original
+    scene.player.weapon.has_laser = True
+    scene._heat = None
+    bot._cooling = False
+    bot._last_plan_frame = 0
+    bot._previous_position = {id(boss): (630, 280)}
+    actions, _ = bot.movement(scene)
+    assert "move_down" not in actions and "move_up" not in actions
+    assert boss.rect == original

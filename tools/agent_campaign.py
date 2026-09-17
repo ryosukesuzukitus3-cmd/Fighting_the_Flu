@@ -198,7 +198,8 @@ class Campaign:
                           laser=scene.laser.state,
                           weapon=player.weapon.snapshot(), companion=scene._companion is not None,
                           boss=({"hp": boss.hp, "form2": boss._form2, "form3": boss._form3,
-                                 "act": boss._form3_act} if boss is not None else None))
+                                 "act": boss._form3_act, "pattern": boss._phase[1],
+                                 "volley": boss._shot_variant} if boss is not None else None))
         if current_boundary != self._previous_boundary:
             record["boundary"] = True
             if dialogue:
@@ -298,6 +299,23 @@ class Campaign:
                 target_x = min(200, max(80, target.rect.left - 220))
             elif getattr(scene, "_post_boss", False):
                 target_x = 785
+        # Ordinary shots take time to arrive. Aim from observed motion instead
+        # of chasing the target's current height and missing a moving boss.
+        # The laser is immediate, so retain direct aim when preparing/using it.
+        use_projectile_aim = (not player.weapon.has_laser or self._cooling
+                              or bool(scene._heat and scene._heat.overheated))
+        if use_projectile_aim and target is not None and (target is boss or target in enemies):
+            previous = self._previous_position.get(id(target))
+            elapsed = ((self.session.frame - self._last_plan_frame) / 60
+                       if self._last_plan_frame is not None else 0)
+            if previous and elapsed > 0:
+                from src.entities.bullets.player_bullet import _SPEED
+                vx = (target.rect.centerx - previous[0]) / elapsed
+                vy = (target.rect.centery - previous[1]) / elapsed
+                factor = .85 if player.weapon.main_level >= 5 else (.9 if player.weapon.main_level >= 3 else 1)
+                flight = max(0, min(1.2, (target.rect.centerx - player.rect.right)
+                                    / max(60, _SPEED * factor - scroll - vx)))
+                target_y += max(-350, min(350, vy)) * flight
         target_y = max(40, min(540, target_y))
         bullets = [b for b in getattr(scene, "enemy_bullets", ())
                    if type(b).__name__ not in ("LaserMuzzleFlash", "LaserChargeOrb")
@@ -442,10 +460,12 @@ class Campaign:
                 self._cooling = True
             elif heat.heat <= 48:
                 self._cooling = False
-        if not self._cooling and self._attack_target:
+        if self._attack_target:
             actions.append("fire")
         if not (heat and heat.overheated) and scene.player.weapon.has_laser:
-            if scene.laser.state == "charging" and scene.laser.charge_ratio < 0.85:
+            if self._cooling and scene.laser.is_active and "laser" not in self.session.held_actions:
+                actions.append("laser")  # Stop the beam while main fire keeps pressure.
+            elif scene.laser.state == "charging" and scene.laser.charge_ratio < 0.85:
                 actions.append("laser")
             elif (scene.laser.state == "ready" and self._laser_target
                   and (heat is None or heat.heat < 66)):

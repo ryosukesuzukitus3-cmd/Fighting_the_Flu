@@ -69,12 +69,12 @@ def _gen_balance() -> str:
 
 
 def _gen_weapon_main() -> str:
-    from src.entities.weapon import _MAIN_LEVELS  # type: ignore[attr-defined]
+    from src.entities.weapon import _MAIN_LEVELS, _MAIN_FIRE_CONFIG
     _DESCRIPTIONS = {
-        "single": "正面に弾1発（発射間隔0.25s）",
-        "rapid1": "連射（発射間隔0.15s）",
-        "rapid2": "超連射（発射間隔0.12s）",
-        "wide1":  "正面＋斜め 2本発射",
+        "single": f"正面に弾1発（発射間隔{_MAIN_FIRE_CONFIG['single'][1]:g}s）",
+        "rapid1": f"連射（発射間隔{_MAIN_FIRE_CONFIG['rapid1'][1]:g}s）",
+        "rapid2": f"超連射（発射間隔{_MAIN_FIRE_CONFIG['rapid2'][1]:g}s）",
+        "wide1":  "正面＋左右交互の斜め 2本発射",
         "wide2":  "正面＋斜め 3本発射",
         "medic":  "先輩復帰時に解禁する3方向貫通弾（通常強化の対象外）",
     }

@@ -45,7 +45,8 @@ class GameScenePostBossMixin:
                 self.particles.spawn_explosion(bx, by, color=(255, 200, 60), count=30)  # type: ignore[attr-defined]
                 self.particles.spawn_explosion(bx, by, color=(255, 120, 20), count=20)  # type: ignore[attr-defined]
                 self.camera.shake(10.0)  # type: ignore[attr-defined]
-                self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.5)  # type: ignore[attr-defined]
+                self.game.sound.play_se("music/se/game_explosion9.mp3",
+                                        volume=0.2 if self._post_boss_next_id is None else 0.5)  # type: ignore[attr-defined]
                 self._boss_boom_timers.pop(i)  # type: ignore[attr-defined]
 
         # 爆発演出が終わったらスロー倍率を徐々に 1.0 へ戻す
@@ -218,8 +219,9 @@ class GameScenePostBossMixin:
         self.particles.spawn_glow(bx, by, color=(255, 230, 160), count=20)  # type: ignore[attr-defined]
         self.camera.shake(20.0)  # type: ignore[attr-defined]
         self._hitstop_timer = 0.16  # type: ignore[attr-defined]
-        self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.8)  # type: ignore[attr-defined]
-        self.game.sound.play_se("music/se/でたぁ.mp3", volume=1.0)  # type: ignore[attr-defined]
+        if next_stage_id(self._stage_id) is not None:
+            self.game.sound.play_se("music/se/game_explosion9.mp3", volume=0.8)
+            self.game.sound.play_se("music/se/でたぁ.mp3", volume=1.0)
         self.game.sound.stop_bgm(fadeout_ms=800)  # type: ignore[attr-defined]
         self.enemy_bullets.empty()  # type: ignore[attr-defined]
         self.laser.state = "ready"  # type: ignore[attr-defined]
@@ -245,8 +247,8 @@ class GameScenePostBossMixin:
             # ラスボス: スロー + 爆発 + 閃光
             self._post_boss_slow    = FINAL_SLOW_FACTOR  # type: ignore[attr-defined]
             self._boss_boom_timers  = [0.25, 0.65, 1.05]  # type: ignore[attr-defined]
-            self._boss_kill_flash_timer = 1.2  # type: ignore[attr-defined]
-            self.game.sound.play_bgm("music/bgm/FFVI_勝利のファンファーレ.mp3", loops=0)  # type: ignore[attr-defined]
+            self._boss_kill_flash_timer = 0.18  # Leave the finishing beam visible.  # type: ignore[attr-defined]
+            self.game.sound.play_bgm("music/bgm/FFVI_勝利のファンファーレ.mp3", loops=0, volume=0.5)  # type: ignore[attr-defined]
 
         self._boss_boom_x = bx  # type: ignore[attr-defined]
         self._boss_boom_y = by  # type: ignore[attr-defined]

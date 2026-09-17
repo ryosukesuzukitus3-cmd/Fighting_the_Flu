@@ -63,6 +63,8 @@ class FinalBattleDirector:
         self._karonaru_arrival_trail: list[tuple[float, float, float]] = []
         self._gate_released = False
         self._final_shot_requested = False
+        self._finishing_beam = None
+        self._bond_timer = 0.0
 
     # ── 公開: 状態読み取り ────────────────────────────────────────
     @property
@@ -108,7 +110,7 @@ class FinalBattleDirector:
                 self.scene._boss.arm_final_kill()
             self._final_seq = "final_chance"
             self._final_shot_requested = True
-            self._show_final_banner("final_chance", 2.4)
+            self._final_banner_timer = 0.0  # The beam owns the final visual beat.
 
     def consume_final_shot_request(self) -> bool:
         """Deliver the first fresh shot even if the request was a short tap."""
@@ -116,8 +118,23 @@ class FinalBattleDirector:
         self._final_shot_requested = False
         return requested
 
+    def create_final_beam(self):
+        from src.entities.combat_effects import FinalBeam
+        if self._finishing_beam is not None and self._finishing_beam in self.scene.player_bullets:
+            return []
+        boss = self.scene._boss
+        if boss is None:
+            return []
+        self._finishing_beam = FinalBeam(self.scene.game, self.scene.player.muzzle_screen(),
+                                        boss.rect.center)
+        return [self._finishing_beam]
+
+    def draw_final_beam(self, screen):
+        if self._finishing_beam is not None:
+            self._finishing_beam.draw_effect(screen)
+
     def mark_final_shot(self, bullets) -> None:
-        """Called only for the player's newly generated normal weapon bullets.
+        """Called only for the player's newly generated finishing projectile.
 
         Further player shots remain eligible if the first shot misses. Companion
         and piece-bomb bullets must not pass through this entry point.
@@ -140,10 +157,18 @@ class FinalBattleDirector:
         self._final_seq = sequence
         self._gate_released = False
         self._final_shot_requested = False
+        self._finishing_beam = None
+        self._bond_timer = 0.0
 
     # ── 公開: 更新エントリ ────────────────────────────────────────
     def update_timers(self, dt: float) -> None:
         """演出タイマー（バナー・宣言オーバーレイ）とカロナール到着モーション。"""
+        self._bond_timer = max(0.0, self._bond_timer - dt)
+        if self._finishing_beam is not None:
+            self._finishing_beam.advance(dt)
+            if self._finishing_beam.age >= self._finishing_beam.DURATION:
+                self._finishing_beam.kill()
+                self._finishing_beam = None
         if self._final_banner_timer    > 0: self._final_banner_timer    -= dt
         if self._sengen_overlay_timer  > 0: self._sengen_overlay_timer  -= dt
         if self._sengen_drain_timer    > 0: self._update_sengen_drain(dt)
@@ -196,8 +221,6 @@ class FinalBattleDirector:
             speed=45.0,
         )
         if t >= 1.0:
-            self.scene._spawn_popup("LET'S GO", int(companion.sx), int(companion.sy) - 34,
-                                    color=(180, 255, 200), life=1.8)
             self._begin_input_gate("await_help")
 
     def update_combat(self, dt: float) -> None:
@@ -332,14 +355,10 @@ class FinalBattleDirector:
             self._sengen_drain_timer = 0.0
             self.scene.player.hp = 1
         self._final_seq = "return"
-        self._show_final_banner("kouhatsu", 3.0)
-        self.scene._boss_kill_flash_timer = 1.2   # 白閃光
-        self.scene._play_video_effect(
-            "radiant_flash", center=(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),
-            size=(SCREEN_WIDTH, 450),
-        )
+        self._final_banner_timer = 0.0
+        self._bond_timer = 1.2
         self.scene.game.sound.play_bgm("music/bgm/Rebirth_the_edge.mp3", volume=0.7)
-        self.scene.game.sound.play_se_alias("SE_LIGHT")
+        self.scene.game.sound.play_se("music/se/kenney/forceField_000.ogg", volume=0.45)
         self._spawn_returning_karonaru()
         self._play_final_dialogue(FINAL_SEQ["return"], on_done=self._start_karonaru_return_join)
 
@@ -396,14 +415,18 @@ class FinalBattleDirector:
         ]
 
     def draw_arrival_trail(self, surf: pygame.Surface) -> None:
+        if self._bond_timer > 0:
+            from src.entities.combat_effects import draw_bond_light
+            center = (self.scene._companion.rect.center if self.scene._companion is not None
+                      else self.scene.player.rect.center)
+            draw_bond_light(surf, self.scene.game.resources, center, 1 - self._bond_timer / 1.2)
         trail = self._karonaru_arrival_trail
         if len(trail) < 2:
             return
         layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i, (x, y, life) in enumerate(trail):
+        for x, y, life in trail:
             alpha = max(0, min(180, int(180 * life / 0.55)))
-            radius = 2 + min(4, i // 3)
-            pygame.draw.circle(layer, (170, 255, 205, alpha), (int(x), int(y)), radius)
+            pygame.draw.rect(layer, (170, 255, 205, alpha), (int(x), int(y), 4, 4))
         pts = [(int(x), int(y)) for x, y, _ in trail]
         if len(pts) >= 2:
             pygame.draw.lines(layer, (125, 245, 180, 80), False, pts, 2)
@@ -449,7 +472,8 @@ class FinalBattleDirector:
         scene.game.story.karonaru_available   = True
         scene.game.story.karonaru_max         = True
         scene.game.story.final_self_distanced = True
-        self._show_final_banner("anti_rumin", 3.0)
+        self._bond_timer = 1.2
+        self._final_banner_timer = 0.0
         # Start the anti-rumination field and final gauge.
         from src.entities.enemies.boss import _FORM3_ACT2_HP
         if scene._boss is not None:
@@ -473,7 +497,7 @@ class FinalBattleDirector:
         healed = max(0, scene.player.hp - before)
         px, py = scene.player.rect.center
         scene._spawn_popup(
-            "HP FULL RECOVER" if healed > 0 else "HP SECURED",
+            "全回復" if healed > 0 else "回復",
             px,
             scene.player.rect.top - 26,
             color=(160, 255, 190),

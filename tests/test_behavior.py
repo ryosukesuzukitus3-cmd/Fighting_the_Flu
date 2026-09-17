@@ -96,7 +96,10 @@ def test_weapon_main_type_and_cooldown_follow_level() -> None:
     assert w.shoot_cooldown == 0.25
     w.main_level = 1
     assert w.main_type == "rapid1"
-    assert w.shoot_cooldown == 0.15
+    assert w.shoot_cooldown < 0.25
+    previous = w.shoot_cooldown
+    w.upgrade("weapon_main")
+    assert w.shoot_cooldown < previous
 
 
 def test_weapon_snapshot_restore_roundtrip() -> None:

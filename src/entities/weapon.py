@@ -6,15 +6,15 @@ if TYPE_CHECKING:
     import pygame
 
 # メインウェポンの強化段階（laserはアドオンスロットに分離）
-# rapid1: 連射(発射間隔0.15s), rapid2: 超連射(0.12s), wide1: 2本, wide2: 3本
+# rapid1: 0.19s、rapid2: 0.14s、wide1: 中央＋左右交互、wide2: 中央＋両側
 _MAIN_LEVELS = ["single", "rapid1", "rapid2", "wide1", "wide2", "medic"]
 
 # (発射数/射撃, クールダウン秒, ダメージ/発)
 _MAIN_FIRE_CONFIG: dict[str, tuple[int, float, int]] = {
     "single": (1, 0.25, 1),
-    "rapid1": (1, 0.15, 1),
-    "rapid2": (1, 0.12, 1),
-    "wide1":  (2, 0.12, 1),
+    "rapid1": (1, 0.19, 1),
+    "rapid2": (1, 0.14, 1),
+    "wide1":  (2, 0.14, 1),
     "wide2":  (3, 0.12, 1),
     "medic":  (3, 0.12, 2),
 }
@@ -45,6 +45,7 @@ class Weapon:
         self.magnet_level: int  = 0   # 0=なし, 1=弱, 2=中, 3=強
         self.has_barrier:  bool = False
         self.weapon_stock: int  = 0   # 取得済みウェポンアイテム在庫（V で選択画面を開いて消費）
+        self._wide_side = 1
         self._homing_timer: float = 0.0   # ホーミング専用クールダウン
 
     @property
@@ -151,7 +152,9 @@ class Weapon:
         if t in ("single", "rapid1", "rapid2"):
             bullets.append(NormalBullet(wx, wy))
         elif t == "wide1":
-            bullets += [WideBullet(wx, wy, angle) for angle in (-12, 12)]
+            # Keep the central shot when upgrading; alternate the extra lane.
+            bullets += [WideBullet(wx, wy, 0), WideBullet(wx, wy, 12 * self._wide_side)]
+            self._wide_side *= -1
         elif t == "wide2":
             bullets += [WideBullet(wx, wy, angle) for angle in (-20, 0, 20)]
         elif t == "medic":

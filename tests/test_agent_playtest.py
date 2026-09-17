@@ -246,6 +246,12 @@ def test_laser_hold_then_release_uses_real_player_input(session):
 
 def test_final_gate_requires_release_and_fresh_fire_and_observe_preserves_request(session):
     scene = install_gameplay(session)
+    from src.entities.enemies.boss import Boss
+    scene._boss = Boss(session.game, stage_id=4)
+    scene._boss._transform_form2()
+    scene._boss._transform_form3()
+    scene._boss.begin_act2(240)
+    scene._boss.rect.center = (650, 250)
     session.command({"step": 1, "actions": ["fire"]})
     scene._final._begin_input_gate("final_ready")
     session.command({"step": 4, "actions": ["fire"]})
