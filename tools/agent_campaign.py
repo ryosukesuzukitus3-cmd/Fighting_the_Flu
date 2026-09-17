@@ -22,6 +22,28 @@ from tools.agent_playtest import Session
 from tools.playtest_state import boundary, mode
 
 
+def _swept_intersects(start, end, other_start, other_end):
+    """Strict AABB overlap at any time while both rectangles move linearly."""
+    entry, leave = 0.0, 1.0
+    for a_min, a_max, b_min, b_max, relative in (
+        (start.left, start.right, other_start.left, other_start.right,
+         end.x - start.x - (other_end.x - other_start.x)),
+        (start.top, start.bottom, other_start.top, other_start.bottom,
+         end.y - start.y - (other_end.y - other_start.y)),
+    ):
+        if relative == 0:
+            if a_max <= b_min or a_min >= b_max:
+                return False
+            continue
+        t1 = (b_min - a_max) / relative
+        t2 = (b_max - a_min) / relative
+        entry = max(entry, min(t1, t2))
+        leave = min(leave, max(t1, t2))
+        if entry >= leave:
+            return False
+    return entry < leave
+
+
 def _escape_distance(hit, danger, bounds, obstacles=()):
     """Distance to a clear cardinal exit inside the playable area.
 
@@ -67,6 +89,10 @@ class Campaign:
         self._previous_boundary = None
         self._previous_scene = None
         self._previous_hp = None
+        self._previous_attacks = []
+        self._previous_player_rect = None
+        self._previous_player_position = None
+        self._previous_note_frame = None
         self._previous_weapon = None
         self._previous_position = {}
         self._last_plan_frame = None
@@ -99,6 +125,10 @@ class Campaign:
             print(json.dumps({"event": "scene", **entry}), flush=True)
             self._previous_scene = scene
             self._previous_hp = None
+            self._previous_attacks = []
+            self._previous_player_rect = None
+            self._previous_player_position = None
+            self._previous_note_frame = None
             self._previous_weapon = None
             self._previous_position.clear()
             self._cooling = False
@@ -115,12 +145,18 @@ class Campaign:
             if self._previous_hp is not None and player.hp < self._previous_hp:
                 event = {"frame": observation["frame"], "stage": observation["stage"],
                          "from": self._previous_hp, "to": player.hp,
-                         "position": list(player.rect.center)}
+                         "position": list(player.rect.center),
+                         "actions": list(observation["held_actions"]),
+                         "previous_frame": self._previous_note_frame,
+                         "previous_player_rect": self._previous_player_rect,
+                         "previous_player_position": self._previous_player_position,
+                         "previous_attacks": self._previous_attacks}
                 event["heat"] = getattr(getattr(scene, "_heat", None), "heat", None)
                 event["nearby_attacks"] = [
                     {"kind": type(b).__name__, "rect": list(b.rect),
                      "damage": getattr(b, "damage", None),
-                     "warning": getattr(b, "warning_only", False)}
+                     "warning": getattr(b, "warning_only", False),
+                     "terrain_bounced": getattr(b, "_terrain_bounced", False)}
                     for b in getattr(scene, "enemy_bullets", ())
                     if b.rect.inflate(160, 160).colliderect(player.rect)]
                 event["enemies"] = [{"kind": type(e).__name__, "rect": list(e.rect),
@@ -130,6 +166,16 @@ class Campaign:
                 self.damage.append(event)
                 print(json.dumps({"event": "damage", **event}), flush=True)
             self._previous_hp = player.hp
+            self._previous_note_frame = observation["frame"]
+            self._previous_player_rect = list(player.rect)
+            self._previous_player_position = list(player.rect.center)
+            self._previous_attacks = [
+                {"kind": type(b).__name__, "rect": list(b.rect),
+                 "vx": getattr(b, "vx", 0), "vy": getattr(b, "vy", 0),
+                 "damage": getattr(b, "damage", None),
+                 "warning": getattr(b, "warning_only", False),
+                 "terrain_bounced": getattr(b, "_terrain_bounced", False)}
+                for b in getattr(scene, "enemy_bullets", ())]
             weapon = player.weapon.snapshot()
             if self._previous_weapon is not None and weapon != self._previous_weapon:
                 self.upgrades.append({"frame": observation["frame"], "weapon": weapon})
@@ -254,7 +300,8 @@ class Campaign:
                 target_x = 785
         target_y = max(40, min(540, target_y))
         bullets = [b for b in getattr(scene, "enemy_bullets", ())
-                   if type(b).__name__ not in ("LaserMuzzleFlash", "LaserChargeOrb")]
+                   if type(b).__name__ not in ("LaserMuzzleFlash", "LaserChargeOrb")
+                   and not getattr(b, "_terrain_bounced", False)]
         hazards = []
         for obj in bullets:
             # Visible warnings are future danger, even before collision activates.
@@ -271,7 +318,7 @@ class Campaign:
             hazards.append((obj.rect, -scroll, 0, 2.5))
         speed = 280 * player.weapon.speed_multiplier
         best = None
-        best_cost = float("inf")
+        best_cost = (True, float("inf"))
         period = self.interval / 60
         # Keep the whole player sprite on screen, even when scoring its smaller
         # collision rectangle. Terrain is projected using the same horizon.
@@ -287,6 +334,10 @@ class Campaign:
                        (-1, -1), (-1, 1), (1, -1), (1, 1)):
             scale = math.sqrt(0.5) if dx and dy else 1
             cost = 0.0
+            enters_terrain = False
+            previous_hit = player.hit_rect
+            previous_hazards = [rect for rect, _, _, _ in hazards]
+            previous_terrain = [obj.rect for obj in terrain]
             for horizon, predicted_hazards, predicted_terrain in predictions:
                 px = max(player.rect.width / 2, min(SCREEN_WIDTH - player.rect.width / 2,
                      center[0] + dx * speed * scale * horizon))
@@ -294,7 +345,12 @@ class Campaign:
                      center[1] + dy * speed * scale * horizon))
                 hit = player.hit_rect.copy()
                 hit.center = int(px), int(py)
-                for predicted, weight in predicted_hazards:
+                for before, (predicted, weight) in zip(previous_hazards, predicted_hazards):
+                    # A narrow bullet can cross the player entirely between
+                    # sampled endpoints. Score that path as a collision too.
+                    if (not previous_hit.colliderect(before)
+                            and _swept_intersects(previous_hit, hit, before, predicted)):
+                        cost += 14000 * weight
                     gap_x = max(predicted.left - hit.right, hit.left - predicted.right, 0)
                     gap_y = max(predicted.top - hit.bottom, hit.top - predicted.bottom, 0)
                     distance = math.hypot(gap_x, gap_y)
@@ -303,11 +359,23 @@ class Campaign:
                         cost += (14000 + depth * 350) * weight
                     elif distance < 70:
                         cost += 220 * weight / (distance + 3)
+                if horizon <= period:
+                    enters_terrain |= any(
+                        not player.hit_rect.colliderect(obj.rect)
+                        and _swept_intersects(previous_hit, hit, before, after)
+                        for obj, before, after in zip(terrain, previous_terrain, predicted_terrain))
+                previous_hit = hit
+                previous_hazards = [rect for rect, _ in predicted_hazards]
+                previous_terrain = predicted_terrain
                 cost += (abs(px - target_x) * 0.18 + abs(py - target_y) * 0.42) / 4
                 if px < 55 or py < 35 or py > 545:
                     cost += 25
-            if cost < best_cost:
-                best_cost, best = cost, (dx, dy)
+            # The game pushes the player out of solid terrain. A forecast that
+            # travels through it is not an achievable escape path. Prefer a
+            # clear path, retaining a least-cost fallback if every path is hit.
+            candidate_cost = (enters_terrain, cost)
+            if candidate_cost < best_cost:
+                best_cost, best = candidate_cost, (dx, dy)
         self._previous_position = {id(obj): obj.rect.center for obj in enemies + ([boss] if boss else [])}
         self._last_plan_frame = self.session.frame
         dx, dy = best
