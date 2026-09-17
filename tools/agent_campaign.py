@@ -418,7 +418,20 @@ class Campaign:
             return actions + ["fire"]
         if name != "GameScene":
             return []
-        if not scene._accepts_combat_input and not scene._post_boss:
+        if scene._post_boss:
+            # Dialogue/upgrade modes above own their inputs. Wait through the
+            # defeat delay and final automatic departure; ordinary clears let
+            # rewards magnetize, then use the real upgrade UI before walking.
+            if not scene._accepts_upgrade_input:
+                return []
+            if scene._top_available_indices() or scene._bottom_available_indices():
+                return self.pulse("weapon_select")
+            if scene.items:
+                return []
+            # Post-boss walking has no terrain collisions. Applying the combat
+            # hazard planner here can trap the controller behind scenery.
+            return ["move_right"]
+        if not scene._accepts_combat_input:
             return []
         if scene._top_available_indices() or scene._bottom_available_indices():
             return self.pulse("weapon_select")

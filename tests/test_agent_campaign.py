@@ -253,3 +253,142 @@ def test_damage_evidence_keeps_previous_positions_after_bullet_disappears(tmp_pa
         if bot is not None:
             bot._trace.close()
         session.close()
+
+
+@pytest.fixture
+def post_boss_campaign(tmp_path, request):
+    from src.entities.enemies.boss import Boss
+
+    stage = getattr(request, "param", 1)
+    session = Session(tmp_path / "post-boss", seed=7, diagnostic=True)
+    bot = None
+    try:
+        game = session.game
+        game.start_new_run()
+        # This fixture starts at a defeat; all subsequent collection, choices
+        # and departure use the same input commands as a campaign run.
+        game.shared.upgrade_tutorial_shown = True
+        scene = GameScene(game, stage_id=stage)
+        game.change_scene(scene)
+        session.command({"step": 1, "actions": []})
+        scene.spawner.skip_all_events()
+        for group in (scene.enemies, scene.enemy_bullets, scene.items, scene.terrain):
+            group.empty()
+        scene.camera.scroll_speed = scene._stage_scroll_speed = 0
+        scene._stage_banner_timer = scene._bgm_delay = 0
+        scene.player._entering = False
+        scene.player.sx, scene.player.sy = 120.0, 285.0
+        scene.player.rect.topleft = (120, 285)
+        scene.player.hp = 60
+        scene._boss = Boss(game, stage)
+        scene._boss.sx, scene._boss.sy = 360.0, 300.0
+        scene._boss.rect.center = (360, 300)
+        scene._boss_intro_state = "fighting"
+        scene._on_boss_killed()
+        bot = Campaign(session)
+        yield bot, scene
+    finally:
+        if bot is not None:
+            bot._trace.close()
+        session.close()
+
+
+def test_post_boss_collects_upgrades_then_walks_to_next_chapter(
+    post_boss_campaign, monkeypatch,
+):
+    import pygame
+    from src.scenes.game.config import POST_BOSS_AUTO_TIMEOUT
+    from src.scenes.stageclear import StageClearScene
+
+    bot, scene = post_boss_campaign
+    session = bot.session
+    # This scenery would block the combat planner, but the cleared arena has
+    # no terrain collision and must be left with ordinary rightward movement.
+    wall = pygame.sprite.Sprite()
+    wall.rect = pygame.Rect(170, 0, 630, 600)
+    wall.image = pygame.Surface((1, 1), pygame.SRCALPHA)
+    scene.terrain.add(wall)
+    monkeypatch.setattr(bot, "movement", lambda _: pytest.fail("combat planner used after boss"))
+    assert len(scene.items) == 5
+    assert scene.player.weapon.weapon_stock == scene._companion.stock == 0
+    saw_collection_wait = saw_upgrade = saw_exit_walk = False
+    start = session.frame
+    for _ in range(150):
+        actions = bot.decide()
+        if scene._accepts_upgrade_input and scene.items and not actions:
+            saw_collection_wait = True
+        if "weapon_select" in actions:
+            saw_upgrade = True
+            assert scene.player.weapon.weapon_stock > 0 or scene._companion.stock > 0
+        if "move_right" in actions:
+            saw_exit_walk = True
+            assert not scene.items and not scene._upgrading
+            assert not scene._top_available_indices() and not scene._bottom_available_indices()
+            assert actions == ["move_right"]
+        bot.advance(actions)
+        if isinstance(session.game._scene, StageClearScene):
+            break
+    else:
+        pytest.fail("post-boss rewards and departure did not finish")
+    assert saw_collection_wait and saw_upgrade and saw_exit_walk
+    assert scene._post_boss_timer < POST_BOSS_AUTO_TIMEOUT
+    assert scene.player.sx >= 760
+    assert scene.player.hp == 100
+    assert scene.player.weapon.main_level == 1
+    assert scene._companion.lv_supply == 1
+    assert scene.player.weapon.weapon_stock == scene._companion.stock == 0
+    assert session.game.shared.carry_weapon == scene.player.weapon.snapshot()
+    assert session.game._scene._next_stage_id == 2
+    # Continue through the real result and story screens with normal decisions.
+    for _ in range(160):
+        bot.advance(bot.decide())
+        if isinstance(session.game._scene, GameScene):
+            break
+    assert isinstance(session.game._scene, GameScene)
+    assert session.game._scene._stage_id == 2
+    assert session.game._scene.player.weapon.main_level == 1
+    assert session.frame - start < 60 * 45
+
+
+def test_post_boss_waits_before_dialogue_then_advances_it(post_boss_campaign):
+    bot, scene = post_boss_campaign
+    # Existing stock must not make the policy send V during the defeat delay.
+    scene.player.weapon.weapon_stock = 1
+    before = scene.player.rect.copy()
+    assert scene._defeat_dialogue_delay > 0
+    assert bot.decide() == []
+    bot.advance(bot.decide())
+    assert not scene._upgrading
+    assert scene.player.rect == before
+    for _ in range(20):
+        bot.advance(bot.decide())
+        if scene._defeat_dialogue_active:
+            break
+    assert scene._defeat_dialogue_active
+    assert bot.decide() == ["ui_accept"]
+    bot.advance(bot.decide())
+    assert scene._defeat_dialogue_index > 0
+    assert not scene._upgrading
+
+
+@pytest.mark.parametrize("post_boss_campaign", [4], indirect=True)
+def test_final_post_boss_waits_for_automatic_departure(post_boss_campaign):
+    bot, scene = post_boss_campaign
+    scene.player.weapon.weapon_stock = 1
+    # This fixture isolates the period after final dialogue. No upgrade should
+    # delay the epilogue even when unspent stock remains.
+    scene._defeat_dialogue_delay = 0
+    scene._defeat_dialogue_active = False
+    scene._defeat_dialogue_pages = []
+    before = scene.player.rect.copy()
+    assert scene._post_boss_next_id is None
+    assert bot.decide() == []
+    for _ in range(25):
+        assert bot.decide() == []
+        bot.advance([])
+        if bot.session.game._scene is not scene:
+            break
+    assert bot.session.game._scene is not scene
+    assert not scene._upgrading
+    assert scene.player.weapon.weapon_stock == 1
+    assert scene.player.rect == before

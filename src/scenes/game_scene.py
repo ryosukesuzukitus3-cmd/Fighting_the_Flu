@@ -314,6 +314,16 @@ class GameScene(
                 and self._final.seq != "return_join")
 
     @property
+    def _accepts_upgrade_input(self) -> bool:
+        """Allow stock use in combat or after a non-final defeat's dialogue."""
+        if self._post_boss:
+            return (not self._paused and not self._upgrading
+                    and self._post_boss_next_id is not None
+                    and self._defeat_dialogue_delay <= 0
+                    and not self._defeat_dialogue_active)
+        return self._accepts_combat_input
+
+    @property
     def _quiet_combat_effects(self) -> bool:
         """Keep the frozen battlefield readable while a narrative beat owns it."""
         return (self._cutin_active or self._final.dialogue_active
@@ -382,7 +392,7 @@ class GameScene(
             self._update_upgrade_ui()
             return
         comp_stock = self._companion.stock if self._companion is not None else 0
-        if (self._accepts_combat_input
+        if (self._accepts_upgrade_input
                 and inp.is_action_just_pressed("weapon_select")
                 and (self.player.weapon.weapon_stock > 0 or comp_stock > 0)):
             self._open_upgrade_ui()
