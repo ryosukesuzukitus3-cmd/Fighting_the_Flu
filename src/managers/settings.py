@@ -29,7 +29,7 @@ _DEFAULTS: dict = {
         "move_left":  "K_LEFT",
         "move_right": "K_RIGHT",
         "fire":          "K_z",
-        "laser":         "K_SPACE",
+        "laser":         "K_b",
         "weapon_select": "K_v",
         "pause":         "K_x",
         "ui_accept":     "K_RETURN",

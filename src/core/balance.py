@@ -25,6 +25,7 @@ ENEMY_SPD_SCALE: dict[int, float] = {
 }
 
 # ── プレイヤー HP / 被ダメージ設計（HP ゲージ・最大100）─────────────
+PLAYER_BASE_SPEED    = 140.0 # 初期移動速度（px/秒）。速度強化前は従来280の半分
 PLAYER_MAX_HP        = 100   # 多段階 HP ゲージの最大値
 PLAYER_INVINCIBLE    = 0.8   # 被弾後の無敵時間（秒）
 

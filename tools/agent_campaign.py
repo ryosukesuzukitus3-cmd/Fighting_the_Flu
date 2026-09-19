@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.core.balance import PLAYER_BASE_SPEED
 from tools.agent_playtest import Session
 from tools.playtest_state import boundary, mode
 
@@ -360,7 +361,7 @@ class Campaign:
             hazards.append((obj.rect, vx, vy, 1.7))
         for obj in terrain:
             hazards.append((obj.rect, -scroll, 0, 2.5))
-        speed = 280 * player.weapon.speed_multiplier
+        speed = PLAYER_BASE_SPEED * player.weapon.speed_multiplier
         plans = []
         best = None
         best_cost = (True, float("inf"))

@@ -443,12 +443,15 @@ def test_precision_hold_can_reach_safe_lane_without_crossing_ceiling():
     ceiling = SimpleNamespace(rect=pygame.Rect(0, 0, 500, 120), collidable=True)
     bot, scene, beam = _movement_fixture((0, 156, 585, 210), terrain=[ceiling])
     scene.player.rect.center = (224, 169)
-    scene.player.weapon.speed_multiplier = 1.12
+    from src.core.balance import PLAYER_BASE_SPEED
+    scene.player.weapon.speed_multiplier = 1.25
+    # At the lower speed, use a longer decision interval to exercise overshoot.
+    bot.interval = 24
     beam.vx = beam.vy = 0
     beam.warning_only = True
     actions, _ = bot.movement(scene)
     assert "move_up" in actions
     assert bot._planned_move_frames < bot.interval
-    hit = scene.player.hit_rect.move(0, -int(280 * 1.12 * bot._planned_move_frames / 60))
+    hit = scene.player.hit_rect.move(0, -int(PLAYER_BASE_SPEED * 1.25 * bot._planned_move_frames / 60))
     assert not hit.colliderect(ceiling.rect)
     assert not hit.colliderect(beam.rect)
