@@ -3412,8 +3412,15 @@ def test_companion_holds_fire_during_boss_intro() -> None:
         def play_se_alias(self, *_a, **_k) -> None:
             pass
 
+    class ArtStub:
+        def image(self, _path):
+            image = pygame.Surface((20, 34), pygame.SRCALPHA)
+            image.fill((120, 230, 150, 255))
+            return image
+
     class GameStub:
         sound = SoundStub()
+        resources = ArtStub()
 
     class WeaponStub:
         speed_multiplier = 1.0

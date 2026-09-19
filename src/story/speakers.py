@@ -31,10 +31,10 @@ BILLY          = "ビリー"
 SAKURA         = "サクラ"
 
 
-# ダミーポートレート（tools/gen_dummy_portraits.py で生成。専用素材が来たら差し替え）
-_KARONARU_PORTRAIT     = "graphic/portrait_karonaru_dummy.png"
-_KARONARU_MAX_PORTRAIT = "graphic/portrait_karonaru_max_dummy.png"
-_MATCHING_ZERO_PORTRAIT = "graphic/portrait_matching_zero_dummy.png"
+# 会話と戦闘で同じキャラクター素材を使う。
+_KARONARU_PORTRAIT     = "graphic/characters/karonaru.png"
+_KARONARU_MAX_PORTRAIT = "graphic/characters/karonaru_max.png"
+_MATCHING_ZERO_PORTRAIT = "graphic/boss_matching_zero_body.png"
 
 
 @dataclass(frozen=True)
@@ -50,19 +50,19 @@ class Speaker:
 # key → Speaker。name が "" の話者はネームプレートを描画しない。
 # portrait はゲーム内スプライト/プレイヤー画像を流用。未設定の話者は画像非表示。
 SPEAKERS: dict[str, Speaker] = {
-    SAWAGUCHI:      Speaker(SAWAGUCHI,      "澤口",                 (180, 210, 255), "graphic/sawaguchi_49_64.png"),
+    SAWAGUCHI:      Speaker(SAWAGUCHI,      "澤口",                 (180, 210, 255), "graphic/characters/sawaguchi.png"),
     KARONARU:       Speaker(KARONARU,       "カロナール先輩",        (140, 230, 150), _KARONARU_PORTRAIT),
     KARONARU_MAX:   Speaker(KARONARU_MAX,   "カロナール先輩・薬効最大", (200, 255, 210), _KARONARU_MAX_PORTRAIT),
     NARRATION:      Speaker(NARRATION,      "",                    (205, 205, 215)),
     UNKNOWN:        Speaker(UNKNOWN,        "？？？",               (210, 90, 90)),
     SYSTEM:         Speaker(SYSTEM,         "",                    (255, 220, 80)),
     BOSS1:          Speaker(BOSS1,          BOSS1,                 (255, 90, 90),  "graphic/enemy_バイキンマン68x80.png"),
-    BOSS2:          Speaker(BOSS2,          BOSS2,                 (255, 90, 90),  "graphic/enemy_ブロリー.png"),
-    BOSS2_FORM2:    Speaker(BOSS2_FORM2,    BOSS2_FORM2,           (255, 200, 40), "graphic/enemy_ブロリー.png"),
+    BOSS2:          Speaker(BOSS2,          BOSS2,                 (255, 90, 90),  "graphic/boss_broly_hires.png"),
+    BOSS2_FORM2:    Speaker(BOSS2_FORM2,    BOSS2_FORM2,           (255, 200, 40), "graphic/boss_broly_hires.png"),
     BOSS3:          Speaker(BOSS3,          BOSS3,                 (255, 120, 170), _MATCHING_ZERO_PORTRAIT),
     BOSS4:          Speaker(BOSS4,          BOSS4,                 (255, 110, 90), "graphic/enemy_fujii4dan.png"),
     BOSS4_FORM2:    Speaker(BOSS4_FORM2,    BOSS4_FORM2,           (255, 60, 60),  "graphic/藤井四段第二形態_もう一度.png"),
-    BOSS_SAWAGUCHI: Speaker(BOSS_SAWAGUCHI, BOSS_SAWAGUCHI,        (200, 60, 200), "graphic/sawaguchi_49_64.png"),
+    BOSS_SAWAGUCHI: Speaker(BOSS_SAWAGUCHI, BOSS_SAWAGUCHI,        (200, 60, 200), "graphic/characters/sawaguchi.png"),
     TUTORIAL_DUMMY: Speaker(TUTORIAL_DUMMY, TUTORIAL_DUMMY,        (150, 200, 140), "graphic/enemy_バイキンマン68x80.png"),
     BILLY:          Speaker(BILLY,          BILLY,                 (235, 190, 130), "graphic/enemy_billy-herrington.jpg"),
     SAKURA:         Speaker(SAKURA,         SAKURA,                (255, 150, 190), "graphic/portrait_sakura.png"),

@@ -32,7 +32,7 @@ VIDEO_EFFECT_SPECS: tuple[VideoEffectSpec, ...] = (
     VideoEffectSpec("anime_impact", "nc172648", "アニメ衝撃・斬撃 / BREAK", 18, 18.0, (360, 360)),
     VideoEffectSpec("blue_slash", "nc186236", "斬撃エフェクト3 / 素材確認（本編不採用）", 18, 18.0, (560, 315)),
     VideoEffectSpec("radiant_flash", "nc224911", "透過閃光 / 素材確認（本編不採用）", 32, 16.0, (800, 450), "alpha"),
-    VideoEffectSpec("light_arrow_tunnel", "nc234645", "光の矢 / ブラックホール脱出", 20, 16.0, (800, 450), "alpha"),
+    VideoEffectSpec("light_arrow_tunnel", "nc234645", "光の矢 / 素材確認（本編不採用）", 20, 16.0, (800, 450), "alpha"),
     VideoEffectSpec("missile_loop", "nc243927", "ミサイル / ホーミングLv1〜6", 18, 12.0, (78, 34), "alpha"),
     VideoEffectSpec("angel_flash", "nc268435", "円環レーザー閃光 / Stage2銃口", 32, 16.0, (520, 293)),
     VideoEffectSpec("rupture_laser", "nc338669", "破裂レーザー / 素材確認（本編不採用）", 30, 12.0, (800, 450)),
@@ -46,7 +46,7 @@ VIDEO_EFFECTS: dict[str, VideoEffectSpec] = {spec.key: spec for spec in VIDEO_EF
 # 素材比較のためデバッグFX一覧には残すが、通常プレイでは使わないもの。
 DEBUG_ONLY_VIDEO_EFFECT_KEYS = frozenset({
     "electrical_hit", "electric_arcs", "blue_slash", "magenta_cleave",
-    "radiant_flash", "retro_lasers", "rupture_laser",
+    "radiant_flash", "retro_lasers", "rupture_laser", "light_arrow_tunnel",
 })
 
 
