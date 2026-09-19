@@ -51,7 +51,7 @@ from src.core.balance import (
     BATTLE_V2_ENABLED, HEAT_LASER_PER_SEC,
     STANCE_HOMING, STANCE_MAIN,
 )
-from src.core.battle_systems import HeatSystem
+from src.core.battle_systems import HeatSystem, suction_offset
 
 # ボス演出シーケンス状態
 # "" -> alert -> entering -> boss_name -> boss_dialogue -> fight_banner -> fighting
@@ -1206,12 +1206,17 @@ class GameScene(
         for bullet in list(self.enemy_bullets):
             if getattr(bullet, "_terrain_bounced", False) or getattr(bullet, "warning_only", False):
                 continue
+            if getattr(bullet, "has_hit_player", False):
+                continue
             collides = getattr(bullet, "collides_with_rect", bullet.rect.colliderect)
             if collides(self.player.hit_rect):
                 hit_bullet = bullet
                 break
         if hit_bullet is not None:
+            can_hit = not self.player.is_invincible and not self._final.final_strike_active
             self._damage_player(getattr(hit_bullet, "damage", PLAYER_DMG_BULLET))
+            if can_hit and getattr(hit_bullet, "hits_player_once", False):
+                hit_bullet.has_hit_player = True
             if not getattr(hit_bullet, "persistent", False):
                 hit_bullet.kill()
             if self.player.hp <= 0 and not self._is_debug_stage:
@@ -1519,14 +1524,9 @@ class GameScene(
             return
         px = self.player.sx + self.player.rect.width / 2
         py = self.player.sy + self.player.rect.height / 2
-        dx = boss.suction_x - px
-        dy = boss.suction_y - py
-        dist = math.hypot(dx, dy)
-        if dist < 1.0:
-            return
-        pull = 175.0 * dt
-        self.player.sx += (dx / dist) * pull
-        self.player.sy += (dy / dist) * pull
+        dx, dy = suction_offset(px, py, boss.suction_x, boss.suction_y, dt)
+        self.player.sx += dx
+        self.player.sy += dy
         self.player.sx = max(0.0, min(SCREEN_WIDTH - self.player.rect.width, self.player.sx))
         self.player.sy = max(0.0, min(SCREEN_HEIGHT - self.player.rect.height, self.player.sy))
         self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))

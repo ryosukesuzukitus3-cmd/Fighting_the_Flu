@@ -82,3 +82,37 @@ def test_fortress_does_not_leave_an_unintended_unguarded_resummon_gap(monkeypatc
         assert len(boss._summoned) == 3
     finally:
         game.close()
+
+
+def test_fortress_loses_shield_after_two_waves_and_keeps_attacking(monkeypatch, tmp_path):
+    from tools.headless import build_game_scene
+    from src.entities.enemies.boss import Boss
+    monkeypatch.setenv("FLU_USER_DATA_DIR", str(tmp_path))
+    game, scene = build_game_scene(3)
+    try:
+        boss = Boss(game, 3)
+        boss._state = "fight"
+        group = pygame.sprite.Group()
+        def summon(count):
+            wave = [pygame.sprite.Sprite() for _ in range(count)]
+            group.add(*wave)
+            return wave
+        boss.summon_turret_fn = summon
+        for wave_number in (1, 2):
+            boss._update_gimmick(.01, "turrets", group, scene.player)
+            assert len(boss._summoned) == 3
+            assert boss._turret_waves == wave_number
+            for drone in list(boss._summoned):
+                drone.kill()
+            assert boss._update_gimmick(.01, "turrets", group, scene.player)
+            boss._update_gimmick(3, "turrets", group, scene.player)
+        for _ in range(3):
+            assert not boss._update_gimmick(10, "turrets", group, scene.player)
+        assert boss._turret_core_exposed and not boss.is_stance_down
+        assert boss._turret_waves == 2 and not boss._summoned
+        assert boss._phase[1] == "rock_fall"
+        hp = boss.hp
+        boss.take_damage(5)
+        assert hp - boss.hp == 5
+    finally:
+        game.close()

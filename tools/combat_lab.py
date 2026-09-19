@@ -19,7 +19,7 @@ from tools.playtest_state import mode
 
 
 def run_trial(args):
-    session = Session(args.output, args.seed, diagnostic=True)
+    session = Session(args.output, args.seed, diagnostic=True, save_step_images=False)
     from src.scenes.game_scene import GameScene
     from tools.headless import apply_weapon
     game = session.game
@@ -29,19 +29,27 @@ def run_trial(args):
     game._scene = scene
     scene.on_enter()
     scene.spawner.skip_all_events()
-    for group in (scene.enemies, scene.enemy_bullets, scene.terrain, scene.items):
+    for group in (scene.enemies, scene.enemy_bullets, scene.items):
         group.empty()
+    if args.arena == 'empty':
+        scene.terrain.empty()
+    else:
+        from src.core.constants import SCREEN_WIDTH
+        boss_event = next(e for e in scene.stage.world_events if e['type'] == 'Boss')
+        scene.camera.x = float(boss_event['x']) - SCREEN_WIDTH
+        scene.spawner.spawn_terrain_events(scene.stage.world_events, scene.camera)
+        scene.terrain.update(0, scene.camera)
     scene.camera.scroll_speed = 0
     scene._stage_banner_timer = scene._bgm_delay = 0
     scene.player._entering = False
     scene.player.sx, scene.player.sy = 140., 280.
     scene.player.rect.topleft = (140, 280)
-    apply_weapon(scene, main=args.main, laser=args.laser, homing=args.homing)
+    apply_weapon(scene, main=args.main, laser=args.laser, homing=args.homing, speed=args.speed)
     scene._queue_boss_spawn(args.stage)
     session._cache()
     setup = dict(stage=args.stage, main=args.main, laser=args.laser,
                  homing=args.homing, policy=args.policy, interval=args.interval,
-                 arena='empty; normal boss introduction and rules', seed=args.seed)
+                 arena=args.arena, camera_x=scene.camera.x, speed=args.speed, seed=args.seed)
     session.metadata['scenario_setup'] = setup
     (session.output_dir / 'session.json').write_text(json.dumps(session.metadata, indent=2), encoding='utf-8')
     controller = Campaign(session, interval=args.interval)
@@ -126,6 +134,8 @@ def main():
     parser.add_argument('--main', type=int, choices=range(5), default=4)
     parser.add_argument('--laser', type=int, choices=range(7), default=3)
     parser.add_argument('--homing', type=int, choices=range(8), default=0)
+    parser.add_argument('--arena', choices=('empty', 'authored'), default='empty')
+    parser.add_argument('--speed', type=int, choices=range(4), default=0)
     parser.add_argument('--policy', choices=('adaptive','hold','main','reckless'), default='adaptive')
     parser.add_argument('--seed', type=int, default=11)
     parser.add_argument('--interval', type=int, default=12)

@@ -108,6 +108,7 @@ _FORM2_CONFIG = {
 
 # 超サイヤ人ブロリー（ステージ2 第二形態）: 通常HPを削り切ると変身する最終ゲージ
 _SSJ_HP    = 300
+_SUPER_BEAM_HEIGHT = 260  # 本編の床と天井の間に、見て選べる退避レーンを残す
 _SSJ_BODY_SIZE = (180, 146)  # 素材の解像度に依存せず、従来の当たり判定を保つ
 
 # 第三形態（頑固王サワグチ）: max_hp（スプライトはダミー生成）
@@ -159,6 +160,7 @@ _WEAK_DUR    = STANCE_DOWN_DUR * 0.65  # 弱点露出は短く、集中攻撃の
 _WEAK_MULT   = 2.0    # 露出中の被ダメ倍率
 
 # turrets ギミック
+_TURRET_MAX_WAVES = 2     # 子機2組で盾を破壊。その後は本体との攻防。
 _TURRET_SUMMON_CD  = 9.0   # 砲台再召喚クールダウン（秒）
 _TURRET_GUARD_MULT = 0.0   # 砲台健在中の被ダメ倍率（0=シールド中は本体無効）
 _TURRET_STUN_DUR   = STANCE_DOWN_DUR * 0.65  # 子機全撃破後の短いスタン（秒）
@@ -212,6 +214,8 @@ class Boss(pygame.sprite.Sprite):
         self.summon_turret_fn = None           # Callable[[int], list] | None
         self.rear_drone_exposed_just_now = None  # one-shot scene feedback
         self._summoned: list   = []
+        self._turret_waves = 0
+        self._turret_core_exposed = False
         self._summon_cd:  float = 0.0
         self._stun_timer: float = 0.0
         self._shot_se_t:  float = -1.0   # 攻撃SEの再生間隔制御
@@ -261,6 +265,8 @@ class Boss(pygame.sprite.Sprite):
     def _phase(self) -> tuple:
         key = self._form_key()
         phases = _PHASE_CONFIGS.get(key, _PHASE_CONFIGS[1])
+        if key == 3 and self._turret_core_exposed:
+            return phases[-1]
         ratio  = self.hp / self.max_hp
         active = phases[0]
         for phase in phases:
@@ -547,6 +553,8 @@ class Boss(pygame.sprite.Sprite):
             if self._stun_timer > 0:
                 self._stun_timer -= dt
                 return True   # スタン中は射撃停止
+            if self._turret_core_exposed:
+                return False
             alive = self._summoned_alive()
             if self._stage_id == 3 and alive == 1:
                 for drone in self._summoned:
@@ -556,6 +564,7 @@ class Boss(pygame.sprite.Sprite):
                 if self._summoned:
                     # 直前まで居た砲台が全滅 → スタン突入
                     self._summoned = []
+                    self._turret_core_exposed = self._turret_waves >= _TURRET_MAX_WAVES
                     self._stun_timer = _TURRET_STUN_DUR
                     self._summon_cd = 0.0
                     if BATTLE_V2_ENABLED:
@@ -565,6 +574,8 @@ class Boss(pygame.sprite.Sprite):
                 if self._summon_cd <= 0 and self.summon_turret_fn is not None:
                     count = 3 if self._stage_id == 3 else 2
                     self._summoned = list(self.summon_turret_fn(count) or [])
+                    if self._summoned:
+                        self._turret_waves += 1
                     self._summon_cd = _TURRET_SUMMON_CD
             return False
 
@@ -622,7 +633,7 @@ class Boss(pygame.sprite.Sprite):
             width / 2,
             by,
             width,
-            320,
+            _SUPER_BEAM_HEIGHT,
             palette=ZUNDA_PALETTE,
             lifetime=1.05,
             damage=46,
@@ -961,12 +972,12 @@ class Boss(pygame.sprite.Sprite):
                 self._beam_charge_pattern = pattern
                 self._beam_charge_y = by
                 # チャージ: 粒子砲チャージ相（特大）＋自機吸引（heavy_laserを停止）。
-                charge_t = 1.5
+                charge_t = 1.7
                 self.suction_y = by
                 self.suction_x = self.sx
                 self.suction_active = True
                 self._suction_timer = charge_t
-                enemy_bullets.add(self._charge_beam(by, charge_t, 320))
+                enemy_bullets.add(self._charge_beam(by, charge_t, _SUPER_BEAM_HEIGHT))
                 if self.camera is not None:
                     self.camera.shake(2.5)
                 self._shoot_delay_override = charge_t
@@ -1199,6 +1210,8 @@ class Boss(pygame.sprite.Sprite):
             if self._stun_timer > 0:
                 mult = STANCE_DOWN_MULT if BATTLE_V2_ENABLED else _TURRET_STUN_MULT
                 dealt = int(amount * mult)                # スタン中は被ダメ増
+            elif self._turret_core_exposed:
+                dealt = amount
             else:
                 dealt = int(amount * _TURRET_GUARD_MULT)  # 砲台健在中は本体シールド
         # Small rapid hits must respect armor too, without losing fractional damage.

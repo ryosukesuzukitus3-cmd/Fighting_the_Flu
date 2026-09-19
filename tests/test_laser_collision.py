@@ -133,3 +133,30 @@ def test_fully_transparent_fade_frame_cannot_damage():
     assert not beam.collides_with_rect(target)
     beam.update(0.25)
     assert beam.collides_with_rect(target)
+
+
+def test_one_beam_is_one_hit_even_after_damage_invulnerability_expires(game):
+    scene = prepare_scene(game, (175, 285))
+    first = real_beam(game)
+    scene.enemy_bullets.add(first)
+    for _ in range(54):
+        game.step(DT, [], False)
+    assert scene.player.hp == 88
+    assert first.has_hit_player and first.alive()
+    second = real_beam(game)
+    scene.enemy_bullets.add(second)
+    game.step(DT, [], False)
+    assert scene.player.hp == 76
+    assert second.has_hit_player
+
+
+def test_existing_invulnerability_does_not_consume_a_beams_first_hit(game):
+    scene = prepare_scene(game, (175, 285))
+    scene.player._invincible_timer = .2
+    beam = real_beam(game)
+    scene.enemy_bullets.add(beam)
+    game.step(DT, [], False)
+    assert not beam.has_hit_player and scene.player.hp == 100
+    for _ in range(14):
+        game.step(DT, [], False)
+    assert beam.has_hit_player and scene.player.hp == 88

@@ -75,6 +75,8 @@ class GameSceneBossFxMixin:
                         label, lcol = f"サクラ x{n}", (255, 170, 200)
                     else:
                         label, lcol = f"DRONE SHIELD x{n}", (160, 230, 255)
+                elif getattr(b, "_turret_core_exposed", False):
+                    label, lcol = "本体露出", (139, 205, 177)
 
         elif gimmick is None and getattr(b, "_down_timer", 0.0) > 0:
             # ギミック無し形態（超サイヤ人ブロリー）の体幹ダウン

@@ -541,3 +541,28 @@ def test_session_close_restores_callers_environment(tmp_path, monkeypatch):
     instance.close()
     assert os.environ["FLU_USER_DATA_DIR"] == previous
     assert not Path(previous).exists()
+
+
+def test_automatic_png_saving_does_not_change_frames_rng_or_pixels(tmp_path):
+    from tools.agent_playtest import Session
+
+    traces = []
+    for save_images in (True, False):
+        instance = Session(tmp_path / str(save_images), seed=71,
+                           save_step_images=save_images)
+        try:
+            probe = install_probe(instance)
+            trace = []
+            for actions in (["fire"], ["move_up"], []):
+                result = instance.command({"step": 12, "actions": actions})
+                assert ("image" in result) == save_images
+                trace.append((result["frame"], result["state_digest"], result["image_digest"]))
+            assert probe.draw_count == 37  # Rendering still happens on every frame.
+            shot = instance.command({"capture": "explicit"})
+            assert Path(shot["image"]).is_file()
+            if not save_images:
+                assert not (instance.output_dir / "latest.png").exists()
+            traces.append(trace)
+        finally:
+            instance.close()
+    assert traces[0] == traces[1]

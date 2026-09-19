@@ -7,12 +7,13 @@
 数値の SSOT は src/core/balance.py。配線は game_scene / boss.py が行う。
 """
 from __future__ import annotations
+import math
 
 from src.core.balance import (
     ENRAGE_MAX_MULT, ENRAGE_T0, ENRAGE_T1,
     HEAT_AFTER_OVERHEAT, HEAT_BOSS_DOWN_MULT, HEAT_COOL_KARONARU,
     HEAT_COOL_RATE, HEAT_MAX, HEAT_TEMP_MAX, HEAT_TEMP_MIN,
-    OVERHEAT_DURATION,
+    OVERHEAT_DURATION, BOSS_SUCTION_SPEED,
 )
 
 
@@ -69,3 +70,13 @@ def enrage_mult(fight_time: float) -> float:
         return 1.0
     t = min(1.0, (fight_time - ENRAGE_T0) / (ENRAGE_T1 - ENRAGE_T0))
     return 1.0 + (ENRAGE_MAX_MULT - 1.0) * t
+
+
+def suction_offset(px: float, py: float, tx: float, ty: float, dt: float) -> tuple[float, float]:
+    """Displacement shared by the real player and read-only input forecasting."""
+    dx, dy = tx - px, ty - py
+    distance = math.hypot(dx, dy)
+    if distance < 1.0:
+        return 0.0, 0.0
+    pull = BOSS_SUCTION_SPEED * dt
+    return (dx / distance) * pull, (dy / distance) * pull
