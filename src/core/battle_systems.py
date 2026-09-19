@@ -2,7 +2,6 @@
 
 - HeatSystem   : レーザーで発熱し、通常射撃へ切り替えると冷える。
                  39.9℃到達で「熱暴走」＝一定時間レーザーのみ停止。
-- award_pieces : コンボ閾値の通過判定で持ち駒（歩/金/龍）を獲得する。
 - enrage_mult  : ボスフェーズ経過時間 → 症状悪化（攻撃間隔短縮）倍率。
 
 数値の SSOT は src/core/balance.py。配線は game_scene / boss.py が行う。
@@ -13,7 +12,7 @@ from src.core.balance import (
     ENRAGE_MAX_MULT, ENRAGE_T0, ENRAGE_T1,
     HEAT_AFTER_OVERHEAT, HEAT_BOSS_DOWN_MULT, HEAT_COOL_KARONARU,
     HEAT_COOL_RATE, HEAT_MAX, HEAT_TEMP_MAX, HEAT_TEMP_MIN,
-    OVERHEAT_DURATION, PIECE_COMBO_THRESHOLDS, PIECE_MAX_HELD,
+    OVERHEAT_DURATION,
 )
 
 
@@ -62,20 +61,6 @@ class HeatSystem:
         # A boss break vents heat even while committing to a laser burst.
         if not laser_active or boss_down:
             self.heat = max(0.0, self.heat - cool * dt)
-
-
-def award_pieces(prev_combo: int, new_combo: int, held_count: int) -> list[str]:
-    """コンボが prev→new に伸びたとき新たに獲得する持ち駒のリスト。
-
-    閾値の「通過」でのみ獲得（同一コンボ中の二重取得なし）。所持上限
-    PIECE_MAX_HELD を超える分は切り捨てる。
-    """
-    gained: list[str] = []
-    for threshold in sorted(PIECE_COMBO_THRESHOLDS):
-        if prev_combo < threshold <= new_combo:
-            if held_count + len(gained) < PIECE_MAX_HELD:
-                gained.append(PIECE_COMBO_THRESHOLDS[threshold])
-    return gained
 
 
 def enrage_mult(fight_time: float) -> float:

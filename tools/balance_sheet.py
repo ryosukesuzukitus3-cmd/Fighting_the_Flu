@@ -87,16 +87,14 @@ def print_enemy_hp() -> None:
 
 def print_weapon_dps() -> None:
     print("\n=== LASER DPS (1ダメージ / hit_int 秒) ===")
-    widths = [8, 10, 10, 10, 10, 22]
-    headers = ["Lv", "hit_int", "DPS雑魚", "DPS_boss", "charge", "cool"]
+    widths = [8, 10, 10, 10]
+    headers = ["Lv", "hit_int", "DPS雑魚", "DPS_boss"]
     print(_sep(widths))
     print(_header(headers, widths))
     print(_sep(widths))
     for lv, cfg in _LASER_CFG.items():
-        hit_int      = cfg[7]
-        boss_hit_int = cfg[8]
-        charge       = cfg[5]
-        cool         = cfg[6]
+        hit_int      = cfg[5]
+        boss_hit_int = cfg[6]
         dps_mob  = 1.0 / hit_int
         dps_boss = 1.0 / boss_hit_int
         row = [
@@ -104,8 +102,6 @@ def print_weapon_dps() -> None:
             f"{hit_int:.3f}s",
             f"{dps_mob:.1f}",
             f"{dps_boss:.1f}",
-            f"{charge:.2f}s",
-            f"{cool:.2f}s",
         ]
         print(_row(row, widths))
     print(_sep(widths))
@@ -158,7 +154,7 @@ def print_boss_kill_time() -> None:
 
     # 各武器レベルでのボス撃破時間（Laser / Homing のみ。メインは省略）
     print("\n=== BOSS KILL TIME (理論値, 発射後の純粋な撃破秒数) ===")
-    print("  ※ チャージ時間・クールダウンは除く。連続ヒット継続を前提。")
+    print("  ※ 発熱による停止・ボスの防御は除く。連続ヒット継続を前提。")
 
     lv_cols  = list(_LASER_CFG.keys())     # [1..6]
     h_cols   = list(_HOMING_CFG.keys())    # [1..7]
@@ -175,7 +171,7 @@ def print_boss_kill_time() -> None:
             label = f"S{sid} {fname}"
             times = []
             for lv in lv_cols:
-                dps_boss = 1.0 / _LASER_CFG[lv][8]
+                dps_boss = 1.0 / _LASER_CFG[lv][6]
                 t = fhp / dps_boss
                 times.append(f"{t:.1f}s".ljust(col_w))
             print(f"  {label:>{label_w}}  " + "  ".join(times))

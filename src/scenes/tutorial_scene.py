@@ -137,6 +137,12 @@ class TutorialScene(Scene):
         self._phase = "move"
         self._moved_h = self._moved_v = False
         self._shots = 0
+        from src.entities.laser_beam import LaserBeam
+        from src.core.battle_systems import HeatSystem
+        self.laser = LaserBeam()
+        self._heat = HeatSystem()
+        self._laser_practiced = False
+        self._laser_seconds = 0.0
         self._hits  = 0
         self._won   = False
 
@@ -191,6 +197,12 @@ class TutorialScene(Scene):
         self._banner = "準備運動：射撃"
         self._hint = script.TUTORIAL["shoot_hint"][0]
         self._shots = 0
+
+    def _start_laser(self) -> None:
+        self._phase = "laser"
+        self._banner = "準備運動：レーザー"
+        self._hint = script.TUTORIAL["laser_hint"][0]
+        self.player.weapon.laser_level = 1
 
     def _start_dummy(self) -> None:
         self._phase = "dummy"
@@ -273,7 +285,7 @@ class TutorialScene(Scene):
             return
 
         self.player.update(dt)
-        if self._phase in ("move", "shoot", "fight"):
+        if self._phase in ("move", "shoot", "laser", "fight"):
             self._update_combat(dt, inp)
 
     def _update_combat(self, dt: float, inp) -> None:
@@ -322,7 +334,19 @@ class TutorialScene(Scene):
         elif self._phase == "shoot":
             if self._shots >= _TARGET_SHOTS:
                 self._hint = None
-                self._say(script.TUTORIAL["shoot_done"], then=self._start_dummy)
+                self._say(script.TUTORIAL["shoot_done"], then=self._start_laser)
+        elif self._phase == "laser":
+            from src.core.balance import HEAT_LASER_PER_SEC
+            self._heat.update(dt, laser_active=self.laser.is_active)
+            self.laser.update(dt, self.player.laser_fire_held and not self._heat.overheated)
+            if self.laser.is_active:
+                self._heat.add(HEAT_LASER_PER_SEC * dt)
+                self._laser_seconds += dt
+                self._laser_practiced |= self._laser_seconds >= .5
+            if self._laser_practiced and not self.player.laser_fire_held and self._heat.heat <= 5:
+                self.player.weapon.laser_level = 0
+                self.laser.state = "ready"
+                self._start_dummy()
         elif self._phase == "fight" and self._dummy is not None:
             if self._dummy.hp <= 0:
                 self.particles.spawn_big_explosion(self._dummy.rect.centerx, self._dummy.rect.centery)
@@ -343,6 +367,8 @@ class TutorialScene(Scene):
         if self._dummy is not None:
             self._dummy.draw(buf)
         self.player.draw(buf)
+        if self._phase == "laser" and not self._in_dialogue:
+            self.laser.draw(buf, *self.player.muzzle_screen())
         self.player_bullets.draw(buf)
         self.enemy_bullets.draw(buf)
         self.particles.draw(buf)
@@ -382,12 +408,16 @@ class TutorialScene(Scene):
         if self._phase == "move":
             instruction = f'{key("move_left")} / {key("move_right")}：左右　{key("move_up")} / {key("move_down")}：上下'
             progress = f'左右の移動：{"完了" if self._moved_h else "未完了"}　上下の移動：{"完了" if self._moved_v else "未完了"}'
-            return "準備運動  1 / 3  移動", instruction, progress
+            return "準備運動  1 / 4  移動", instruction, progress
         if self._phase == "shoot":
-            return ("準備運動  2 / 3  射撃", f'{key("fire")} を長押しして連射',
+            return ("準備運動  2 / 4  射撃", f'{key("fire")} を長押しして連射',
                     f"発射した回数：{min(self._shots, _TARGET_SHOTS)} / {_TARGET_SHOTS}")
+        if self._phase == "laser":
+            instruction = (f'{key("laser")} を押して発射、離して冷やす'
+                           if not self._laser_practiced else f'{key("laser")} を離して冷やそう')
+            return "準備運動  3 / 4  レーザー", instruction, f"体温 {self._heat.display_temp:.1f}℃"
         hp = self._dummy.hp if self._dummy is not None else _DUMMY_HP
-        return ("準備運動  3 / 3  実戦", f'{key("fire")} で人形を撃つ。弾を避けながら動こう',
+        return ("準備運動  4 / 4  実戦", f'{key("fire")} で人形を撃つ。弾を避けながら動こう',
                 f"人形のHP：{hp} / {_DUMMY_HP}　被弾：{self._hits} / {_LOSE_HITS}（失敗しても進めます）")
 
     def _draw_choice(self, screen: pygame.Surface) -> None:

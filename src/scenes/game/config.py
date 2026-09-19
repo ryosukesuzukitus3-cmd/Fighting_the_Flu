@@ -98,7 +98,7 @@ CONTINUE_WEAPON: dict[int, dict] = {
     1: {},
     2: {"main_level": 2, "speed_level": 1},
     3: {"main_level": 2, "speed_level": 3, "has_barrier": True},
-    4: {"main_level": 4, "speed_level": 4, "has_barrier": True},
+    4: {"main_level": 4, "speed_level": 3, "has_barrier": True},
 }
 
 

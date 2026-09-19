@@ -177,7 +177,7 @@ def test_new_asset_files_decode_match_provenance_and_are_credited(stage):
             assert pygame.mixer.Sound(file).get_length() > 0
 
 
-@pytest.mark.parametrize("stage_id,ratio,warning_duration", [(2,.65,.62),(4,.56,.85)])
+@pytest.mark.parametrize("stage_id,ratio,warning_duration", [(2,.65,.95),(4,.56,.85)])
 def test_boss_beams_always_warn_at_the_firing_position(stage, stage_id, ratio, warning_duration):
     from src.entities.enemies.boss import Boss
     from src.entities.bullets.laser_fx import LaserBeamSprite
@@ -213,27 +213,66 @@ def test_boss_beams_always_warn_at_the_firing_position(stage, stage_id, ratio, w
     assert boss.sy == pytest.approx(y, abs=1)
 
 
-def test_staggered_broly_cancels_charge_and_warns_again_after_recovery(stage):
+@pytest.mark.parametrize("form", [1, 2])
+def test_broly_opens_only_after_beam_ends_and_repeats_warning(stage, form):
     from src.entities.enemies.boss import Boss
     from src.entities.bullets.laser_fx import LaserBeamSprite
     game, scene = stage
     boss = Boss(game, 2)
-    boss._transform_super_saiyan()
+    if form == 2:
+        boss._transform_super_saiyan()
     boss._state = "fight"
     boss.sx, boss.sy = 610, 300
     boss.rect.center = (610, 300)
     shots = pygame.sprite.Group()
-    boss._shoot(shots, scene.player)
-    assert boss.suction_active
-    boss.add_stance(boss._stance_max)
-    assert boss.is_stance_down
-    assert not boss.suction_active
-    for _ in range(180):
+    openings, warnings = 0, 0
+    previous_open = False
+    previous_warning = False
+    for _ in range(900):
         shots.update(1/60)
         boss.update(1/60, shots, scene.player)
-    # Old warning has expired. The next volley must start a new charge.
-    shots.empty()
-    boss._shoot(shots, scene.player)
-    beams = [b for b in shots if isinstance(b, LaserBeamSprite)]
-    assert beams and all(b.warning_only for b in beams)
-    assert boss.suction_active
+        warning = boss._beam_charge_pattern is not None
+        warnings += int(warning and not previous_warning)
+        previous_warning = warning
+        if boss.is_stance_down:
+            assert not any(isinstance(b, LaserBeamSprite) and not b.warning_only for b in shots)
+            assert not boss.suction_active
+            openings += int(not previous_open)
+        previous_open = boss.is_stance_down
+    assert openings >= 2 and warnings >= 2
+    assert boss.stance_ratio() is None
+
+
+def test_single_damage_hits_respect_defense_without_disappearing(stage):
+    from src.entities.enemies.boss import Boss
+    game, _ = stage
+    boss = Boss(game, 2)
+    boss._state = "fight"
+    hp = boss.hp
+    for _ in range(10):
+        boss.take_damage(1)
+    assert hp - boss.hp == 2
+    boss._weak_timer = 1
+    hp = boss.hp
+    for _ in range(10):
+        boss.take_damage(1)
+    assert hp - boss.hp == 20
+
+
+def test_laser_release_stops_damage_and_repress_keeps_hit_cooldown():
+    from src.entities.laser_beam import LaserBeam
+    from types import SimpleNamespace
+    beam = LaserBeam()
+    hits = []
+    boss = SimpleNamespace(rect=pygame.Rect(200, 280, 80, 80),
+                           take_damage=lambda amount, **kw: hits.append(amount))
+    enemies = pygame.sprite.Group()
+    beam.update(.08, True)
+    beam.hit_check(enemies, boss, 120, 300)
+    assert hits == [1]
+    beam.update(.001, False)
+    beam.hit_check(enemies, boss, 120, 300)
+    assert not beam.is_active and hits == [1]
+    beam.update(.08, True)
+    beam.hit_check(enemies, boss, 120, 300)
+    assert hits == [1]

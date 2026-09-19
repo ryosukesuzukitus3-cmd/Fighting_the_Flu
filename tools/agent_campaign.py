@@ -102,8 +102,11 @@ class Campaign:
         self._cooling = False
         self._attack_target = False
         self._laser_target = False
-        sources = [*sorted((ROOT / "src").rglob("*.py")), Path(__file__).resolve(),
-                   ROOT / "tools/agent_playtest.py", ROOT / "tools/playtest_state.py"]
+        sources = [*sorted((ROOT / "src").rglob("*.py")),
+                   *sorted((ROOT / "data/stages").glob("stage*.json")),
+                   Path(__file__).resolve(), ROOT / "tools/agent_playtest.py",
+                   ROOT / "tools/playtest_state.py", ROOT / "tools/combat_lab.py",
+                   ROOT / "tools/headless.py"]
         (session.output_dir / "source-fingerprints.json").write_text(json.dumps({
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sources}, indent=2), encoding="utf-8")
@@ -280,7 +283,13 @@ class Campaign:
         self._attack_target = bool(boss or enemies or any(getattr(t, "destructible", False)
                                    and player.rect.right < t.rect.left < 800 for t in terrain))
         self._laser_target = self._attack_target
-        if cannons:
+        drones = [e for e in enemies if type(e).__name__ == "MatchingZeroDrone"
+                  and (not e.requires_laser or player.weapon.has_laser)]
+        if drones:
+            target = min(drones, key=lambda e: (e.requires_laser, math.dist(center, e.rect.center)))
+            target_y = target.rect.centery
+            target_x = min(200, max(80, target.rect.left - 220))
+        elif cannons:
             target = min(cannons, key=lambda e: e.rect.left)
             target_y = target.rect.centery
             target_x = min(200, max(80, target.rect.left - 220))
@@ -430,6 +439,8 @@ class Campaign:
         if name in ("DisclaimerScene", "TitleScene", "StageClearScene", "GameClearScene"):
             return self.pulse("ui_accept")
         if name == "TutorialScene":
+            if scene._phase == "laser":
+                return [] if scene._laser_practiced else ["laser"]
             if scene._phase == "move":
                 return ["move_up"] if scene._moved_h else ["move_right"]
             actions, _ = self.movement(scene)
@@ -460,19 +471,16 @@ class Campaign:
                 self._cooling = True
             elif heat.heat <= 48:
                 self._cooling = False
+        boss = scene._boss
+        counter = bool(boss and getattr(boss, "_current_gimmick", lambda: None)() == "counter")
+        if counter:
+            # Spend heat in the visible opening rather than against closed armor.
+            self._cooling = not boss.is_stance_down
         if self._attack_target:
             actions.append("fire")
-        if not (heat and heat.overheated) and scene.player.weapon.has_laser:
-            if self._cooling and scene.laser.is_active and "laser" not in self.session.held_actions:
-                actions.append("laser")  # Stop the beam while main fire keeps pressure.
-            elif scene.laser.state == "charging" and scene.laser.charge_ratio < 0.85:
-                actions.append("laser")
-            elif (scene.laser.state == "ready" and self._laser_target
-                  and (heat is None or heat.heat < 66)):
-                actions.append("laser")
-        if scene._pieces and "bomb" not in self.session.held_actions:
-            if any(math.dist(scene.player.rect.center, b.rect.center) < 140 for b in bullets):
-                actions.append("bomb")
+        if (scene.player.weapon.has_laser and self._laser_target
+                and not self._cooling and not (heat and heat.overheated)):
+            actions.append("laser")
         return actions
 
     def run(self):

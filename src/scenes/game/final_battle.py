@@ -137,7 +137,7 @@ class FinalBattleDirector:
         """Called only for the player's newly generated finishing projectile.
 
         Further player shots remain eligible if the first shot misses. Companion
-        and piece-bomb bullets must not pass through this entry point.
+        bullets must not pass through this entry point.
         """
         if self.final_strike_active:
             for bullet in bullets:

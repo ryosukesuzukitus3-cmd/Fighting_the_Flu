@@ -11,7 +11,7 @@ _SPEED        = 600.0   # px/秒
 _HOMING_SPEED = 350.0
 _TURN_RATE    = 1.8     # 方向補正の強さ（1秒あたりの補間率）
 _HOMING_TIME  = 1.2     # ホーミング有効時間（秒）
-_HOMING_DAMAGE = 4
+_HOMING_DAMAGE = 2
 
 
 def _angle_velocity(speed: float, angle_deg: float) -> tuple[float, float]:

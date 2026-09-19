@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 from tools.playtest_state import boundary, observe
 
 ACTIONS = frozenset(('move_up', 'move_down', 'move_left', 'move_right', 'fire',
-                     'laser', 'weapon_select', 'bomb', 'pause', 'ui_accept', 'ui_back',
+                     'laser', 'weapon_select', 'pause', 'ui_accept', 'ui_back',
                      'menu_up', 'menu_down', 'menu_left', 'menu_right', 'escape', 'tab'))
 DT = 1 / 60
 

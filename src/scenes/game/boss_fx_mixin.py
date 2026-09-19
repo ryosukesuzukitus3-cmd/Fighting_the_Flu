@@ -45,6 +45,12 @@ class GameSceneBossFxMixin:
             elif self._accepts_combat_input:
                 label, lcol = "BREAK CHANCE!", (120, 255, 140)
 
+        elif gimmick == "counter":
+            if down_now:
+                # A small mint opening cue; the HUD carries the explanation.
+                for offset in (-18, 18):
+                    pygame.draw.rect(buf, (139, 205, 177), (cx + offset - 3, b.rect.bottom + 5, 6, 6))
+
         elif gimmick == "weakpoint":
             if getattr(b, "_weak_timer", 0.0) > 0:
                 glow = pygame.Surface((r * 2 + 6, r * 2 + 6), pygame.SRCALPHA)
@@ -125,18 +131,6 @@ class GameSceneBossFxMixin:
                                        (r + pad, r + pad), rr, 2)
             buf.blit(aura, (cx - r - pad, cy - r - pad), special_flags=pygame.BLEND_RGBA_ADD)
             return
-
-        if stage_id == 2 and not form2:
-            if getattr(b, "_weak_timer", 0.0) <= 0:
-                plate = pygame.Surface((b.rect.width + 34, b.rect.height + 34), pygame.SRCALPHA)
-                w, h = plate.get_size()
-                col = (150, 165, 185, 135)
-                pygame.draw.rect(plate, col, (4, 14, w - 8, 14), border_radius=3)
-                pygame.draw.rect(plate, col, (4, h - 28, w - 8, 14), border_radius=3)
-                pygame.draw.rect(plate, col, (6, 30, 16, h - 60), border_radius=3)
-                pygame.draw.rect(plate, col, (w - 22, 30, 16, h - 60), border_radius=3)
-                pygame.draw.rect(plate, (230, 240, 255, 110), (0, 10, w, h - 20), 2, border_radius=8)
-                buf.blit(plate, (b.rect.left - 17, b.rect.top - 17))
 
         if stage_id == 3 and not form2:
             alive = b._summoned_alive() if hasattr(b, "_summoned_alive") else 0

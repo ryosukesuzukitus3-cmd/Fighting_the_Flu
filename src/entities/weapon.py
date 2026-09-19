@@ -19,8 +19,8 @@ _MAIN_FIRE_CONFIG: dict[str, tuple[int, float, int]] = {
     "medic":  (3, 0.12, 2),
 }
 
-# スピードアップ最大段階（1段階あたり+20%、最大2倍）
-_SPEED_MAX_LEVEL = 5
+# スピードは3段階、1段階+12%。入力感度の変化を抑える。
+_SPEED_MAX_LEVEL = 3
 
 # レベル別: (クールダウン秒, 発射角リスト)
 _HOMING_CONFIG: dict[int, tuple[float, list[float]]] = {
@@ -71,7 +71,7 @@ class Weapon:
 
     @property
     def speed_multiplier(self) -> float:
-        return 1.0 + self.speed_level * 0.2
+        return 1.0 + min(self.speed_level, _SPEED_MAX_LEVEL) * 0.12
 
     @property
     def speed_at_max(self) -> bool:
@@ -128,7 +128,7 @@ class Weapon:
     def restore(self, data: dict) -> None:
         """snapshot から状態を復元"""
         self.main_level   = data.get("main_level",   0)
-        self.speed_level  = data.get("speed_level",  0)
+        self.speed_level  = max(0, min(data.get("speed_level", 0), _SPEED_MAX_LEVEL))
         self.laser_level  = data.get("laser_level",  0)
         self.homing_level = data.get("homing_level", 0)
         self.magnet_level = data.get("magnet_level", 0)

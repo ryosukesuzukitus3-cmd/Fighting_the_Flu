@@ -1,6 +1,6 @@
 """対話型チュートリアル（準備運動）の liveness テスト。
 
-FakeInput でフレームを送り、offer→move→shoot→dummy→fight→result→outro を
+FakeInput でフレームを送り、offer→move→shoot→laser→dummy→fight→result→outro を
 通って on_complete に到達すること（例外なし）を検査する。中身の演出ではなく
 「最後まで進むか」を守る（[[project_dev_constraints_and_verification]] の方針）。
 """
@@ -69,6 +69,8 @@ def _drive(game, with_offer: bool):
         inp.enter = True
         inp.fire = True
         inp.move = {"move_left", "move_up"}
+        if scene._phase == "laser" and not scene._laser_practiced:
+            inp.move.add("laser")
         scene.update(1 / 60.0)
         scene.draw(game.screen)
         phases.add(scene._phase)
@@ -80,7 +82,7 @@ def _drive(game, with_offer: bool):
 def test_tutorial_campaign_offer_completes(game):
     done, phases = _drive(game, with_offer=True)
     assert done, "campaign tutorial did not reach on_complete"
-    assert {"move", "shoot", "dummy", "fight", "result", "outro"} <= phases
+    assert {"move", "shoot", "laser", "dummy", "fight", "result", "outro"} <= phases
 
 
 def test_tutorial_replay_completes(game):
