@@ -88,7 +88,7 @@ def test_blackhole_runs_through_all_pages_using_configured_input(game, method):
         if done.called:
             break
     assert len(pages) == len(scene._pages)
-    assert {"push", "fall", "farewell", "gone", "silence"} <= phases
+    assert {"charge", "push", "fall", "farewell", "gone", "silence"} <= phases
     done.assert_called_once_with()
     for _ in range(120):
         _frame(scene)
@@ -190,3 +190,32 @@ def test_empty_content_does_not_crash_or_leave_scene_stuck(game, pages):
         _frame(scene)
         scene.draw(game.screen)
     done.assert_called_once_with()
+
+
+def test_full_pressure_launches_hero_outside_frame_and_does_not_replay(game):
+    scene, _ = _scene(game)
+    _seek_cue(scene, "bh_resolve")
+    _frame(scene, dt=1.0)
+    _seek_cue(scene, "bh_charge")
+    _frame(scene, dt=1.3)
+    scene.draw(game.screen)
+    assert scene._rescue_fx.get_bounding_rect().width > 0
+    _seek_cue(scene, "bh_push")
+    _frame(scene, dt=.25)
+    scene.draw(game.screen)
+    assert scene._rescue_fx.get_bounding_rect().width > 150
+    _frame(scene, dt=1.1)
+    assert scene._player_pos[0] + scene._player.image.get_width() / 2 < 0
+    assert scene._karonaru_pos[0] > 400
+    # Reading the next ordinary line must not reset the blast clock.
+    age = scene._rescue_age
+    scene._page += 1
+    scene._enter_page()
+    assert scene._rescue_age == age
+    _frame(scene, dt=2)
+    scene.draw(game.screen)
+    assert scene._rescue_fx.get_bounding_rect().width == 0
+    for cue in ("bh_fall", "bh_hold", "bh_farewell"):
+        _seek_cue(scene, cue)
+        _frame(scene, dt=3)
+        assert scene._player_pos[0] < 0
