@@ -266,8 +266,8 @@ def draw_combat_panel(screen, resources, speaker, lines, *, hint_text=None, styl
 
 # ── ストーリーパネル（左右に立ち絵・上詰め） ──────────────────────────
 
-def _tachie_image(resources, speaker, size, *, flip, active):
-    path = speaker_tachie(speaker) or speaker_portrait(speaker)  # 立ち絵が無ければ顔素材流用
+def _tachie_image(resources, speaker, size, *, flip, active, facing="right"):
+    path = speaker_tachie(speaker) or speaker_portrait(speaker, facing=facing)  # 立ち絵が無ければ顔素材流用
     if not path:
         return None
     img = fit_character_art(resources.image(path), (size, size), pixel_grid=2)
@@ -308,7 +308,7 @@ def draw_story_panel(screen, resources, speaker, lines, *, chars=None, complete=
             if img:
                 screen.blit(img, (rect.x, base_y))                 # 画面端から余白＝中央寄り
         if right_speaker:
-            img = _tachie_image(resources, right_speaker, size, flip=False, active=(right_speaker == speaker))
+            img = _tachie_image(resources, right_speaker, size, flip=False, active=(right_speaker == speaker), facing="left")
             if img:
                 screen.blit(img, (rect.right - size, base_y))
 

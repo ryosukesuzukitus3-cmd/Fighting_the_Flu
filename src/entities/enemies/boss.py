@@ -109,7 +109,7 @@ _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
 # ステージ別ボス設定: (image_path, scale, max_hp)
 _BOSS_CONFIG = {
     1: ("graphic/enemy_バイキンマン68x80.png", 1.0, 180),
-    2: ("graphic/boss_broly_hires.png",      0.20, 280),
+    2: ("graphic/characters/broly.png",      0.20, 280),
     3: ("graphic/boss_matching_zero_body.png", 0.25, 340),
     4: ("graphic/enemy_fujii4dan.png",         1.2, 250),
 }
@@ -249,6 +249,9 @@ class Boss(pygame.sprite.Sprite):
 
     def _load_image(self, path: str, scale: float) -> pygame.Surface:
         raw = self.game.resources.image(path)
+        if path == "graphic/characters/broly.png":
+            from src.core.sprite_art import fit_character_art
+            return fit_character_art(raw, (280, 224), pixel_grid=2)
         if scale != 1.0:
             w = int(raw.get_width()  * scale)
             h = int(raw.get_height() * scale)
@@ -1241,7 +1244,7 @@ class Boss(pygame.sprite.Sprite):
         """高品質な通常素材を再利用。キャンバスと当たり判定の大きさは変えない。"""
         from src.core.sprite_art import fit_character_art
 
-        raw = self.game.resources.image("graphic/boss_broly_hires.png")
+        raw = self.game.resources.image("graphic/characters/broly.png")
         w, h = _SSJ_BODY_SIZE
         big = fit_character_art(raw, (w, h), pixel_grid=2)
         pad = 18

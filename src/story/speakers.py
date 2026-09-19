@@ -45,20 +45,21 @@ class Speaker:
     portrait: str | None = None       # 顔アイコン画像（戦闘パネル等。None=非表示）
     tachie:   str | None = None       # 立ち絵（全身）画像。ストーリーパネルで優先使用。
                                       # None のときは portrait（顔）にフォールバックする。
+    portrait_left: str | None = None  # 味方用の左向き原画。portrait は右向き。
 
 
 # key → Speaker。name が "" の話者はネームプレートを描画しない。
 # portrait はゲーム内スプライト/プレイヤー画像を流用。未設定の話者は画像非表示。
 SPEAKERS: dict[str, Speaker] = {
-    SAWAGUCHI:      Speaker(SAWAGUCHI,      "澤口",                 (180, 210, 255), "graphic/characters/sawaguchi.png"),
-    KARONARU:       Speaker(KARONARU,       "カロナール先輩",        (140, 230, 150), _KARONARU_PORTRAIT),
-    KARONARU_MAX:   Speaker(KARONARU_MAX,   "カロナール先輩・薬効最大", (200, 255, 210), _KARONARU_MAX_PORTRAIT),
+    SAWAGUCHI:      Speaker(SAWAGUCHI,      "澤口",                 (180, 210, 255), "graphic/characters/sawaguchi_right.png", portrait_left="graphic/characters/sawaguchi.png"),
+    KARONARU:       Speaker(KARONARU,       "カロナール先輩",        (140, 230, 150), _KARONARU_PORTRAIT, portrait_left="graphic/characters/karonaru_left.png"),
+    KARONARU_MAX:   Speaker(KARONARU_MAX,   "カロナール先輩・薬効最大", (200, 255, 210), _KARONARU_MAX_PORTRAIT, portrait_left="graphic/characters/karonaru_max_left.png"),
     NARRATION:      Speaker(NARRATION,      "",                    (205, 205, 215)),
     UNKNOWN:        Speaker(UNKNOWN,        "？？？",               (210, 90, 90)),
     SYSTEM:         Speaker(SYSTEM,         "",                    (255, 220, 80)),
     BOSS1:          Speaker(BOSS1,          BOSS1,                 (255, 90, 90),  "graphic/enemy_バイキンマン68x80.png"),
-    BOSS2:          Speaker(BOSS2,          BOSS2,                 (255, 90, 90),  "graphic/boss_broly_hires.png"),
-    BOSS2_FORM2:    Speaker(BOSS2_FORM2,    BOSS2_FORM2,           (255, 200, 40), "graphic/boss_broly_hires.png"),
+    BOSS2:          Speaker(BOSS2,          BOSS2,                 (255, 90, 90),  "graphic/characters/broly.png"),
+    BOSS2_FORM2:    Speaker(BOSS2_FORM2,    BOSS2_FORM2,           (255, 200, 40), "graphic/characters/broly.png"),
     BOSS3:          Speaker(BOSS3,          BOSS3,                 (255, 120, 170), _MATCHING_ZERO_PORTRAIT),
     BOSS4:          Speaker(BOSS4,          BOSS4,                 (255, 110, 90), "graphic/enemy_fujii4dan.png"),
     BOSS4_FORM2:    Speaker(BOSS4_FORM2,    BOSS4_FORM2,           (255, 60, 60),  "graphic/藤井四段第二形態_もう一度.png"),
@@ -84,10 +85,12 @@ def speaker_color(key: str) -> tuple[int, int, int]:
     return sp.color if sp is not None else (230, 230, 230)
 
 
-def speaker_portrait(key: str) -> str | None:
+def speaker_portrait(key: str, *, facing: str = "right") -> str | None:
     """話者の顔アイコン画像パスを返す（未設定/未登録は None=非表示）。"""
     sp = SPEAKERS.get(key)
-    return sp.portrait if sp is not None else None
+    if sp is None:
+        return None
+    return (sp.portrait_left or sp.portrait) if facing == "left" else sp.portrait
 
 
 def speaker_tachie(key: str) -> str | None:

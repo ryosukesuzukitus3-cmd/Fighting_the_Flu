@@ -68,7 +68,10 @@ def test_broly_transformation_keeps_collision_envelope_with_high_quality_art(gam
     boss._transform_super_saiyan()
     assert boss.rect.size == (216, 182)
     assert boss.rect.center == (530, 280)
-    assert boss.image.get_bounding_rect(min_alpha=128).width >= 170
+    body = boss.image.get_bounding_rect(min_alpha=128)
+    assert body.height >= 150  # Full figure, including hair and boots.
+    assert .9 < body.width / body.height < 1.1
+    assert body.left > 0 and body.right < boss.rect.width
 
 
 def test_pixel_hero_and_inner_shadow_keep_existing_gameplay_sizes(game):
@@ -84,5 +87,32 @@ def test_pixel_hero_and_inner_shadow_keep_existing_gameplay_sizes(game):
     boss._transform_form3()
     assert boss.rect.size == (117, 153)
     assert boss.rect.center == (530, 280)
-    assert speaker_portrait(SAWAGUCHI) == speaker_portrait(BOSS_SAWAGUCHI)
+    assert speaker_portrait(SAWAGUCHI, facing="left") == speaker_portrait(BOSS_SAWAGUCHI)
     assert game.resources.image(speaker_portrait(SAWAGUCHI)).get_width() > 49
+
+
+@pytest.mark.parametrize("speaker", [SAWAGUCHI, KARONARU, KARONARU_MAX])
+def test_directional_sources_are_exact_mirrors_and_dialogue_uses_them(game, speaker):
+    right = game.resources.image(speaker_portrait(speaker, facing="right"))
+    left = game.resources.image(speaker_portrait(speaker, facing="left"))
+    assert pygame.image.tobytes(left, "RGBA") == pygame.image.tobytes(
+        pygame.transform.flip(right, True, False), "RGBA")
+    facing = "right" if speaker == SAWAGUCHI else "left"
+    image = _tachie_image(game.resources, speaker, 300, flip=False, active=True, facing=facing)
+    expected_source = right if facing == "right" else left
+    # Actual dialogue output must keep the source orientation after fitting.
+    expected = fit_character_art(expected_source, image.get_size(), pixel_grid=2)
+    assert pygame.image.tobytes(image, "RGBA") == pygame.image.tobytes(expected, "RGBA")
+
+
+def test_gameplay_companions_use_right_facing_art(game):
+    from src.entities.player import Player
+    player = Player(game)
+    expected = fit_character_art(game.resources.image(speaker_portrait(SAWAGUCHI)), player.image.get_size())
+    assert pygame.image.tobytes(player.image, "RGBA") == pygame.image.tobytes(expected, "RGBA")
+    companion = Karonaru(game)
+    for speaker in (KARONARU, KARONARU_MAX):
+        if speaker == KARONARU_MAX:
+            companion.set_max()
+        expected = fit_character_art(game.resources.image(speaker_portrait(speaker)), companion.image.get_size())
+        assert pygame.image.tobytes(companion.image, "RGBA") == pygame.image.tobytes(expected, "RGBA")

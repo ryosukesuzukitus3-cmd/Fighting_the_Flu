@@ -3,6 +3,7 @@ import math
 from typing import TYPE_CHECKING
 import pygame
 from src.entities.enemies.base import Enemy
+from src.core.sprite_art import fit_character_art
 from src.core.constants import SCREEN_HEIGHT
 from src.core.registries import enemy_stats
 
@@ -41,9 +42,8 @@ class EnemyPachemon(Enemy):
         speed = _STATS.enhanced_speed if enhanced else _STATS.base_speed
         super().__init__(world_x, world_y, hp=hp, speed=speed, enhanced=enhanced)
         self._shoot_interval = _ENH_INTERVAL if enhanced else _BASE_INTERVAL
-        raw        = game.resources.image("graphic/enemy_パチえもん.png")
-        w, h       = raw.get_width(), raw.get_height()
-        self.image = pygame.transform.smoothscale(raw, (int(w * 0.70), int(h * 0.70)))
+        raw = game.resources.image("graphic/characters/pachemon.png")
+        self.image = fit_character_art(raw, (53, 56))
         self.rect  = self.image.get_rect(center=(int(world_x), int(world_y)))
 
         self._game          = game

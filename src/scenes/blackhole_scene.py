@@ -21,12 +21,13 @@ _CENTER = (566.0, 181.0)
 _HORIZON = (470.0, 216.0)
 _PHASE_TAGS = {
     "bh_balance": "balance", "bh_pull": "pull", "bh_resolve": "resolve",
+    "bh_charge": "charge",
     "bh_push": "push", "bh_fall": "fall", "bh_hold": "hold",
     "bh_farewell": "farewell", "bh_gone": "gone", "bh_silence": "silence",
 }
-_MIN_PHASE_TIME = {"push": 0.9, "fall": 1.6, "gone": 1.1, "silence": 0.8}
+_MIN_PHASE_TIME = {"charge": 1.2, "push": 1.25, "fall": 1.6, "gone": 1.1, "silence": 0.8}
 _MOTION_TIME = {
-    "balance": 1.5, "pull": 2.0, "resolve": 1.0, "push": 0.9,
+    "balance": 1.5, "pull": 2.0, "resolve": 1.0, "charge": 1.2, "push": 1.25,
     "fall": 2.5, "hold": 0.7, "farewell": 0.45, "gone": 1.1, "silence": 0.8,
 }
 
@@ -57,7 +58,7 @@ class BlackholeScene(Scene):
         self._player.rect = self._player.image.get_rect()
         self._karonaru = Karonaru(self.game)
         self._karonaru.image = fit_character_art(
-            self.game.resources.image(speaker_portrait(KARONARU)), (66, 100), pixel_grid=2,
+            self.game.resources.image(speaker_portrait(KARONARU, facing="left")), (66, 100), pixel_grid=2,
         )
         self._karonaru.rect = self._karonaru.image.get_rect()
         self._page = 0
@@ -76,6 +77,9 @@ class BlackholeScene(Scene):
         self._fade_out = False
         self._finished = False
         self._quiet = False
+        self._rescue_origin = (336.0, 230.0)
+        self._rescue_age = None
+        self._rescue_fx = pygame.Surface((400, 171), pygame.SRCALPHA)
         self._advance_queued = False
         self._buf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self._sky = pygame.Surface((400, 300), pygame.SRCALPHA)
@@ -94,6 +98,8 @@ class BlackholeScene(Scene):
             return
         self._time += dt
         self._phase_time += dt
+        if self._rescue_age is not None:
+            self._rescue_age += dt
         self._shake_t = max(0.0, self._shake_t - dt)
         self._fade_in_t = max(0.0, self._fade_in_t - dt)
         self._update_actor_motion(dt)
@@ -150,7 +156,10 @@ class BlackholeScene(Scene):
         self._motion_start_alpha = self._karonaru_alpha
         self._motion_start_scale = self._karonaru_scale
         if phase == "push":
-            self._shake_t = 0.4
+            self._shake_t = 0.65
+            self._rescue_origin = self._karonaru_pos
+            self._rescue_age = 0.0
+            self.game.sound.play_se_alias("SE_KARONARU_ARRIVE", volume=0.75)
         if phase in {"gone", "silence"}:
             self._enter_quiet()
 
@@ -197,11 +206,12 @@ class BlackholeScene(Scene):
         eased = progress * progress * (3.0 - 2.0 * progress)
         player_target = {
             "balance": (200.0, 244.0), "pull": (274.0, 240.0),
-            "resolve": (280.0, 240.0),
-        }.get(phase, (154.0, 258.0))
+            "resolve": (280.0, 240.0), "charge": (280.0, 240.0),
+        }.get(phase, (-72.0, 270.0))
         companion_target = {
             "balance": (130.0, 256.0), "pull": (192.0, 248.0),
-            "resolve": (336.0, 230.0), "push": (366.0, 222.0),
+            "resolve": (336.0, 230.0), "charge": (336.0, 230.0),
+            "push": (412.0, 214.0),
             "fall": _HORIZON, "hold": (474.0, 212.0),
             "farewell": (478.0, 208.0),
         }.get(phase, _CENTER)
@@ -253,6 +263,50 @@ class BlackholeScene(Scene):
                     pygame.draw.rect(sky, (105, 116, 143), (int(x), y, 1, 1))
         screen.blit(pygame.transform.scale(sky, (SCREEN_WIDTH, SCREEN_HEIGHT)), (0, 0))
 
+    def _draw_rescue_power(self, screen: pygame.Surface) -> None:
+        """Release all remaining pressure leftward; the equal recoil carries K right.
+
+        The beam and its short afterimage use an independent clock, so page
+        advances cannot replay the blast. It is confined above the dialogue.
+        """
+        fx = self._rescue_fx
+        fx.fill((0, 0, 0, 0))
+        if self._quiet:
+            return
+        if self._phase == "charge":
+            cx, cy = (int(n / 2) for n in self._karonaru_pos)
+            power = min(1.0, self._phase_time / 1.2)
+            for i in range(22):
+                a = i * 2.39996 + self._time * 1.8
+                radius = 12 + (1 - (self._time * .8 + i / 22) % 1) * 38
+                x, y = cx + math.cos(a) * radius, cy + math.sin(a) * radius * .75
+                pygame.draw.rect(fx, (136, 255, 220, int(80 + 160 * power)), (int(x), int(y), 2, 2))
+            radius = int(10 + 18 * power)
+            pygame.draw.circle(fx, (196, 255, 228, 200), (cx, cy), radius, 2)
+            pygame.draw.circle(fx, (244, 255, 235, 110), (cx, cy), max(3, radius // 2))
+        age = self._rescue_age
+        if age is not None and age < 1.55:
+            cx, cy = (int(n / 2) for n in self._rescue_origin)
+            life = max(0.0, 1.0 - age / 1.55)
+            width = max(1, int(24 * life))
+            length = int(240 * min(1.0, age / .20))
+            # A directional cone, three bright layers, then a broken shock ring.
+            for spread, color in [(width + 12, (47, 196, 159, int(90 * life))),
+                                  (width, (114, 255, 202, int(210 * life))),
+                                  (max(2, width // 3), (245, 255, 230, int(255 * life)))]:
+                pygame.draw.polygon(fx, color, [(cx, cy - 3), (cx - length, cy - spread),
+                                              (cx - length, cy + spread), (cx, cy + 3)])
+            radius = int(12 + age * 96)
+            for i in range(12):
+                a = i * math.tau / 12
+                x, y = cx + math.cos(a) * radius, cy + math.sin(a) * radius * .68
+                pygame.draw.rect(fx, (171, 255, 220, int(230 * life)), (int(x), int(y), 3, 2))
+            for i in range(18):
+                x = cx - ((age * (160 + i * 5) + i * 19) % 300)
+                y = cy + ((i * 17) % 55) - 27
+                pygame.draw.line(fx, (184, 255, 222, int(150 * life)), (x, y), (x + 8, y), 1)
+        screen.blit(pygame.transform.scale(fx, (800, 342)), (0, 0))
+
     def _draw_actors(self, screen: pygame.Surface) -> None:
         px, py = self._player_pos
         self._player.rect.center = (round(px), round(py))
@@ -284,6 +338,7 @@ class BlackholeScene(Scene):
 
     def draw(self, screen: pygame.Surface) -> None:
         self._draw_blackhole(self._buf)
+        self._draw_rescue_power(self._buf)
         self._draw_actors(self._buf)
         screen.fill((0, 0, 0))
         screen.blit(self._buf, self._shake_offset())

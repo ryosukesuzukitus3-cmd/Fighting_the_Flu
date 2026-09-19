@@ -4,6 +4,7 @@ import math
 import pygame
 from src.core.registries import enemy_stats
 from src.entities.enemies.base import Enemy
+from src.core.sprite_art import fit_character_art
 
 if TYPE_CHECKING:
     from src.core.camera import Camera
@@ -34,9 +35,8 @@ class EnemyBroly(Enemy):
         self._enemy_bullets = enemy_bullets
         self._player = player
         self._charge_speed = _ENH_CHARGE if enhanced else _CHARGE_SPEED
-        raw        = game.resources.image("graphic/enemy_ブロリー.png")
-        w, h       = raw.get_width(), raw.get_height()
-        self.image = pygame.transform.smoothscale(raw, (int(w * 0.70), int(h * 0.70)))
+        raw = game.resources.image("graphic/characters/broly.png")
+        self.image = fit_character_art(raw, (56, 45))
         self.rect  = self.image.get_rect(center=(int(world_x), int(world_y)))
         self._target_y: float = target_y if target_y is not None else world_y
         self._state: str = "approach"
