@@ -57,44 +57,31 @@ if TYPE_CHECKING:
 #   curtain     : 画面を広く埋める終盤弾幕
 # 将棋駒の駒種別の軌道は src/entities/bullets/shogi_bullet.py に定義（歩=直進ほか）
 _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
-    1: [   # 悪寒大王インフルX（ステージ1 入門ボス）
-        (1.00, "fan5",        1.7),
-        (0.70, "fever_lunge", 1.25),
-        (0.45, "cross",       0.9),
-        (0.20, "dbl_aimed",   0.52),
+    1: [   # 薄い扇を読んで動き、後半は同じ狙いへ前進圧力を加える。
+        (1.00, "fan5", 1.7),
+        (0.50, "fever_lunge", 1.45),
     ],
-    2: [   # 情報汚染超人野獣ブロリー（ステージ2 中級ボス）
-        (1.00, "fan7",       1.28),
-        (0.74, "mega_laser", 1.90),
-        (0.54, "wall_gap",   0.72),
-        (0.34, "burst3",     0.58),
-        (0.16, "scatter",    0.28),
+    2: [   # 大技を避けて、撃ち終わりへ戻って反撃する。
+        (1.00, "mega_laser", 2.8),
+        (0.45, "mega_laser", 2.4),
     ],
     "2f2": [  # 超サイヤ人ブロリー（ステージ2 第二形態・極太レーザーと吸引）
         (1.00, "super_laser", 2.8),
         (0.45, "super_laser", 2.4),
     ],
-    3: [   # 婚活要塞マッチング・ゼロ（ステージ3 中上級ボス）
-        (1.00, "drone_cross", 1.35),
-        (0.72, "rock_fall",   1.10),
-        (0.50, "wall_gap",    0.78),
-        (0.30, "scatter",     0.34),
-        (0.12, "spiral",      0.55),
+    3: [   # 子機の優先撃破。後半は上下の進路にも注意する。
+        (1.00, "drone_cross", 1.65),
+        (0.40, "rock_fall", 1.45),
     ],
-    4: [   # 藤井竜王 Form1（ステージ4 ラスボス）
-        (1.00, "shogi_file", 1.25),
-        (0.72, "wall_gap",   0.86),
-        (0.52, "spiral",     0.50),
-        (0.32, "aimring8",   0.58),
-        (0.15, "vortex2",    0.28),
+    4: [   # 駒の進路を読む。後半も同じ規則で間隔だけ詰める。
+        (1.00, "shogi_file", 1.35),
+        (0.40, "shogi_file", 1.05),
     ],
-    "4f2": [  # 藤井竜王 Form2（激難・角/飛/龍 解禁。将棋攻撃を主軸に）
-        (1.00, "shogi_storm", 0.78),
-        (0.80, "shogi_drop",  1.05),
-        (0.62, "dash_knives", 0.55),
-        (0.46, "shogi_storm", 0.72),
-        (0.30, "vortex3",     0.36),
-        (0.16, "shogi_drop",  0.95),
+    "4f2": [   # 角・飛・龍と、着地点が分かる駒打ちの組み合わせ。
+        (1.00, "shogi_storm", 1.1),
+        (0.70, "shogi_drop", 1.35),
+        (0.40, "shogi_storm", 0.95),
+        (0.18, "shogi_drop", 1.15),
     ],
     "4f3": [  # 頑固王サワグチ Form3（最終形態・盤面崩壊の大技）
         (1.00, "board_throw", 1.35),
@@ -121,6 +108,7 @@ _FORM2_CONFIG = {
 
 # 超サイヤ人ブロリー（ステージ2 第二形態）: 通常HPを削り切ると変身する最終ゲージ
 _SSJ_HP    = 300
+_SUPER_BEAM_HEIGHT = 260  # 本編の床と天井の間に、見て選べる退避レーンを残す
 _SSJ_BODY_SIZE = (180, 146)  # 素材の解像度に依存せず、従来の当たり判定を保つ
 
 # 第三形態（頑固王サワグチ）: max_hp（スプライトはダミー生成）
@@ -154,7 +142,8 @@ _MOVE_STYLES: dict[str | int, str] = {
 #   turrets   : 地形・砲台連動。砲台を召喚、健在中は被ダメ減、全滅でスタン（被ダメ増）。
 _GIMMICKS: dict[str | int, str] = {
     1:     "shield",     # 悪寒大王インフルX
-    2:     "weakpoint",  # 情報汚染超人野獣ブロリー
+    2:     "counter",    # 大技のあとに弱点が開く
+    "2f2": "counter",
     3:     "turrets",    # 婚活要塞マッチング・ゼロ
     4:     "shield",     # 藤井竜王 Form1
     "4f2": "weakpoint",  # 赤眼の真・藤井四段 Form2
@@ -171,13 +160,15 @@ _WEAK_DUR    = STANCE_DOWN_DUR * 0.65  # 弱点露出は短く、集中攻撃の
 _WEAK_MULT   = 2.0    # 露出中の被ダメ倍率
 
 # turrets ギミック
+_TURRET_MAX_WAVES = 2     # 子機2組で盾を破壊。その後は本体との攻防。
 _TURRET_SUMMON_CD  = 9.0   # 砲台再召喚クールダウン（秒）
 _TURRET_GUARD_MULT = 0.0   # 砲台健在中の被ダメ倍率（0=シールド中は本体無効）
 _TURRET_STUN_DUR   = STANCE_DOWN_DUR * 0.65  # 子機全撃破後の短いスタン（秒）
 _TURRET_STUN_MULT  = 1.8   # スタン中の被ダメ倍率
 
 
-_POSTURE_DAMAGE_MULT = 0.16
+_COUNTER_GUARD_MULT = 0.20
+_COUNTER_OPEN_DUR = 2.4
 
 
 class Boss(pygame.sprite.Sprite):
@@ -217,11 +208,15 @@ class Boss(pygame.sprite.Sprite):
         # weakpoint
         self._armor:      int   = _ARMOR_MAX
         self._weak_timer: float = 0.0
+        self._counter_wait = 0.0
+        self._damage_fraction = 0.0
         # turrets（game_scene が summon_turret_fn を注入。呼ぶと砲台リストを返す）
         self.summon_turret_fn = None           # Callable[[int], list] | None
         self.rear_drone_exposed_just_now = None  # one-shot scene feedback
         self._summoned: list   = []
-        self._summon_cd:  float = 3.0
+        self._turret_waves = 0
+        self._turret_core_exposed = False
+        self._summon_cd:  float = 0.0
         self._stun_timer: float = 0.0
         self._shot_se_t:  float = -1.0   # 攻撃SEの再生間隔制御
         self._shoot_delay_override: float | None = None
@@ -270,6 +265,8 @@ class Boss(pygame.sprite.Sprite):
     def _phase(self) -> tuple:
         key = self._form_key()
         phases = _PHASE_CONFIGS.get(key, _PHASE_CONFIGS[1])
+        if key == 3 and self._turret_core_exposed:
+            return phases[-1]
         ratio  = self.hp / self.max_hp
         active = phases[0]
         for phase in phases:
@@ -293,7 +290,7 @@ class Boss(pygame.sprite.Sprite):
         gimmick = self._current_gimmick()
         if gimmick == "shield" and self._shield_active:
             return True
-        if gimmick == "weakpoint" and self._weak_timer <= 0:
+        if gimmick in ("weakpoint", "counter") and self._weak_timer <= 0:
             return True
         if gimmick == "turrets" and self._summoned_alive() > 0:
             return True
@@ -325,8 +322,8 @@ class Boss(pygame.sprite.Sprite):
         if self._down_timer > 0 or self._weak_timer > 0:
             return
         gimmick = self._current_gimmick()
-        if gimmick == "turrets":
-            return   # サクラ子機の撃破が体幹の代替（ボムは子機ごと薙ぎ払える）
+        if gimmick in ("turrets", "counter"):
+            return   # 子機の撃破、または大技後の反撃が攻略の軸
         if gimmick == "shield" and self._shield_active and not ignore_shield:
             return
         if self._stance_max <= 0:
@@ -382,6 +379,9 @@ class Boss(pygame.sprite.Sprite):
         self._stance     = self._stance_max
         self._down_timer = 0.0
         self._stance_regen_wait = 0.0
+        self._counter_wait = 0.0
+        self._damage_fraction = 0.0
+        self._beam_charge_pattern = None
         self._fight_time = 0.0
         self._enrage_notified = False
 
@@ -455,7 +455,8 @@ class Boss(pygame.sprite.Sprite):
         # 超サイヤ人レーザーのチャージ中は静止（予告線＝着弾位置を固定する）。
         if self._beam_charge_pattern != pattern:
             self._beam_charge_pattern = None
-        if self.suction_active or self._beam_charge_pattern is not None:
+        if (self.suction_active or self._beam_charge_pattern is not None
+                or self._counter_wait > 0 or self.is_stance_down):
             return
         style = _MOVE_STYLES.get(self._form_key())
         mid_y = SCREEN_HEIGHT / 2.0
@@ -513,6 +514,17 @@ class Boss(pygame.sprite.Sprite):
     def _update_gimmick(self, dt: float, gimmick: str | None,
                         enemy_bullets: pygame.sprite.Group, player: "Player") -> bool:
         """ギミックの時間進行。射撃を止めるべきとき True を返す（スタン中など）。"""
+        if gimmick == "counter":
+            if self._counter_wait > 0:
+                self._counter_wait -= dt
+                if self._counter_wait <= 0:
+                    self._weak_timer = max(0.0, _COUNTER_OPEN_DUR + self._counter_wait)
+                    self._counter_wait = 0.0
+                    self.down_just_started = True
+            elif self._weak_timer > 0:
+                self._weak_timer = max(0.0, self._weak_timer - dt)
+            return self._counter_wait > 0 or self._weak_timer > 0
+
         if gimmick == "shield":
             self._shield_timer -= dt
             if self._shield_timer <= 0:
@@ -535,12 +547,14 @@ class Boss(pygame.sprite.Sprite):
                 if self._weak_timer <= 0:
                     self._armor  = _ARMOR_MAX        # 露出終了で再装甲
                     self._stance = self._stance_max  # v2: 体幹も全回復
-            return False
+            return self._weak_timer > 0
 
         if gimmick == "turrets":
             if self._stun_timer > 0:
                 self._stun_timer -= dt
                 return True   # スタン中は射撃停止
+            if self._turret_core_exposed:
+                return False
             alive = self._summoned_alive()
             if self._stage_id == 3 and alive == 1:
                 for drone in self._summoned:
@@ -550,7 +564,9 @@ class Boss(pygame.sprite.Sprite):
                 if self._summoned:
                     # 直前まで居た砲台が全滅 → スタン突入
                     self._summoned = []
+                    self._turret_core_exposed = self._turret_waves >= _TURRET_MAX_WAVES
                     self._stun_timer = _TURRET_STUN_DUR
+                    self._summon_cd = 0.0
                     if BATTLE_V2_ENABLED:
                         self.down_just_started = True   # BREAK 演出を共通化
                     return True
@@ -558,6 +574,8 @@ class Boss(pygame.sprite.Sprite):
                 if self._summon_cd <= 0 and self.summon_turret_fn is not None:
                     count = 3 if self._stage_id == 3 else 2
                     self._summoned = list(self.summon_turret_fn(count) or [])
+                    if self._summoned:
+                        self._turret_waves += 1
                     self._summon_cd = _TURRET_SUMMON_CD
             return False
 
@@ -615,7 +633,7 @@ class Boss(pygame.sprite.Sprite):
             width / 2,
             by,
             width,
-            320,
+            _SUPER_BEAM_HEIGHT,
             palette=ZUNDA_PALETTE,
             lifetime=1.05,
             damage=46,
@@ -929,16 +947,14 @@ class Boss(pygame.sprite.Sprite):
             if self._beam_charge_pattern is None:
                 self._beam_charge_pattern = pattern
                 self._beam_charge_y = by
-                enemy_bullets.add(self._charge_beam(by, 0.62, 210))
+                enemy_bullets.add(self._charge_beam(by, 0.95, 210))
                 for off in (-56, 56):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
-                self._shoot_delay_override = 0.62
+                self._shoot_delay_override = 0.95
             else:
                 by = self._beam_charge_y
                 self._beam_charge_pattern = None
                 enemy_bullets.add(self._mega_beam(by))
-                if self.video_effect_fn is not None:
-                    self.video_effect_fn("angel_flash", center=(bx - 120.0, by), size=(520, 293))
                 # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク＋発射音。
                 enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.28, by,
                                                    ZUNDA_PALETTE, max_radius=104, spikes=10))
@@ -947,10 +963,8 @@ class Boss(pygame.sprite.Sprite):
                     self.camera.shake(8.0)
                 for off in (-88, 88):
                     enemy_bullets.add(EnemyBullet(bx, by + off, -330.0, off * 0.15, 12, radius=7, color=(255, 120, 70)))
-                if self._current_gimmick() == "weakpoint":
-                    self._weak_timer = max(self._weak_timer, 1.65)
-                    self._armor = min(self._armor, _ARMOR_MAX // 2)
-                self._shoot_delay_override = 2.55
+                self._counter_wait = 0.82
+                self._shoot_delay_override = self._counter_wait + _COUNTER_OPEN_DUR + 0.75
 
         # ── Stage2 第二形態: 超サイヤ人の極太レーザー。チャージ中は自機を吸引。
         elif pattern == "super_laser":
@@ -958,12 +972,12 @@ class Boss(pygame.sprite.Sprite):
                 self._beam_charge_pattern = pattern
                 self._beam_charge_y = by
                 # チャージ: 粒子砲チャージ相（特大）＋自機吸引（heavy_laserを停止）。
-                charge_t = 1.5
+                charge_t = 1.7
                 self.suction_y = by
                 self.suction_x = self.sx
                 self.suction_active = True
                 self._suction_timer = charge_t
-                enemy_bullets.add(self._charge_beam(by, charge_t, 320))
+                enemy_bullets.add(self._charge_beam(by, charge_t, _SUPER_BEAM_HEIGHT))
                 if self.camera is not None:
                     self.camera.shake(2.5)
                 self._shoot_delay_override = charge_t
@@ -983,7 +997,8 @@ class Boss(pygame.sprite.Sprite):
                 for off in (-150, -80, 80, 150):
                     enemy_bullets.add(EnemyBullet(self.sx, fire_y + off, -320.0, off * 0.18,
                                                   14, radius=7, color=(255, 215, 90)))
-                self._shoot_delay_override = 2.6
+                self._counter_wait = 1.05
+                self._shoot_delay_override = self._counter_wait + _COUNTER_OPEN_DUR + 0.85
 
         # ── Stage3: 砲台/子機の射線と交差する狙撃。
         elif pattern == "drone_cross":
@@ -1169,19 +1184,17 @@ class Boss(pygame.sprite.Sprite):
     # ─────────────────────────────────────────
     def take_damage(self, amount: int, stance: float | None = None) -> bool:
         # ── バトルv2: 体幹を並行して削る（stance 未指定はダメージ量相当）──
-        posture_intact = (BATTLE_V2_ENABLED and self._stance_max > 0
-                           and self._stance > 0 and not self.is_stance_down)
         if BATTLE_V2_ENABLED:
             self.add_stance(float(amount) if stance is None else stance)
         # ── ギミックによる被ダメージ補正 ──────────────────────────
         gimmick = self._current_gimmick()
         dealt = amount
-        if posture_intact:
-            dealt = max(1, int(amount * _POSTURE_DAMAGE_MULT))
         if BATTLE_V2_ENABLED and self._down_timer > 0:
             dealt = int(amount * STANCE_DOWN_MULT)   # 体幹ダウン中は大ダメージ
         elif gimmick == "shield" and self._shield_active:
             return False   # シールド中は無敵（ダメージ無効）
+        elif gimmick == "counter":
+            dealt = amount * (_WEAK_MULT if self._weak_timer > 0 else _COUNTER_GUARD_MULT)
         elif gimmick == "weakpoint":
             if self._weak_timer > 0:
                 dealt = int(amount * _WEAK_MULT)   # 弱点露出中は大ダメージ
@@ -1197,8 +1210,14 @@ class Boss(pygame.sprite.Sprite):
             if self._stun_timer > 0:
                 mult = STANCE_DOWN_MULT if BATTLE_V2_ENABLED else _TURRET_STUN_MULT
                 dealt = int(amount * mult)                # スタン中は被ダメ増
-            elif self._summoned_alive() > 0:
+            elif self._turret_core_exposed:
+                dealt = amount
+            else:
                 dealt = int(amount * _TURRET_GUARD_MULT)  # 砲台健在中は本体シールド
+        # Small rapid hits must respect armor too, without losing fractional damage.
+        self._damage_fraction += dealt
+        dealt = int(self._damage_fraction + 1e-9)
+        self._damage_fraction = max(0.0, self._damage_fraction - dealt)
         if dealt > 0:
             self.hit_flash_timer = 0.08   # 被弾フラッシュ
         self.hp -= dealt

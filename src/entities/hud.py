@@ -55,7 +55,6 @@ class HUD:
         laser: LaserBeam | None = None,
         lives: int = 0,
         heat=None,
-        pieces: list[str] | None = None,
         companion_stock: int | None = None,
     ) -> None:
         w = player.weapon
@@ -102,7 +101,7 @@ class HUD:
         inset = 14 if has_stock else 0
         self._text(screen, stock, x2 + inset, 58, col_w - inset, stock_color)
 
-        # Heat, held pieces, and laser readiness share the right column.
+        # Heat and laser readiness share the right column.
         if heat is not None:
             hot = heat.overheated
             heat_color = ACCENT_CORAL if hot or heat.ratio >= 0.85 else gold if heat.ratio >= 0.6 else ACCENT_MINT
@@ -111,24 +110,16 @@ class HUD:
             self._meter(screen, (x3, 36, col_w, 8), heat.ratio, heat_color)
         if laser is not None:
             state = laser.state
-            if heat is not None and heat.overheated and state in ("ready", "charging"):
+            if heat is not None and heat.overheated and state == "ready":
                 label, color = "熱で停止", ACCENT_CORAL
             elif state in ("firing", "starting"):
                 label, color = "発射中", ACCENT_MINT
-            elif state == "charging":
-                label, color = "充填中", gold
             elif state == "ready":
-                label, color = "発射可", ACCENT_MINT
+                label, color = "押して発射", ACCENT_MINT
             else:
                 label, color = "冷却", muted
             laser_key = self._settings.key_display("laser")
             self._text(screen, f"[{laser_key}] {label}", x3, 48, col_w - 65, color, 12)
-            self._meter(screen, (x3 + col_w - 60, 52, 60, 6), laser.gauge_ratio, color)
-        if pieces:
-            held = "・".join(pieces)
-            bomb_key = self._settings.key_display("bomb")
-            self._text(screen, f"持駒 [{bomb_key}] {held}", x3, 65 if laser else 59, col_w, white, 14)
-
         # ボスHPバー
         if boss is not None:
             bar_w, bar_h = 400, 18
@@ -142,7 +133,7 @@ class HUD:
             if getattr(boss, "is_stance_down", False):
                 blink = (ticks_ms() // 150) % 2 == 0
                 if blink:
-                    self._text(screen, "ダウン中・ダメージ増", bx + 118, by - 19, 282, ACCENT_MINT, 14)
+                    self._text(screen, "反撃の隙・ダメージ増", bx + 118, by - 19, 282, ACCENT_MINT, 14)
             else:
                 sr = boss.stance_ratio() if hasattr(boss, "stance_ratio") else None
                 if sr is not None:

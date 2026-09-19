@@ -30,7 +30,8 @@ def dialogue_scene():
     scene._overheat_barked = False
     scene._boss_dialogue_timer = 0
     scene._hitstop_timer = scene._boss_break_flash_timer = 0
-    scene._boss = SimpleNamespace(rect=pygame.Rect(520, 200, 100, 100))
+    scene._boss = SimpleNamespace(rect=pygame.Rect(520, 200, 100, 100),
+                                  _current_gimmick=lambda: "shield")
     scene._boss_stage_id = lambda: 4
     return scene
 

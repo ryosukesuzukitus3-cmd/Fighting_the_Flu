@@ -226,8 +226,8 @@ class GameSceneUpgradeMixin:
         descriptions = {
             "weapon_main": "連射・弾の広がりを強化。主砲を2回強化すると追加装備が解放。",
             "speed": "移動を速くして弾や地形を避けやすくします。",
-            "laser": (f"[{self.game.settings.key_display('laser')}] 長押しでため、離して発射。"
-                      "発射中の再押下で停止。通常弾に切り替えて冷却。"),
+            "laser": (f"[{self.game.settings.key_display('laser')}] 押している間だけ発射。"
+                      "離すと停止・冷却。隙にまとめて撃ち込む。"),
             "homing": "敵を追う弾を通常射撃に追加します。",
             "kt_hp": "先輩の耐久力を上げ、その場で回復します。",
             "kt_shot": "先輩の解熱弾を強化し、自機の体温も下がりやすくします。",

@@ -47,7 +47,7 @@ def final_scene(monkeypatch, tmp_path):
 def test_fakeout_shows_collapse_before_dialogue_without_changing_combat_state(final_scene):
     scene = final_scene
     boss, director = scene._boss, scene._final
-    scene.laser.state, scene.laser._gauge = "firing", 0.6
+    scene.laser.state, scene.laser._beam_progress = "firing", 0.6
     scene.enemy_bullets.add(EnemyBullet(200, 200, -30, 0))
     state = (boss.hp, boss.rect.copy(), boss._time, scene.player.hp, scene._stage_elapsed)
     director.update_combat(0)
@@ -65,7 +65,7 @@ def test_fakeout_shows_collapse_before_dialogue_without_changing_combat_state(fi
     assert director._final_dialogue_pages == FINAL_SEQ["fakeout"]
     assert director.draw_boss_reaction(scene.game.screen)
     assert (boss.hp, boss.rect, boss._time, scene.player.hp, scene._stage_elapsed) == state
-    assert scene.laser.state == "firing" and scene.laser._gauge == 0.6
+    assert scene.laser.state == "firing" and scene.laser._beam_progress == 0.6
     assert not scene._post_boss
 
     scene.game.step(1 / 60, [pygame.event.Event(pygame.KEYUP, key=enter)], False)
@@ -99,7 +99,7 @@ def test_large_hit_does_not_start_fakeout_under_midfight_dialogue(final_scene):
 def test_dialogue_suppresses_frozen_light_but_preserves_attack_state(final_scene, monkeypatch):
     scene = final_scene
     scene._start_combat_cutin(BOSS_MID["4f3mid"])
-    scene.laser.state, scene.laser._gauge = "firing", 0.6
+    scene.laser.state, scene.laser._beam_progress = "firing", 0.6
     scene.laser._timer = 0.5
     bullet = EnemyBullet(220, 200, -30, 0, lifetime=3)
     scene.enemy_bullets.add(bullet)
@@ -122,7 +122,7 @@ def test_dialogue_suppresses_frozen_light_but_preserves_attack_state(final_scene
     before = (bullet.rect.copy(), bullet.lifetime, scene._boss.hp, scene._stage_elapsed)
     scene.game.step(0.1, [], False)
     assert (bullet.rect, bullet.lifetime, scene._boss.hp, scene._stage_elapsed) == before
-    assert (scene.laser.state, scene.laser._gauge, scene.laser._timer) == ("firing", 0.6, 0.5)
+    assert (scene.laser.state, scene.laser._beam_progress, scene.laser._timer) == ("firing", 0.6, 0.5)
     assert not laser_draws
     scene._cutin_active = False
     scene.draw(scene.game.screen)

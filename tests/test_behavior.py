@@ -36,7 +36,7 @@ def test_weapon_upgrade_caps_each_track() -> None:
     for _ in range(20):
         w.upgrade("speed")
     assert w.speed_at_max
-    assert w.speed_multiplier == 1.0 + 5 * 0.2
+    assert w.speed_multiplier == 1.0 + 3 * 0.12
 
     for _ in range(20):
         w.upgrade("laser")

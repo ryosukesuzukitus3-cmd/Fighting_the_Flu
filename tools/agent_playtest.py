@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 from tools.playtest_state import boundary, observe
 
 ACTIONS = frozenset(('move_up', 'move_down', 'move_left', 'move_right', 'fire',
-                     'laser', 'weapon_select', 'bomb', 'pause', 'ui_accept', 'ui_back',
+                     'laser', 'weapon_select', 'pause', 'ui_accept', 'ui_back',
                      'menu_up', 'menu_down', 'menu_left', 'menu_right', 'escape', 'tab'))
 DT = 1 / 60
 
@@ -39,7 +39,8 @@ def _digest(value):
 class Session:
     """One pygame session at a time. Output folders must be new or empty."""
 
-    def __init__(self, output_dir, seed=1, diagnostic=False, *, visible=False):
+    def __init__(self, output_dir, seed=1, diagnostic=False, *, visible=False,
+                 save_step_images=True):
         if type(seed) is not int:
             raise ValueError('seed must be an integer')
         self.output_dir = Path(output_dir).resolve()
@@ -61,6 +62,7 @@ class Session:
         self.seed = seed
         self.diagnostic = diagnostic
         self.visible = visible
+        self.save_step_images = save_step_images
         self.closed = False
         self.frame = 0
         self.held_actions = set()
@@ -85,6 +87,7 @@ class Session:
                          'observation': 'diagnostic' if diagnostic else 'screen',
                          'input': 'fixed-frame actions; unlimited thinking time',
                          'rule_overrides': [], 'visible': visible,
+                         'save_step_images': save_step_images,
                          'user_data': str(self.data_dir),
                          'bindings': self.game.settings.get_key_bindings()}
         (self.output_dir / 'session.json').write_text(
@@ -104,9 +107,11 @@ class Session:
                                      self.pygame.image.tobytes(self._screen, 'RGB')).hexdigest())
 
     def _response(self, image_name='latest.png'):
-        path = self.output_dir / image_name
-        self.pygame.image.save(self._screen, str(path))
-        result = {**copy.deepcopy(self._observation), 'image': str(path)}
+        result = copy.deepcopy(self._observation)
+        if image_name is not None:
+            path = self.output_dir / image_name
+            self.pygame.image.save(self._screen, str(path))
+            result['image'] = str(path)
         (self.output_dir / 'observation.json').write_text(
             json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         return result
@@ -191,8 +196,10 @@ class Session:
                 self._advance([], 1)
             self._advance([command['tap']], 1)
             self._advance([], 1)
-        result = self._response('capture-' + command['capture'] + '.png'
-                                if name == 'capture' else 'latest.png')
+        image_name = 'capture-' + command['capture'] + '.png' if name == 'capture' else 'latest.png'
+        if name in ('step', 'tap') and not self.save_step_images:
+            image_name = None
+        result = self._response(image_name)
         result['advanced'] = self.frame - frame_before
         if self.closed:
             return {**result, 'type': 'closed', 'held_actions': []}

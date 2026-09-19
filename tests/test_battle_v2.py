@@ -1,4 +1,4 @@
-"""バトルシステムv2（体幹/体温/持ち駒/症状悪化）のテスト。
+"""バトルシステムv2（体幹/体温/症状悪化）のテスト。
 
 前半は pygame 非依存の純ロジック（battle_systems.py）、後半はヘッドレス
 ハーネス上の Boss で体幹→ダウン→倍率→回復のサイクルを検証する。
@@ -17,7 +17,7 @@ from tools.headless import build_game_scene  # noqa: E402
 import pygame  # noqa: E402
 
 from src.core import balance  # noqa: E402
-from src.core.battle_systems import HeatSystem, award_pieces, enrage_mult  # noqa: E402
+from src.core.battle_systems import HeatSystem, enrage_mult  # noqa: E402
 
 
 # ── HeatSystem ───────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ def test_heat_cooling_scales_with_karonaru_and_boss_down():
     assert kalv.heat == pytest.approx(
         60.0 - (balance.HEAT_COOL_RATE + 3 * balance.HEAT_COOL_KARONARU))
     assert down.heat == pytest.approx(
-        60.0 - balance.HEAT_COOL_RATE * balance.HEAT_BOSS_DOWN_MULT)
+        max(0.0, 60.0 - balance.HEAT_COOL_RATE * balance.HEAT_BOSS_DOWN_MULT))
 
 
 def test_display_temp_range():
@@ -59,22 +59,6 @@ def test_display_temp_range():
     assert h.display_temp == pytest.approx(balance.HEAT_TEMP_MIN)
     h.heat = balance.HEAT_MAX
     assert h.display_temp == pytest.approx(balance.HEAT_TEMP_MAX)
-
-
-# ── 持ち駒 ───────────────────────────────────────────────────────────
-def test_award_pieces_on_threshold_crossing():
-    thresholds = sorted(balance.PIECE_COMBO_THRESHOLDS)
-    t0 = thresholds[0]
-    assert award_pieces(t0 - 1, t0, 0) == [balance.PIECE_COMBO_THRESHOLDS[t0]]
-    # 通過済みの閾値では再取得しない
-    assert award_pieces(t0, t0 + 1, 1) == []
-
-
-def test_award_pieces_respects_cap():
-    lo, hi = min(balance.PIECE_COMBO_THRESHOLDS), max(balance.PIECE_COMBO_THRESHOLDS)
-    gained = award_pieces(lo - 1, hi, balance.PIECE_MAX_HELD - 1)
-    assert len(gained) == 1   # 空き1枠なら1つだけ
-    assert award_pieces(lo - 1, hi, balance.PIECE_MAX_HELD) == []
 
 
 # ── 症状悪化 ─────────────────────────────────────────────────────────
@@ -119,30 +103,33 @@ def test_shield_boss_stance_break_and_down_cycle(game):
     assert b.stance_ratio() == pytest.approx(1.0)
 
 
-def test_intact_stance_heavily_reduces_boss_hp_damage(game):
-    b = _fight_boss(game, 4)
+@pytest.mark.parametrize("stage", [1, 4])
+def test_open_shield_takes_normal_damage_before_stance_break(game, stage):
+    b = _fight_boss(game, stage)
     b._shield_active = False
     hp0 = b.hp
     b.take_damage(25)
-    assert hp0 - b.hp == 4  # int(25 * 0.16), before the stance is broken
+    assert hp0 - b.hp == 25
+    assert not b.is_stance_down
 
 
 def test_weakpoint_boss_stance_break_exposes_core(game):
-    b = _fight_boss(game, 2)
+    b = _fight_boss(game, 4)
+    b._transform_form2()
     hp0 = b.hp
     b.take_damage(10)                        # 露出前は HP 無効・体幹のみ削れる
     assert b.hp == hp0
     assert b.stance_ratio() < 1.0
-    b.add_stance(balance.STANCE_MAX[2])      # 削り切ると弱点露出（＝ダウン）
+    b.add_stance(balance.STANCE_MAX["4f2"])      # 削り切ると弱点露出（＝ダウン）
     assert b._weak_timer > 0 and b.is_stance_down
     b.take_damage(10)
     assert hp0 - b.hp == 20                  # 露出中×2（既存 _WEAK_MULT）
 
 
-def test_bomb_stance_ignores_shield(game):
+def test_explicit_stance_override_ignores_shield(game):
     b = _fight_boss(game, 1)
     b._shield_active = True
-    b.add_stance(balance.STANCE_MAX[1], ignore_shield=True)   # ボムはシールド貫通
+    b.add_stance(balance.STANCE_MAX[1], ignore_shield=True)   # 検証用の明示的なシールド貫通
     assert b.is_stance_down
     assert b._shield_active is False
 

@@ -48,10 +48,10 @@ from src.story.script import (
 from src.core.balance import (
     PLAYER_DMG_ENEMY, PLAYER_DMG_BULLET, PLAYER_DMG_BOSS, PLAYER_DMG_TERRAIN,
     KARONARU_CONTACT_DMG,
-    BATTLE_V2_ENABLED, HEAT_PER_LASER, HEAT_PER_SHOT, HEAT_LASER_PER_SEC, PIECE_EFFECTS,
+    BATTLE_V2_ENABLED, HEAT_LASER_PER_SEC,
     STANCE_HOMING, STANCE_MAIN,
 )
-from src.core.battle_systems import HeatSystem, award_pieces
+from src.core.battle_systems import HeatSystem, suction_offset
 
 # ボス演出シーケンス状態
 # "" -> alert -> entering -> boss_name -> boss_dialogue -> fight_banner -> fighting
@@ -221,9 +221,8 @@ class GameScene(
         # ポップアップテキスト
         self._popups: list = []
 
-        # ── バトルv2: 体温（オーバーヒート）/ 持ち駒 ────────────────
+        # ── 体温（レーザーのオーバーヒート） ────────────────
         self._heat = HeatSystem() if BATTLE_V2_ENABLED else None
-        self._pieces: list[str] = []
         self._overheat_barked = False   # 先輩バークはステージ1回まで
 
         # 相棒（カロナール先輩）
@@ -477,11 +476,6 @@ class GameScene(
                     self._combo_break_timer = 0.9
                 self._combo_count = 0
 
-        if (BATTLE_V2_ENABLED and self._pieces and self._accepts_combat_input
-                and not self._final.final_strike_active
-                and inp.is_action_just_pressed("bomb")):
-            self._fire_bomb()
-
         # ── 通常 / alert / entering 共通更新 ─────────────────
         self.camera.update(dt)
         self._stage_elapsed += dt
@@ -575,26 +569,18 @@ class GameScene(
                     self.game.sound.play_se("music/se/ウェポン：missile_shot.mp3", volume=0.5)
                 if not self._final.final_strike_active and any(not isinstance(b, HomingBullet) for b in new_bullets):
                     self.game.sound.play_se_alias("SE_NORMALSHOT", volume=0.4)
-                if (self._heat is not None and not self._final.final_strike_active
-                        and self._heat.add(HEAT_PER_SHOT)):
-                    self._on_overheat_started()
 
             # レーザー
             if self.player.weapon.has_laser and not self._final.final_strike_active:
                 msx, msy = self.player.muzzle_screen()
                 self.laser.laser_level = self.player.weapon.laser_level
-                _laser_was_ready = self.laser.state == "ready"
                 just_fired, just_ended = self.laser.update(dt, self.player.laser_fire_held)
-                if _laser_was_ready and self.laser.state == "charging":
-                    self.game.sound.play_se("music/se/ウェポン：laser_charge.mp3", volume=0.75)
                 if just_fired:
                     lv = self.player.weapon.laser_level
                     se = "music/se/ウェポン：laser1_shot.mp3" if lv <= 4 else "music/se/ウェポン：laser2_shot.mp3"
                     self.game.sound.play_se(se, volume=0.225)
                     self.camera.shake(6.0)
                     self._laser_flash_timer = 0.08
-                    if self._heat is not None and self._heat.add(HEAT_PER_LASER):
-                        self._on_overheat_started()
                 if self._heat is not None and self.laser.is_active:
                     if self._heat.add(HEAT_LASER_PER_SEC * dt):
                         self._on_overheat_started()
@@ -889,7 +875,6 @@ class GameScene(
             laser=self.laser if self.player.weapon.has_laser else None,
             lives=self.game.shared.lives,
             heat=self._heat,
-            pieces=self._pieces if BATTLE_V2_ENABLED else None,
             companion_stock=self._companion.stock if self._companion is not None else None,
         )
 
@@ -1221,12 +1206,17 @@ class GameScene(
         for bullet in list(self.enemy_bullets):
             if getattr(bullet, "_terrain_bounced", False) or getattr(bullet, "warning_only", False):
                 continue
+            if getattr(bullet, "has_hit_player", False):
+                continue
             collides = getattr(bullet, "collides_with_rect", bullet.rect.colliderect)
             if collides(self.player.hit_rect):
                 hit_bullet = bullet
                 break
         if hit_bullet is not None:
+            can_hit = not self.player.is_invincible and not self._final.final_strike_active
             self._damage_player(getattr(hit_bullet, "damage", PLAYER_DMG_BULLET))
+            if can_hit and getattr(hit_bullet, "hits_player_once", False):
+                hit_bullet.has_hit_player = True
             if not getattr(hit_bullet, "persistent", False):
                 hit_bullet.kill()
             if self.player.hp <= 0 and not self._is_debug_stage:
@@ -1306,12 +1296,10 @@ class GameScene(
             self.particles.spawn_spark(sx, sy, color=(190, 168, 130), count=7, speed=240.0)
             self.game.sound.play_se("music/se/hit.wav", volume=0.3)
             score = 15
-        prev_combo = self._combo_count
         self._combo_count += 1
         self._combo_timer = COMBO_WINDOW
         self._combo_pulse = 0.8
         self.game.shared.score += score * combo_multiplier(self._combo_count)
-        self._award_combo_pieces(prev_combo)
 
     def _on_enemy_killed(self, enemy) -> None:
         sx = self.camera.to_screen_x(enemy.world_x)
@@ -1329,11 +1317,9 @@ class GameScene(
                 sx2 = self.camera.to_screen_x(shard.world_x)
                 self.particles.spawn_spark(int(sx2), int(shard.world_y), count=6, speed=280.0)
         enemy.kill()
-        prev_combo = self._combo_count
         self._combo_count += 1
         self._combo_timer  = COMBO_WINDOW
         self._combo_pulse  = 1.0
-        self._award_combo_pieces(prev_combo)
         mult = combo_multiplier(self._combo_count)
         self.game.shared.score      += 100 * mult
         self.game.shared.kill_count += 1
@@ -1428,49 +1414,7 @@ class GameScene(
             txt.set_alpha(70)
             surf.blit(txt, (int(it["x"]), int(it["y"])))
 
-    # ── バトルv2: ボム / 熱暴走 / 体幹ブレイク演出 ─────────────────
-    def _fire_bomb(self) -> None:
-        """持ち駒を「打つ」: 対応する駒ミサイル群と、控えめな体幹ダメージ。"""
-        piece = self._pieces.pop(0)
-        _, _, stance_pts, inv = PIECE_EFFECTS[piece]
-        px, py = int(self.player.sx), int(self.player.sy)
-        self._spawn_popup(f"「{piece}」、打つ！", px + 16, py - 30,
-                          color=(255, 235, 170), life=1.5)
-        self._play_shogi_snap(px + 30, py)
-        self.particles.spawn_big_explosion(px + 60, py)
-        self.camera.shake(6.0)
-        self._laser_flash_timer = max(self._laser_flash_timer, 0.1)
-        # A held piece no longer clears the whole screen; it launches a
-        # readable volley of the matching shogi missiles instead.
-        from src.entities.bullets.player_bullet import HomingBullet
-        world_x = self.camera.to_world_x(px + 28)
-        missile_count = 6 + min(8, int(stance_pts / 6.0))
-        for i in range(missile_count):
-            missile = HomingBullet(
-                world_x, py + (i - (missile_count - 1) / 2) * 7,
-                self.enemies, game=self.game, boss=self._boss,
-                init_angle=(i - (missile_count - 1) / 2) * 6,
-            )
-            missile.damage = 1
-            self.player_bullets.add(missile)
-        if inv > 0:
-            self.player._invincible_timer = max(self.player._invincible_timer, inv)
-        if self._boss is not None and self._in_boss_fight:
-            # The missiles carry the damage.  Keep only a modest posture hit
-            # here, so a held piece cannot skip a boss phase on activation.
-            self._boss.add_stance(stance_pts * 0.25, ignore_shield=True)
-
-    def _award_combo_pieces(self, prev_combo: int) -> None:
-        """コンボ閾値の通過で持ち駒を獲得（バトルv2）。"""
-        if not BATTLE_V2_ENABLED:
-            return
-        for piece in award_pieces(prev_combo, self._combo_count, len(self._pieces)):
-            self._pieces.append(piece)
-            px, py = int(self.player.sx), int(self.player.sy)
-            self._spawn_popup(f"持ち駒「{piece}」獲得", px + 16, py - 44,
-                              color=(255, 235, 170), life=1.6)
-            self._play_shogi_snap(px + 24, py - 30)
-
+    # ── 熱暴走 / 反撃の隙の演出 ─────────────────
     def _companion_can_speak(self) -> bool:
         return (self.game.story.karonaru_available
                 and self._companion is not None and self._companion.is_active)
@@ -1500,15 +1444,14 @@ class GameScene(
         if b is None:
             return
         bx, by = b.rect.center
-        text = "王手！！" if self._boss_stage_id() == 4 else "BREAK!!"
+        text = "王手！！" if self._boss_stage_id() == 4 else "反撃！"
         self._spawn_popup(text, bx, by - 46, color=(255, 215, 70), life=1.6)
         self.particles.spawn_hit(bx, by, color=(255, 225, 130), count=10)
         self.particles.spawn_spark(bx, by, color=(255, 245, 190), count=14, speed=220.0)
         self.particles.spawn_glow(bx, by, color=(255, 215, 75), count=8, speed=100.0)
-        self._play_video_effect("anime_impact", center=(bx, by), size=(180, 180), opacity=145)
-        self.camera.shake(10.0)
-        self._hitstop_timer = max(self._hitstop_timer, 0.10)
-        self._boss_break_flash_timer = max(self._boss_break_flash_timer, 0.16)
+        self.camera.shake(2.0)
+        if b._current_gimmick() != "counter":
+            self._hitstop_timer = max(self._hitstop_timer, 0.05)
         if not self.game.shared.boss_break_tutorial_shown:
             self.game.shared.boss_break_tutorial_shown = True
             lines = BOSS_BREAK_TUTORIAL if self._companion_can_speak() else BOSS_BREAK_TUTORIAL_SOLO
@@ -1581,14 +1524,9 @@ class GameScene(
             return
         px = self.player.sx + self.player.rect.width / 2
         py = self.player.sy + self.player.rect.height / 2
-        dx = boss.suction_x - px
-        dy = boss.suction_y - py
-        dist = math.hypot(dx, dy)
-        if dist < 1.0:
-            return
-        pull = 175.0 * dt
-        self.player.sx += (dx / dist) * pull
-        self.player.sy += (dy / dist) * pull
+        dx, dy = suction_offset(px, py, boss.suction_x, boss.suction_y, dt)
+        self.player.sx += dx
+        self.player.sy += dy
         self.player.sx = max(0.0, min(SCREEN_WIDTH - self.player.rect.width, self.player.sx))
         self.player.sy = max(0.0, min(SCREEN_HEIGHT - self.player.rect.height, self.player.sy))
         self.player.rect.topleft = (int(self.player.sx), int(self.player.sy))

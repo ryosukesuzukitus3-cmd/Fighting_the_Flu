@@ -35,7 +35,7 @@ class _RecordingFont:
 def game():
     pygame.font.init()
     rendered = []
-    keys = {"weapon_select": "F8", "bomb": "LSHIFT", "laser": "RCTRL"}
+    keys = {"weapon_select": "F8", "laser": "RCTRL"}
     resources = SimpleNamespace(
         pixelfont=lambda size: _RecordingFont(pygame.font.Font(FONT, size), rendered),
     )
@@ -62,8 +62,7 @@ def _draw_full_hud(hud, screen, player=None, **kwargs):
         screen, player or _player(), score=1234567890, kill_count=1234,
         clear_goal=0, lives=0,
         heat=SimpleNamespace(overheated=False, ratio=0.7, display_temp=39.1),
-        pieces=["歩", "金", "龍"],
-        laser=SimpleNamespace(state="ready", gauge_ratio=1.0), **kwargs,
+        laser=SimpleNamespace(state="ready"), **kwargs,
     )
 
 
@@ -85,12 +84,12 @@ def test_hud_uses_current_remapped_gameplay_keys(game):
     screen = pygame.Surface((800, 600), pygame.SRCALPHA)
     _draw_full_hud(hud, screen)
     text = "\n".join(item[0] for item in game.rendered)
-    assert "[F8]" in text and "[LSHIFT]" in text and "[RCTRL]" in text
-    game.keys.update(weapon_select="Q", bomb="E", laser="R")
+    assert "[F8]" in text and "[RCTRL]" in text
+    game.keys.update(weapon_select="Q", laser="R")
     game.rendered.clear()
     _draw_full_hud(hud, screen)
     text = "\n".join(item[0] for item in game.rendered)
-    assert "[Q]" in text and "[E]" in text and "[R]" in text
+    assert "[Q]" in text and "[R]" in text
     assert "[F8]" not in text
 
 

@@ -27,7 +27,8 @@ if str(ROOT) not in sys.path:
 import pygame  # noqa: E402
 
 from src.core.game import Game  # noqa: E402
-from src.scenes.game_scene import GameScene  # noqa: E402
+from src.scenes.game_scene import GameScene
+from src.entities.weapon import _SPEED_MAX_LEVEL  # noqa: E402
 
 # CLIの操作名 → 設定アクション。実キーはそのGameのSettingsManagerから解決する。
 HOLD_ACTIONS = {
@@ -77,7 +78,7 @@ def apply_weapon(
     w.main_level   = max(0, min(main, len(w._MAIN_LEVELS) - 1))
     w.laser_level  = max(0, min(laser, 6))
     w.homing_level = max(0, min(homing, 7))
-    w.speed_level  = max(0, min(speed, 5))
+    w.speed_level  = max(0, min(speed, _SPEED_MAX_LEVEL))
     w.magnet_level = max(0, min(magnet, 3))
     w.has_barrier  = barrier
 

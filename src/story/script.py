@@ -130,6 +130,10 @@ TUTORIAL: dict[str, list[Line]] = {
     "shoot_done": [
         Line(K, "いい音だにょ。それが、お前の反撃だにょ。"),
     ],
+    "laser_hint": [
+        Line(K, "こっちは強いぶん、熱くなるにょ。",
+                "撃ったら一度、手を離せにょ。"),
+    ],
     # ④ 練習用インフル人形 登場
     "dummy": [
         Line(K,     "じゃあ、的を出すにょ。"),
@@ -508,13 +512,13 @@ OVERHEAT_BARKS: list[Line] = [
 
 # ボスを初めてダウンさせた時の説明（1プレイにつき1回）
 BOSS_BREAK_TUTORIAL: list[Line] = [
-    Line(K, "体幹を削り切ったからダウンしたにょ！",
-         "ダウン中はダメージ2倍。撃ち込めにょ！"),
+    Line(K, "動きが止まったにょ。",
+         "今ならダメージ2倍。撃ち込めにょ！"),
 ]
 
 BOSS_BREAK_TUTORIAL_SOLO: list[Line] = [
-    Line(SYS, "体幹を削り切るとダウン。",
-              "ダウン中はダメージ2倍。攻撃のチャンス。"),
+    Line(SYS, "敵の動きが止まると反撃の隙。",
+              "この間はダメージ2倍。攻撃のチャンス。"),
 ]
 
 SAKURA_SHIELD_RELEASED: list[Line] = [

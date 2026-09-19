@@ -75,6 +75,7 @@ class LaserBeamSprite(EnemyBullet):
     """
 
     persistent = True
+    hits_player_once = True
 
     def collides_with_rect(self, target: pygame.Rect) -> bool:
         """Intersect the target with this frame's visible pixels, not its padding.
@@ -126,6 +127,7 @@ class LaserBeamSprite(EnemyBullet):
             terrain_passthrough=True,
             warning_only=warning_only,
         )
+        self.has_hit_player = False
         self._w = total_w
         self._h = height
         self._core, self._mid, self._glow = palette

@@ -42,7 +42,7 @@ def scene():
     records = []
     keys = {"ui_accept": pygame.K_F9, "ui_back": pygame.K_F10, "pause": pygame.K_F11}
     displays = {"ui_accept": "F9", "ui_back": "F10", "pause": "F11",
-                "weapon_select": "V", "bomb": "B", "laser": "SPACE"}
+                "weapon_select": "V", "laser": "SPACE"}
     settings = SimpleNamespace(get_key=keys.__getitem__, key_display=displays.__getitem__)
     result = Menus()
     result.game = SimpleNamespace(
@@ -122,15 +122,15 @@ def test_laser_explanation_uses_bound_key_and_keeps_release_and_stop_instruction
     scene.game.displays["laser"] = "RIGHT CTRL"
     scene._draw_upgrade_ui(pygame.Surface((800, 600), pygame.SRCALPHA))
     text = "".join(text for text, _ in scene.game.records)
-    assert "[RIGHT CTRL] 長押しでため、離して発射。" in text
-    assert "発射中の再押下で停止。" in text
+    assert "[RIGHT CTRL] 押している間だけ発射。" in text
+    assert "離すと停止・冷却。" in text
     assert all(width <= 752 for _, width in scene.game.records)
 
 
 def test_empty_hud_omits_unavailable_actions_and_stays_in_top_band(scene):
     scene.player.weapon.weapon_stock = 0
     surface = pygame.Surface((800, 600), pygame.SRCALPHA)
-    HUD(scene.game).draw(surface, scene.player, 0, 0, 0, pieces=[])
+    HUD(scene.game).draw(surface, scene.player, 0, 0, 0)
     text = "\n".join(text for text, _ in scene.game.records)
     assert "[V]" not in text and "[B]" not in text
     assert "未装備" not in text and "追加装備 なし" not in text
@@ -142,7 +142,7 @@ def test_overheated_laser_does_not_advertise_ready_to_fire(scene):
     surface = pygame.Surface((800, 600), pygame.SRCALPHA)
     HUD(scene.game).draw(surface, scene.player, 0, 0, 0,
         heat=SimpleNamespace(overheated=True, ratio=1.0, display_temp=39.9),
-        laser=SimpleNamespace(state="ready", gauge_ratio=1.0))
+        laser=SimpleNamespace(state="ready"))
     text = "\n".join(text for text, _ in scene.game.records)
     assert "熱暴走・冷却中" in text and "熱で停止" in text
     assert "発射可" not in text

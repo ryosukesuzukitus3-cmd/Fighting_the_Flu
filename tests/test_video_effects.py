@@ -170,7 +170,8 @@ def test_boss_break_is_subdued_and_explained_only_once() -> None:
     )
     shared = SimpleNamespace(boss_break_tutorial_shown=False)
     scene = SimpleNamespace(
-        _boss=SimpleNamespace(rect=pygame.Rect(300, 200, 100, 100)),
+        _boss=SimpleNamespace(rect=pygame.Rect(300, 200, 100, 100),
+                              _current_gimmick=lambda: "shield"),
         _boss_stage_id=Mock(return_value=1),
         _spawn_popup=Mock(),
         particles=particles,
@@ -189,11 +190,9 @@ def test_boss_break_is_subdued_and_explained_only_once() -> None:
 
     GameScene._on_boss_break(scene)
 
-    scene._play_video_effect.assert_called_once_with(
-        "anime_impact", center=(350, 250), size=(180, 180), opacity=145,
-    )
+    scene._play_video_effect.assert_not_called()
     particles.spawn_hit.assert_called_once()
-    scene.camera.shake.assert_called_once_with(10.0)
+    scene.camera.shake.assert_called_once_with(2.0)
     scene._enqueue_boss_dialogue.assert_called_once_with(
         BOSS_BREAK_TUTORIAL, BOSS_MID_LINE_DURATION,
     )

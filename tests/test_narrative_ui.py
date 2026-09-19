@@ -165,7 +165,7 @@ def test_practice_instruction_uses_movement_bindings_and_progress(game):
     scene.on_enter()
     scene._moved_h = True
     title, instruction, progress = scene._practice_labels()
-    assert "1 / 3" in title
+    assert "1 / 4" in title
     assert "A / D" in instruction and "W / S" in instruction
     assert "左右の移動：完了" in progress and "上下の移動：未完了" in progress
     scene._start_shoot()

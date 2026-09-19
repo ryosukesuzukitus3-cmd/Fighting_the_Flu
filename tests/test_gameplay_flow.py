@@ -83,9 +83,8 @@ def test_continue_rewinds_final_chapter_story_but_retry_starts_a_new_journey(sce
 
 
 @pytest.mark.parametrize("suspension", ["pause", "upgrade", "cutin", "boss_intro", "final_gate"])
-def test_suspended_combat_preserves_combo_heat_camera_and_pieces(scene, suspension):
+def test_suspended_combat_preserves_combo_heat_camera(scene, suspension):
     scene._combo_count, scene._combo_timer = 8, 0.1
-    scene._pieces = ["歩"]
     scene._heat.heat = 60
     if suspension == "pause":
         scene._paused = True
@@ -99,10 +98,8 @@ def test_suspended_combat_preserves_combo_heat_camera_and_pieces(scene, suspensi
         scene._boss_intro_pages = list(next(iter(BOSS_MID.values())))
     else:
         scene._final._begin_input_gate("await_help")
-    scene.game.input._just_pressed.add(scene.game.settings.get_key("bomb"))
     before = (scene.camera.x, scene._stage_elapsed)
     scene.update(0.2)
-    assert scene._pieces == ["歩"]
     assert (scene._combo_count, scene._combo_timer) == (8, 0.1)
     assert scene._heat.heat == 60
     assert (scene.camera.x, scene._stage_elapsed) == before

@@ -416,3 +416,39 @@ def test_movement_leads_projectiles_but_aims_laser_at_current_target():
     actions, _ = bot.movement(scene)
     assert "move_down" not in actions and "move_up" not in actions
     assert boss.rect == original
+
+
+def test_short_hold_releases_movement_without_speeding_up_decisions():
+    from types import SimpleNamespace
+    commands = []
+    session = SimpleNamespace(frame=0)
+    def command(value):
+        commands.append(value)
+        session.frame += value["step"]
+        return {"advanced": value["step"]}
+    session.command = command
+    bot = Campaign.__new__(Campaign)
+    bot.session, bot.interval = session, 12
+    bot._planned_move_frames = 3
+    bot.note = lambda result: None
+    bot.advance(["move_up", "fire"])
+    assert commands == [{"step": 3, "actions": ["fire", "move_up"]},
+                        {"step": 9, "actions": ["fire"]}]
+    assert session.frame == 12 and bot._planned_move_frames is None
+
+
+def test_precision_hold_can_reach_safe_lane_without_crossing_ceiling():
+    import pygame
+    from types import SimpleNamespace
+    ceiling = SimpleNamespace(rect=pygame.Rect(0, 0, 500, 120), collidable=True)
+    bot, scene, beam = _movement_fixture((0, 156, 585, 210), terrain=[ceiling])
+    scene.player.rect.center = (224, 169)
+    scene.player.weapon.speed_multiplier = 1.12
+    beam.vx = beam.vy = 0
+    beam.warning_only = True
+    actions, _ = bot.movement(scene)
+    assert "move_up" in actions
+    assert bot._planned_move_frames < bot.interval
+    hit = scene.player.hit_rect.move(0, -int(280 * 1.12 * bot._planned_move_frames / 60))
+    assert not hit.colliderect(ceiling.rect)
+    assert not hit.colliderect(beam.rect)
