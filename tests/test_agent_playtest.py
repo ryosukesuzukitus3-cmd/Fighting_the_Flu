@@ -178,6 +178,7 @@ def test_invalid_commands_are_atomic_and_leave_session_usable(session):
 def test_actions_resolve_current_bindings_and_shared_keys_release_once(session):
     probe = install_probe(session)
     assert session.game.settings.set_key_binding("fire", pygame.K_SPACE)
+    assert session.game.settings.set_key_binding("laser", pygame.K_SPACE)
     assert session.game.settings.set_key_binding("move_down", pygame.K_s)
     session.command({"step": 1, "actions": ["fire", "laser"]})
     assert probe.events == [(pygame.KEYDOWN, pygame.K_SPACE)]
@@ -271,13 +272,14 @@ def test_final_gate_requires_release_and_fresh_fire_and_observe_preserves_reques
     assert any(getattr(bullet, "final_strike", False) for bullet in scene.player_bullets)
 
 
-def test_continue_through_menu_consumes_one_life_and_restores_chapter_loadout(session):
+def test_continue_through_menu_restores_checkpoint_loadout_without_a_life_cost(session):
     from src.scenes.gameover import GameOverScene
 
     scene = install_gameplay(session)
     session.game.shared.score = 1234
     session.game.shared.kill_count = 12
-    session.game.shared.stage_start_weapon["main_level"] = 2
+    scene.player.weapon.main_level = 2
+    scene._save_checkpoint("road", "test rest")
     scene.player.weapon.main_level = 4
     scene.player.hp = 0
     session.game.change_scene(GameOverScene(session.game))
@@ -286,7 +288,7 @@ def test_continue_through_menu_consumes_one_life_and_restores_chapter_loadout(se
     resumed = session.game._scene
     assert type(resumed).__name__ == "GameScene"
     assert resumed is not scene and resumed._stage_id == 1
-    assert session.game.shared.lives == 2
+    assert session.game.shared.lives == 3
     assert session.game.shared.score == 1234
     assert session.game.shared.kill_count == 12
     assert resumed.player.hp == resumed.player.max_hp

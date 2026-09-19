@@ -10,6 +10,7 @@ import random
 from typing import Callable, TYPE_CHECKING
 import pygame
 from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.core.balance import SUPPLY_BUDGET
 from src.core.sprite_art import fit_character_art
 from src.entities.terrain_query import terrain_collideany
 from src.story.speakers import KARONARU, KARONARU_MAX, speaker_portrait
@@ -34,7 +35,7 @@ _FOLLOW_LERP      = 7.5    # 追従の基本追従率（澤口の speed_multipli
 _KT_MAX_LEVEL = 3                     # 各系統の最大レベル
 _HP_BY_LEVEL  = [1, 10, 30, 50]       # lv_hp 0..3 → 最大HP
 # 補給: lv 0=無効, 1〜3 で回復アイテム射出間隔（秒）が短縮
-_SUPPLY_INTERVAL = [0.0, 9.0, 6.5, 4.0]
+_SUPPLY_INTERVAL = [0.0, 10.0, 9.0, 8.0]
 # マグネット: lv 0=無効, 1〜3 で (引き寄せ半径px, 速度px/s)
 _MAGNET_BY_LEVEL = [(0.0, 0.0), (150.0, 90.0), (280.0, 150.0), (9999.0, 240.0)]
 _NORMAL_SIZE = (34, 34)
@@ -55,7 +56,7 @@ class Karonaru(pygame.sprite.Sprite):
         self,
         game: "Game",
         popup_fn: Callable[[str, int, int], None] | None = None,
-        spawn_heal_fn: Callable[[], None] | None = None,
+        spawn_heal_fn: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
         self.game      = game
@@ -94,8 +95,9 @@ class Karonaru(pygame.sprite.Sprite):
         self.lv_shot:   int = 0   # 解熱弾（連射）
         self.lv_supply: int = 0   # 補給（回復アイテム射出）
         self.lv_magnet: int = 0   # マグネット（アイテム引き寄せ）
-        self.stock:     int = 0   # 先輩用 強化ストック（ウェポンアイテム取得ごとに +1）
+        self.stock:     int = 0   # 先輩用 強化ストック（ウェポンアイテム2個ごとに +1）
         self._supply_timer: float = 0.0
+        self.supply_spent = 0
 
     # ── 公開プロパティ ────────────────────────────────────────────
 
@@ -171,7 +173,8 @@ class Karonaru(pygame.sprite.Sprite):
             self._shoot_cooldown = self._shoot_interval()
 
         # 補給（回復アイテムを前方へ射出。Lvで頻度上昇）
-        self._tick_supply(dt)
+        if can_fire and self.lv_supply > 0 and player.hp <= player.max_hp - 10:
+            self._tick_supply(dt)
 
     def _move_with_terrain(
         self, new_x: float, new_y: float, terrain: pygame.sprite.Group | None
@@ -268,15 +271,36 @@ class Karonaru(pygame.sprite.Sprite):
             "kt_magnet": self.lv_magnet,
         }.get(key, 0)
 
+    def rest(self, player) -> None:
+        """Refill at a checkpoint so the first attempt and retries start alike."""
+        self.hp = self.max_hp
+        self._state = "active"
+        self._return_timer = 0
+        self._invincible_timer = 0
+        self._blink_visible = True
+        self.refill_supply()
+        self.reseed_trail(player)
+
+    def refill_supply(self) -> None:
+        self.supply_spent = 0
+        self._supply_timer = self._supply_interval()
+
     def _tick_supply(self, dt: float) -> None:
         # 補給: 回復アイテムを前方へ射出（Lv1+。頻度はLvで上昇）
         if self.lv_supply <= 0 or self._spawn_heal_fn is None:
             return
+        remaining = SUPPLY_BUDGET[self.lv_supply] - self.supply_spent
+        if remaining <= 0:
+            return
         self._supply_timer -= dt
         if self._supply_timer <= 0.0:
             self._supply_timer = self._supply_interval()
+            amount = min(10, remaining)
+            self.supply_spent += amount
             try:
-                self._spawn_heal_fn()
+                self._spawn_heal_fn(amount)
+                if self.supply_spent >= SUPPLY_BUDGET[self.lv_supply]:
+                    self._popup("補給切れ / 次の休息地点で補充", (170,205,195))
             except Exception:
                 pass
 

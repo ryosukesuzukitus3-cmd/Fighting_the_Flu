@@ -1,5 +1,6 @@
 {
   "stage_id": 1,
+  "learning": {"checkpoint_x": 2600, "encounter_x": 2720, "name": "咳の三連射", "waves": 2, "emitter_hp": 28, "pattern": 1, "cycle": 5.2},
   "bgm": "The_world_of_spirit_short.mp3",
   "boss_terrain_mode": "preplaced",
   "random_drop_scale": 0.55,
@@ -468,15 +469,14 @@
     {"type": "Terrain", "screen_x": 716, "y": 430, "w": 108, "h": 70, "kind": "clot", "destructible": true, "hp": 5, "drop_chance": 0.12, "material_role": "breakable_block", "material_asset": "clot_wide:15"}
   ],
   "world_events": [
-    {"type": "weapon_gate", "x": 1775, "y": 215, "w": 120, "h": 240, "kind": "clot", "hp": 12, "material_role": "breakable_block", "material_asset": "clot_gate:1", "draw_order": 364},
+    {"type": "weapon_gate", "x": 1775, "y": 215, "w": 120, "h": 240, "kind": "clot", "hp": 12, "material_role": "breakable_block", "material_asset": "clot_gate:1", "draw_order": 364, "fixed_drop": "WeaponItem"},
     {"type": "BossGate", "trigger_x": 7330, "lock_camera_x": 6530, "player_limit_x": 7330},
     {"type": "Boss", "x": 8040, "count": 1, "formation": "single", "preload": 0},
     {"type": "breakable_gate", "x": 5879, "y": 312, "w": 120, "h": 240, "kind": "clot", "hp": 18, "drop_chance": 0.03, "material_role": "breakable_block", "material_asset": "clot_gate:1"},
-    {"type": "weapon_gate", "x": 6016, "y": 388, "w": 110, "h": 170, "kind": "clot", "hp": 18, "material_role": "breakable_block", "material_asset": "clot_gate:1"},
+    {"type": "weapon_gate", "x": 6016, "y": 388, "w": 110, "h": 170, "kind": "clot", "hp": 18, "material_role": "breakable_block", "material_asset": "clot_gate:1", "fixed_drop": "WeaponItem"},
     {"type": "EnemyVirus", "x": 5278, "count": 9, "formation": "v_shape", "anchor_y": 298},
     {"type": "EnemyCrawler", "x": 6359, "count": 1, "surface": "bottom", "surface_offset": 22},
     {"type": "EnemyTakeshi", "x": 4411, "count": 5, "formation": "line", "anchor_y": 303},
-    {"type": "EnemyPachemon", "x": 3375, "count": 2, "formation": "line", "anchor_y": 320},
     {"type": "EnemyPachemon", "x": 4170, "count": 2, "formation": "line", "anchor_y": 351},
     {"type": "EnemyVirus", "x": 780, "count": 1, "formation": "single", "anchor_y": 274},
     {"type": "EnemyVirus", "x": 705, "count": 2, "formation": "line", "anchor_y": 347},
@@ -486,11 +486,8 @@
     {"type": "EnemyTakeshi", "x": 1484, "count": 1, "formation": "single", "anchor_y": 314},
     {"type": "EnemyPachemon", "x": 2044, "count": 1, "formation": "single", "anchor_y": 311},
     {"type": "EnemyTurret", "x": 2676, "count": 1, "surface": "top", "surface_offset": 22},
-    {"type": "EnemyTurret", "x": 2919, "count": 1, "surface": "top", "surface_offset": 22},
     {"type": "EnemyVirus", "x": 2766, "count": 1, "formation": "single", "anchor_y": 410},
-    {"type": "EnemyVirus", "x": 2977, "count": 1, "formation": "single", "anchor_y": 473},
-    {"type": "EnemyTakeshi", "x": 3168, "count": 1, "formation": "single", "anchor_y": 460},
-    {"type": "EnemyBilly", "x": 3812, "count": 1, "y": 450}
+    {"type": "EnemyBilly", "x": 2320, "count": 1, "y": 450, "fixed_drop": "WeaponItem"}
   ],
   "events": []
 }

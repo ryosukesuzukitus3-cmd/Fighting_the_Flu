@@ -305,7 +305,7 @@ class EnemySpawner:
                 world_x = self._terrain_world_x(event, camera)
                 destructible = bool(event.get("destructible", enemy_type in {"gate", "breakable_gate", "weapon_gate"}))
                 fixed_drop = event.get("fixed_drop")
-                if enemy_type == "weapon_gate" and fixed_drop is None:
+                if enemy_type == "weapon_gate" and "fixed_drop" not in event:
                     fixed_drop = "WeaponItem"
                 material_role = event.get("material_role")
                 if material_role is None:

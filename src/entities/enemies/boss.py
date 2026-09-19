@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 # 将棋駒の駒種別の軌道は src/entities/bullets/shogi_bullet.py に定義（歩=直進ほか）
 _PHASE_CONFIGS: dict[str | int, list[tuple]] = {
     1: [   # 薄い扇を読んで動き、後半は同じ狙いへ前進圧力を加える。
-        (1.00, "fan5", 1.7),
+        (1.00, "fever_lunge", 1.7),
         (0.50, "fever_lunge", 1.45),
     ],
     2: [   # 大技を避けて、撃ち終わりへ戻って反撃する。
@@ -168,7 +168,7 @@ _TURRET_STUN_MULT  = 1.8   # スタン中の被ダメ倍率
 
 
 _COUNTER_GUARD_MULT = 0.20
-_COUNTER_OPEN_DUR = 2.4
+_COUNTER_OPEN_DUR = 1.8
 
 
 class Boss(pygame.sprite.Sprite):
@@ -209,6 +209,7 @@ class Boss(pygame.sprite.Sprite):
         self._armor:      int   = _ARMOR_MAX
         self._weak_timer: float = 0.0
         self._counter_wait = 0.0
+        self._laser_chain_step = 0
         self._damage_fraction = 0.0
         # turrets（game_scene が summon_turret_fn を注入。呼ぶと砲台リストを返す）
         self.summon_turret_fn = None           # Callable[[int], list] | None
@@ -380,6 +381,7 @@ class Boss(pygame.sprite.Sprite):
         self._down_timer = 0.0
         self._stance_regen_wait = 0.0
         self._counter_wait = 0.0
+        self._laser_chain_step = 0
         self._damage_fraction = 0.0
         self._beam_charge_pattern = None
         self._fight_time = 0.0
@@ -456,7 +458,7 @@ class Boss(pygame.sprite.Sprite):
         if self._beam_charge_pattern != pattern:
             self._beam_charge_pattern = None
         if (self.suction_active or self._beam_charge_pattern is not None
-                or self._counter_wait > 0 or self.is_stance_down):
+                or self._counter_wait > 0 or self._laser_chain_step > 0 or self.is_stance_down):
             return
         style = _MOVE_STYLES.get(self._form_key())
         mid_y = SCREEN_HEIGHT / 2.0
@@ -526,6 +528,17 @@ class Boss(pygame.sprite.Sprite):
             return self._counter_wait > 0 or self._weak_timer > 0
 
         if gimmick == "shield":
+            if self._stage_id == 1:
+                # The opening follows the lunge beam; no unrelated shield timer
+                # inserts an unannounced ring into this teaching pattern.
+                if self._counter_wait > 0:
+                    self._counter_wait -= dt
+                    if self._counter_wait <= 0:
+                        self._counter_wait = 0
+                        self._shield_active = False
+                        self._down_timer = 1.6
+                        self.down_just_started = True
+                return self._counter_wait > 0 or self._down_timer > 0
             self._shield_timer -= dt
             if self._shield_timer <= 0:
                 if self._shield_active:
@@ -643,6 +656,43 @@ class Boss(pygame.sprite.Sprite):
             frames=zunda_beam_frames(self.game.resources),
             frame_mode="progress",
         )
+
+    def _shoot_laser_chain(self, bullets, player, pattern):
+        super_beam = pattern == "super_laser"
+        step = self._laser_chain_step
+        if step in (0, 2):
+            height = (_SUPER_BEAM_HEIGHT if super_beam else 210) if step == 0 else (140 if super_beam else 110)
+            duration = (1.7 if super_beam else 1.15) if step == 0 else 1.15
+            self._beam_charge_y = self.sy if step == 0 else max(190., min(410., float(player.hit_rect.centery)))
+            self._beam_charge_height = height
+            self._beam_charge_pattern = pattern
+            self._active_warning = self._charge_beam(self._beam_charge_y, duration + .1, height)
+            bullets.add(self._active_warning)
+            self.suction_active = bool(super_beam and step == 0)
+            self.suction_x, self.suction_y = self.sx, self._beam_charge_y
+            self._suction_timer = duration if self.suction_active else 0
+            self._shoot_delay_override = duration
+        else:
+            by = self._beam_charge_y
+            if getattr(self, "_active_warning", None) is not None:
+                self._active_warning.kill()
+            self._beam_charge_pattern = None
+            self.suction_active = False
+            self._suction_timer = 0
+            lifetime = .9 if super_beam and step == 1 else .75
+            bullets.add(self._mega_beam(by, height=self._beam_charge_height,
+                                       damage=36 if super_beam else 32, lifetime=lifetime))
+            bullets.add(LaserMuzzleFlash(self.sx-18, by, ZUNDA_PALETTE,
+                                         max_radius=100, spikes=10))
+            self.game.sound.play_se_alias("SE_LASER_FIRE", volume=.55)
+            if self.camera:
+                self.camera.shake(5)
+            if step == 3:
+                self._counter_wait = lifetime
+                self._shoot_delay_override = lifetime + _COUNTER_OPEN_DUR + .75
+            else:
+                self._shoot_delay_override = lifetime + .25
+        self._laser_chain_step = (step + 1) % 4
 
     def _forward_aim(self, sx: float, sy: float, player: "Player", tilt: float) -> tuple[float, float]:
         """右端から左へ進む駒に、プレイヤー方向へ控えめな上下の傾きを与える。"""
@@ -936,69 +986,31 @@ class Boss(pygame.sprite.Sprite):
 
         # ── Stage1: 前進突き上げ。突進で距離を詰め、薄い扇と高速弾を重ねる。
         elif pattern == "fever_lunge":
-            for deg in (-30, -15, 0, 15, 30):
-                vx, vy = self._rotated(nx, ny, deg, spd * 1.22)
-                enemy_bullets.add(EnemyBullet(bx, by, vx, vy, color=(255, 95, 75)))
-            if variant % 2 == 0:
-                enemy_bullets.add(EnemyBullet(bx - 28, by, nx * 430, ny * 430, color=(255, 210, 120)))
-
-        # ── Stage2: 巨大レーザー。発射中/直後は弱点が開く。
-        elif pattern == "mega_laser":
-            if self._beam_charge_pattern is None:
+            step = variant % 4
+            if step in (0, 1):
+                self._shield_active = True
+                for deg in (-22, 0, 22):
+                    vx, vy = self._rotated(nx, ny, deg, 205)
+                    enemy_bullets.add(EnemyBullet(bx, by, vx, vy, color=(255,95,75)))
+                self._shoot_delay_override = .75 if step == 0 else 1.1
+            elif step == 2:
                 self._beam_charge_pattern = pattern
-                self._beam_charge_y = by
-                enemy_bullets.add(self._charge_beam(by, 0.95, 210))
-                for off in (-56, 56):
-                    enemy_bullets.add(EnemyBullet(bx, by + off, -165.0, off * 0.04, 8, radius=5, color=(255, 180, 80)))
-                self._shoot_delay_override = 0.95
-            else:
-                by = self._beam_charge_y
-                self._beam_charge_pattern = None
-                enemy_bullets.add(self._mega_beam(by))
-                # 発射の瞬間: 銃口フラッシュ＋強めの画面シェイク＋発射音。
-                enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.28, by,
-                                                   ZUNDA_PALETTE, max_radius=104, spikes=10))
-                self.game.sound.play_se_alias("SE_LASER_FIRE", volume=0.5)
-                if self.camera is not None:
-                    self.camera.shake(8.0)
-                for off in (-88, 88):
-                    enemy_bullets.add(EnemyBullet(bx, by + off, -330.0, off * 0.15, 12, radius=7, color=(255, 120, 70)))
-                self._counter_wait = 0.82
-                self._shoot_delay_override = self._counter_wait + _COUNTER_OPEN_DUR + 0.75
-
-        # ── Stage2 第二形態: 超サイヤ人の極太レーザー。チャージ中は自機を吸引。
-        elif pattern == "super_laser":
-            if self._beam_charge_pattern is None:
-                self._beam_charge_pattern = pattern
-                self._beam_charge_y = by
-                # チャージ: 粒子砲チャージ相（特大）＋自機吸引（heavy_laserを停止）。
-                charge_t = 1.7
-                self.suction_y = by
-                self.suction_x = self.sx
-                self.suction_active = True
-                self._suction_timer = charge_t
-                enemy_bullets.add(self._charge_beam(by, charge_t, _SUPER_BEAM_HEIGHT))
-                if self.camera is not None:
-                    self.camera.shake(2.5)
-                self._shoot_delay_override = charge_t
+                self._beam_charge_y = max(150., min(450., float(player.hit_rect.centery)))
+                self._active_warning = self._charge_beam(self._beam_charge_y, 1.2, 100)
+                enemy_bullets.add(self._active_warning)
+                self._shoot_delay_override = 1.1
             else:
                 self._beam_charge_pattern = None
-                fire_y = self.suction_y          # チャージ位置＝着弾位置（テレグラフ一致）
-                self.suction_active = False
-                self._suction_timer = 0.0
-                enemy_bullets.add(self._super_beam(fire_y))
-                enemy_bullets.add(LaserMuzzleFlash(self.sx - self.rect.width * 0.20, fire_y,
-                                                   ZUNDA_PALETTE, max_radius=170, spikes=12,
-                                                   duration=0.24))
-                self.game.sound.play_se_alias("SE_LASER_FIRE", volume=0.7)
-                if self.camera is not None:
-                    self.camera.shake(18.0)
-                # 吸引で寄せた直後に上下へ抜けさせる圧（避け先は残す）。
-                for off in (-150, -80, 80, 150):
-                    enemy_bullets.add(EnemyBullet(self.sx, fire_y + off, -320.0, off * 0.18,
-                                                  14, radius=7, color=(255, 215, 90)))
-                self._counter_wait = 1.05
-                self._shoot_delay_override = self._counter_wait + _COUNTER_OPEN_DUR + 0.85
+                if getattr(self, "_active_warning", None) is not None:
+                    self._active_warning.kill()
+                enemy_bullets.add(self._mega_beam(self._beam_charge_y, height=100,
+                                                 damage=30, lifetime=.5))
+                self._counter_wait = .5
+                self._shoot_delay_override = .75
+
+        # Two individually telegraphed shots, then the shared counter window.
+        elif pattern in ("mega_laser", "super_laser"):
+            self._shoot_laser_chain(enemy_bullets, player, pattern)
 
         # ── Stage3: 砲台/子機の射線と交差する狙撃。
         elif pattern == "drone_cross":
@@ -1048,15 +1060,14 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage4 Form1: 将棋駒の隊列。歩が並んで直進し、たまに special が混じる。
         elif pattern == "shogi_file":
             rows = (90.0, 190.0, 290.0, 390.0, 490.0)
-            gap = variant % len(rows)
+            gap = (1, 2, 3, 2)[variant % 4]
             spd = 250.0
             # 特殊駒は最大1行だけ（無しの確率も高め＝歩の隊列が主役）。
             special_kind = None
             special_row = -1
-            if random.random() < 0.55:
-                special_kind = random.choices(
-                    ("lance", "knight", "silver", "gold"), weights=(4, 4, 2, 2))[0]
-                special_row = random.choice([i for i in range(len(rows)) if i != gap])
+            if variant % 3 == 2:
+                special_kind = "lance"
+                special_row = (gap + 2) % len(rows)
             for i, sy in enumerate(rows):
                 if i == gap:
                     continue
@@ -1068,7 +1079,7 @@ class Boss(pygame.sprite.Sprite):
         # ── Stage4 Form2: 角/飛/龍 解禁。歩の隊列に大駒の猛攻が重なる。
         elif pattern == "shogi_storm":
             rows = (80.0, 170.0, 260.0, 350.0, 440.0, 530.0)
-            gap = variant % len(rows)
+            gap = (1, 2, 3, 2)[variant % 4]
             spd = 285.0
             for i, sy in enumerate(rows):
                 if i == gap:

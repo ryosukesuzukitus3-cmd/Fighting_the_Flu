@@ -40,20 +40,21 @@ def continue_run(game, stage):
     return scene
 
 
-def test_stage_one_continue_consumes_lives_and_restores_stage_loadout(scene):
+def test_stage_one_continue_restores_checkpoint_and_does_not_exhaust_retries(scene):
     game = scene.game
     game.shared.score, game.shared.kill_count = 1234, 12
-    game.shared.stage_start_weapon["main_level"] = 2
-    game.shared.stage_start_companion["lv_shot"] = 1
-    for remaining in (2, 1, 0):
-        resumed = continue_run(game, 1)
-        assert game.shared.lives == remaining
+    scene.player.weapon.main_level = 2
+    scene._companion.lv_shot = 1
+    scene._save_checkpoint('road', 'test rest')
+    for _ in range(4):
+        scene.player.weapon.main_level = 4
+        game.shared.score += 100
+        scene = continue_run(game, 1)
+        assert scene is not None
         assert game.shared.score == 1234 and game.shared.kill_count == 12
-        assert resumed.player.hp == resumed.player.max_hp
-        assert resumed.player.weapon.main_level == 2
-        assert resumed._companion.lv_shot == 1
-    assert continue_run(game, 1) is None
-    assert game.shared.lives == 0
+        assert scene.player.hp == scene.player.max_hp
+        assert scene.player.weapon.main_level == 2
+        assert scene._companion.lv_shot == 1
 
 
 def test_continue_rewinds_final_chapter_story_but_retry_starts_a_new_journey(scene):
@@ -122,6 +123,7 @@ def test_first_authored_gate_teaches_both_upgrade_trees(scene):
     scene._strike_terrain(terrain, gate["hp"], *terrain.rect.center, allow_damage=True)
     item = next(iter(scene.items))
     assert type(item).__name__ == "WeaponItem"
+    scene.game.shared.support_pickups = 1  # This pickup earns the first support point.
     scene._pickup_weapon_item()
     assert scene._upgrading
     assert scene.player.weapon.weapon_stock == scene._companion.stock == 1

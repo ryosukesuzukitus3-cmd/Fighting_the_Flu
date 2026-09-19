@@ -466,3 +466,22 @@ MarkdownのローカルHTML化も任意。ファイルを明示した場合だ�
 `stage-report` は章JSONを800pxごとの敵数・確定強化報酬と座標順のイベントに整理する。
 `--window` で区間幅を指定できる。人向け設計ツールと同じJSONを読み、別の配置データを作らない。
 集計は配置数であり、同時に生きている敵数や通路の安全性ではない。実プレイで裏付ける。
+
+
+### 配分・道中難所の比較 (`challenge-lab`)
+
+本編の道中難所またはボス部屋に、章の上限以内の強化を準備して比較する。
+ロード後のHP補正や強制撃破は行わず、通常と同じ全フレーム更新・描画・衝突判定を通す。
+
+```powershell
+.venv\Scripts\python tools/run.py challenge-lab --stage 2 --kind boss --build mobility --output captures/challenge-mobility
+.venv\Scripts\python tools/run.py challenge-lab --stage 1 --kind road --policy reactive --output captures/challenge-reactive
+```
+
+- `--build balanced|mobility|laser|homing`: 同じポイント数で配分を変更。各配分・ポイント数は `scenario_setup` に保存。
+- `--policy planned|reactive|stationary`: 先読み、近い危険への反応、移動なし。先読みと反応は共に12フレーム（200ms）ごとに入力を決定。反応側も地形と近い弾の向きを見て横へ避けるが、将来位置や次の攻撃順は読まない。
+- `--kind road|boss`: 道中難所またはボス（4章は最終決戦まで）。道中の初期地点は直前の休息地点。
+- `--seed` と `--seconds`: 乱数種と試行上限。`trial.json` に結果・戦闘時間・HP・被弾原因、被弾画像と操作履歴を保存。
+- いずれも内部座標を利用する診断であり、人間の初見死亡数を測るものではない。
+- `stage-report` は難所の設定と章のW配置総数も出力する。明示的な `fixed_drop: null` は報酬に数えない。
+- `agent-campaign` は通常開始からの取得・強化選択・再挑戦・エンディング進行を検証する。ゲームには再挑戦上限を設けず、検証操作だけ12回で停止する。

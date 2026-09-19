@@ -76,6 +76,7 @@ def finish_defeat_dialogue(game, scene):
 
 def test_post_boss_upgrade_freezes_walk_then_carries_both_choices(game):
     scene = make_scene(game)
+    game.shared.support_pickups = 1
     scene.items.add(WeaponItem(scene.camera.to_world_x(scene.player.rect.centerx),
                                scene.player.rect.centery))
     game.step(DT, [], allow_debug=False)
@@ -115,7 +116,7 @@ def test_post_boss_upgrade_freezes_walk_then_carries_both_choices(game):
     assert scene.player.weapon.weapon_stock == scene._companion.stock == 0
 
     game.step(DT, [key_event(game, pygame.KEYDOWN, "move_right")], allow_debug=False)
-    for _ in range(180):
+    for _ in range(420):
         if game._next_scene is not None:
             break
         game.step(DT, [], allow_debug=False)

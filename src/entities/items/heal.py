@@ -12,4 +12,4 @@ class HealItem(Item):
     label = "+"
 
     def apply(self, player: Player) -> None:
-        player.hp = min(player.hp + HEAL_AMOUNT, player.max_hp)
+        player.hp = min(player.hp + getattr(self, "heal_amount", HEAL_AMOUNT), player.max_hp)

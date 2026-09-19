@@ -177,7 +177,7 @@ def test_new_asset_files_decode_match_provenance_and_are_credited(stage):
             assert pygame.mixer.Sound(file).get_length() > 0
 
 
-@pytest.mark.parametrize("stage_id,ratio,warning_duration", [(2,.65,.95),(4,.56,.85)])
+@pytest.mark.parametrize("stage_id,ratio,warning_duration", [(2,.65,1.15),(4,.56,.85)])
 def test_boss_beams_always_warn_at_the_firing_position(stage, stage_id, ratio, warning_duration):
     from src.entities.enemies.boss import Boss
     from src.entities.bullets.laser_fx import LaserBeamSprite

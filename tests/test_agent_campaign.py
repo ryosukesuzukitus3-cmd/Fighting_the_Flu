@@ -244,7 +244,7 @@ def test_damage_evidence_keeps_previous_positions_after_bullet_disappears(tmp_pa
         assert event["previous_player_rect"] == previous_player
         assert event["previous_attacks"] == [{
             "kind": "EnemyBullet", "rect": previous_rect, "vx": -215, "vy": 0,
-            "damage": 10, "warning": False, "terrain_bounced": True,
+            "damage": 20, "warning": False, "terrain_bounced": True,
         }]
         assert event["nearby_attacks"] == []
         bot.note(session.command({"step": 1, "actions": []}))
@@ -268,6 +268,7 @@ def post_boss_campaign(tmp_path, request):
         # This fixture starts at a defeat; all subsequent collection, choices
         # and departure use the same input commands as a campaign run.
         game.shared.upgrade_tutorial_shown = True
+        game.shared.support_pickups = 1
         scene = GameScene(game, stage_id=stage)
         game.change_scene(scene)
         session.command({"step": 1, "actions": []})
@@ -334,8 +335,8 @@ def test_post_boss_collects_upgrades_then_walks_to_next_chapter(
     assert scene._post_boss_timer < POST_BOSS_AUTO_TIMEOUT
     assert scene.player.sx >= 760
     assert scene.player.hp == 100
-    assert scene.player.weapon.main_level == 1
-    assert scene._companion.lv_supply == 1
+    assert scene.player.weapon.speed_level == 1
+    assert scene._companion.lv_hp == 1
     assert scene.player.weapon.weapon_stock == scene._companion.stock == 0
     assert session.game.shared.carry_weapon == scene.player.weapon.snapshot()
     assert session.game._scene._next_stage_id == 2
@@ -346,7 +347,7 @@ def test_post_boss_collects_upgrades_then_walks_to_next_chapter(
             break
     assert isinstance(session.game._scene, GameScene)
     assert session.game._scene._stage_id == 2
-    assert session.game._scene.player.weapon.main_level == 1
+    assert session.game._scene.player.weapon.speed_level == 1
     assert session.frame - start < 60 * 45
 
 

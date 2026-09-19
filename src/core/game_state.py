@@ -14,7 +14,11 @@ class GameState:
     stage:      int = 1
 
     # 残機（コンティニュー可能回数）
-    lives: int = 3
+    lives: int = 3  # 旧記録との互換用。通常の再挑戦回数は制限しない
+    deaths: int = 0
+    support_pickups: int = 0
+    checkpoint: dict | None = None
+    resume_checkpoint: bool = False
 
     # ステージ引き継ぎ（ボス撃破→StageClear 間のみ使用。pop 相当で取得後は None にする）
     carry_hp:     int | None  = None

@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         print(
             "usage: python tools/run.py "
-            "{check|test|docs|docs-check|balance|game|playtest|agent-playtest|agent-campaign|combat-lab|stage-report|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage-terrain-composer|stage-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
+            "{check|test|docs|docs-check|balance|game|playtest|agent-playtest|agent-campaign|combat-lab|challenge-lab|stage-report|capture|preview-boss|stage-rect-preview|stage-rect-editor|stage-alpha-mask-editor|stage-terrain-composer|stage-composer-report|stage-designer|boss-concepts|dialogues|dummies|pr-media|pr-html|pr-report|pycompile} "
             "[args...]"
         )
         return 0
@@ -67,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         "game":       ([py, "main.py", *argv], False),
         "playtest":   ([py, "-u", "tools/playtest.py", *argv], False),
         "combat-lab": ([py, "tools/combat_lab.py", *argv], True),
+        "challenge-lab": ([py, "tools/challenge_lab.py", *argv], True),
         "stage-report": ([py, "tools/stage_report.py", *argv], True),
         "agent-campaign": ([py, "tools/agent_campaign.py", *argv], True),
         "agent-playtest": ([py, "-u", "tools/agent_playtest.py", *argv], False),

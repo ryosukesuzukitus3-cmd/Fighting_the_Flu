@@ -17,7 +17,7 @@ _SHAKE_AMOUNT   = 5      # 震れ幅 px
 
 
 class EnemyBilly(Enemy):
-    """ビリー・ヘリントン。HP 高く動き鈍い。被弾ごとにアｯー♂と震え。必ず W ドロップ。"""
+    """ビリー・ヘリントン。HP 高く動き鈍い。被弾ごとにアｯー♂と震え。回復1個。W は章の配置指定に従う。"""
 
     # クラスレベル画像キャッシュ
     _base_image: pygame.Surface | None = None

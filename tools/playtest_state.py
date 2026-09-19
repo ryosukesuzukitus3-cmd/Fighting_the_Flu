@@ -86,7 +86,7 @@ def observe(game, diagnostic=False):
     scene = game._scene
     result = {'scene': type(scene).__name__, 'mode': mode(scene),
               'score': game.shared.score, 'stage': game.shared.stage,
-              'lives': game.shared.lives}
+              'lives': game.shared.lives, 'deaths': game.shared.deaths}
     dialogue = _dialogue(scene)
     if dialogue:
         result['dialogue'] = dialogue
@@ -143,6 +143,16 @@ def observe(game, diagnostic=False):
         if final:
             extra['final'] = {'phase': final.phase, 'seq': final.seq,
                               'gate_released': final._gate_released}
+        encounter = getattr(scene, '_learning_encounter', None)
+        if encounter:
+            extra['encounter'] = {'wave': encounter.wave, 'time': round(encounter.time, 3),
+                                  'event': encounter.next_event, 'name': encounter.config['name']}
+        if game.shared.checkpoint:
+            cp = game.shared.checkpoint
+            extra['checkpoint'] = {k: cp[k] for k in ('kind', 'label', 'camera_x')}
+        extra['support_pickups'] = game.shared.support_pickups
+        if companion:
+            extra['companion']['supply_spent'] = companion.supply_spent
         extra['story'] = game.story.snapshot()
         extra['kills'] = game.shared.kill_count
         result['diagnostic'] = extra

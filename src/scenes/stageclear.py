@@ -34,7 +34,7 @@ class StageClearScene(Scene):
         self._kills      = self.game.shared.kill_count
         self._remaining_hp = self.game.shared.carry_hp
         self._weapon     = self.game.shared.carry_weapon or {}
-        self._lives      = self.game.shared.lives
+        self._deaths     = self.game.shared.deaths
         self._timer      = 0.0
         self.game.sound.stop_bgm(fadeout_ms=600)
 
@@ -84,7 +84,7 @@ class StageClearScene(Scene):
             ("累計撃破数", f"{self._kills:,} 体"),
             ("残りHP", "—" if self._remaining_hp is None else f"{self._remaining_hp} / {PLAYER_MAX_HP}"),
             ("メイン武器", Weapon._MAIN_LEVELS[main_level].upper()),
-            ("残り有給", f"{self._lives} 日"),
+            ("累計の再挑戦", f"{self._deaths} 回"),
         ]
         for i, (label, value) in enumerate(stats):
             y = panel.y + 24 + i * 49
