@@ -292,7 +292,7 @@ class FinalBattleDirector:
         self._final_phase = 1
         self._final_seq   = ""
         self._show_final_banner("true_final", 3.0)
-        self._play_final_dialogue(BOSS_FORM3_INTRO, on_done=lambda: None)
+        self._play_final_dialogue(BOSS_FORM3_INTRO, on_done=lambda: scene._save_checkpoint("final", "最終決戦"))
 
     # ── 内部: バナー / セリフ ─────────────────────────────────────
     def _show_final_banner(self, key: str, duration: float = 2.6) -> None:
@@ -517,6 +517,7 @@ class FinalBattleDirector:
 
     def _resume_final_combat(self) -> None:
         self._final_seq = ""
+        self.scene._save_checkpoint("final_pair", "ふたりの最終決戦")
 
     def _start_final_sengen(self) -> None:
         self._final_seq = "final_sengen"

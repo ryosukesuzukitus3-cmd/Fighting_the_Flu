@@ -28,7 +28,7 @@ class GameOverScene(Scene):
         self._score = self.game.shared.score
         self._stage = self.game.shared.stage
         self._lives = self.game.shared.lives
-        self._options = (["continue"] if self._lives > 0 else []) + ["retry", "title"]
+        self._options = ["continue", "retry", "title"]
         self._cursor = 0
         if self._score > 0:
             self.game.highscore.add("---", self._score, self._stage)
@@ -37,27 +37,27 @@ class GameOverScene(Scene):
         pass
 
     def _do_continue(self) -> None:
-        """現在のステージをステージ開始時のウェポン・先輩強化状態で再スタート。"""
-        if self.game.shared.lives <= 0:
-            return
-        self.game.shared.lives -= 1
+        """Restore the last rest point without a retry limit or reward duplication."""
+        import copy
+        shared = self.game.shared
+        cp = shared.checkpoint
         self.game.playlog.begin_run()
-        if self.game.shared.stage_start_story is not None:
-            self.game.story.restore(self.game.shared.stage_start_story)
-        stage = self._stage
-        wdata = self.game.shared.stage_start_weapon
-        # HP は最大100制。コンティニューは全回復（残機消費が十分なペナルティ）。
-        if wdata is not None:
-            self.game.shared.carry_hp     = PLAYER_MAX_HP
-            self.game.shared.carry_weapon = wdata
+        if cp and cp["stage"] == self._stage:
+            self.game.story.restore(cp["story"])
+            shared.carry_hp = PLAYER_MAX_HP
+            shared.carry_weapon = copy.deepcopy(cp["weapon"])
+            shared.carry_companion = copy.deepcopy(cp["companion"])
+            shared.score, shared.kill_count = cp["score"], cp["kills"]
+            shared.support_pickups = cp["support_pickups"]
+            shared.resume_checkpoint = True
         else:
-            self.game.shared.carry_hp     = PLAYER_MAX_HP
-            self.game.shared.carry_weapon = None
-        # 先輩の強化もステージ開始時の状態で復元（死亡でリセットさせない）
-        cdata = self.game.shared.stage_start_companion
-        self.game.shared.carry_companion = dict(cdata) if cdata else None
+            if shared.stage_start_story:
+                self.game.story.restore(shared.stage_start_story)
+            shared.carry_hp = PLAYER_MAX_HP
+            shared.carry_weapon = copy.deepcopy(shared.stage_start_weapon)
+            shared.carry_companion = copy.deepcopy(shared.stage_start_companion)
         from src.scenes.game_scene import GameScene
-        self.game.change_scene(GameScene(self.game, stage_id=stage))
+        self.game.change_scene(GameScene(self.game, stage_id=self._stage))
 
     def _do_retry(self) -> None:
         """ステージ1からやり直し（残機リセット）。"""
@@ -108,17 +108,17 @@ class GameOverScene(Scene):
             fit_text(self._info_font, f"スコア {self._score:,}", 400), False, TEXT,
         )
         screen.blit(score, score.get_rect(right=706, y=205))
-        life_text = f"残り有給 {self._lives}日" if self._lives else "有給は残っていません"
+        life_text = f"再挑戦 {self.game.shared.deaths}回 / 回数制限なし"
         life = self._hint_font.render(fit_text(self._hint_font, life_text, 612), False, accent)
         screen.blit(life, (94, 247))
         labels = {
-            "continue": "有給を1日使って続ける",
+            "continue": "直前の休息地点から再挑戦",
             "retry": "最初からやり直す",
             "title": "タイトルへ戻る",
         }
         details = {
-            "continue": "今の章をHP全回復・章開始時の強化で再開",
-            "retry": "スコア・強化・有給を初期状態にして第一章へ",
+            "continue": "HP全回復・休息地点の強化で再開",
+            "retry": "スコア・強化を初期状態にして第一章へ",
             "title": "このプレイを終えてタイトルへ",
         }
         for i, option in enumerate(self._options):

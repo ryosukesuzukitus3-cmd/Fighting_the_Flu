@@ -26,9 +26,10 @@ def stage_report(stage_id: int, width: int = 800) -> dict:
         windows.append(dict(start=start,end=min(end,start+width),enemies=dict(counts),
                             rewards=[dict(x=e['x'], source=e['type'],
                                           item=e.get('fixed_drop', 'WeaponItem'))
-                                     for e in subset if e['type'] in ('weapon_gate', 'EnemyBilly')
-                                     or e.get('fixed_drop') == 'WeaponItem']))
-    return dict(stage=stage_id,boss_gate=end,window_width=width,windows=windows,
+                                     for e in subset if e.get('fixed_drop', 'WeaponItem' if e['type']=='weapon_gate' else None) == 'WeaponItem']))
+    return dict(stage=stage_id,learning=data.get('learning'),
+                weapon_points=sum(e.get('count',1) for e in events if e.get('fixed_drop')=='WeaponItem'),
+                boss_gate=end,window_width=width,windows=windows,
                 events=[{k:v for k,v in e.items() if k in ('type','x','trigger_x','count',
                         'formation','anchor_y','y','hp','enhanced','preload','fixed_drop')} for e in events],
                 limitation='Authored placement only; validate reachability and pressure in actual gameplay')

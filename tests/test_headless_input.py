@@ -32,10 +32,10 @@ def scene(tmp_path, monkeypatch):
 def test_player_laser_follows_binding_and_ignores_old_default(scene):
     assert scene.game.settings.set_key_binding("laser", pygame.K_l)
     inp = scene.game.input
-    inp.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+    inp.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_b))
     scene.player.update(0.1)
     assert not scene.player.laser_fire_held
-    inp.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_SPACE))
+    inp.handle_event(pygame.event.Event(pygame.KEYUP, key=pygame.K_b))
     inp.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_l))
     scene.player.update(0.1)
     assert scene.player.laser_fire_held

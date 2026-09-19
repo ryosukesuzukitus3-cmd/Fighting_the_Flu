@@ -45,7 +45,7 @@ def test_legacy_speed_is_capped_and_each_upgrade_is_useful():
     previous=1
     for _ in range(_SPEED_MAX_LEVEL):
         weapon.upgrade('speed')
-        assert previous < weapon.speed_multiplier <= 1.4
+        assert previous < weapon.speed_multiplier <= 1.75
         previous=weapon.speed_multiplier
     weapon.restore({'speed_level':5})
     assert weapon.speed_at_max

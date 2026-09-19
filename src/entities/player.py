@@ -16,9 +16,8 @@ if TYPE_CHECKING:
     from src.core.game import Game
     from src.core.camera import Camera
 
-from src.core.balance import PLAYER_MAX_HP, PLAYER_INVINCIBLE
+from src.core.balance import PLAYER_BASE_SPEED, PLAYER_MAX_HP, PLAYER_INVINCIBLE
 
-_SPEED           = 280.0
 _MAX_HP          = PLAYER_MAX_HP   # 多段階 HP ゲージ（最大100）
 _INVINCIBLE_TIME = PLAYER_INVINCIBLE
 _BLINK_INTERVAL  = 0.1
@@ -100,7 +99,7 @@ class Player(pygame.sprite.Sprite):
             dx *= math.sqrt(0.5)
             dy *= math.sqrt(0.5)
 
-        spd = _SPEED * self.weapon.speed_multiplier
+        spd = PLAYER_BASE_SPEED * self.weapon.speed_multiplier
         new_sx = max(0.0, min(SCREEN_WIDTH  - self.rect.width,  self.sx + dx * spd * dt))
         new_sy = max(0.0, min(SCREEN_HEIGHT - self.rect.height, self.sy + dy * spd * dt))
 

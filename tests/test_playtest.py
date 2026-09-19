@@ -101,7 +101,7 @@ def test_movement_and_shooting_hold_and_release_independently(bridge):
     player = Player(game)
     player._entering = False
     player.sx, player.sy = 120.0, 200.0
-    controller.submit('{"press":["right","z","space"],"seconds":1.0}')
+    controller.submit('{"press":["right","z","b"],"seconds":1.0}')
     frame(0.0)
     player.update(0.1)
     assert player.sx > 120.0

@@ -72,7 +72,7 @@ class HUD:
         self._text(screen, "危険" if ratio <= 0.3 else "", x1 + col_w - 54, 12, 54, hp_color)
         self._meter(screen, (x1, 36, col_w, 12), ratio, hp_color)
         self._text(screen, f"得点 {score:,}", x1, 59, col_w - 85, muted, 14)
-        self._text(screen, f"有給 {max(0, lives)}日", x1 + col_w - 80, 59, 80, muted, 14)
+        self._text(screen, "再挑戦 ∞", x1 + col_w - 80, 59, 80, muted, 14)
 
         # Separate the main weapon, add-ons, and upgrade prompt into fixed rows.
         self._text(screen, f"メイン {w.main_type.upper()}", x2, 10, col_w - 70, white, 16)

@@ -244,7 +244,7 @@ def test_damage_evidence_keeps_previous_positions_after_bullet_disappears(tmp_pa
         assert event["previous_player_rect"] == previous_player
         assert event["previous_attacks"] == [{
             "kind": "EnemyBullet", "rect": previous_rect, "vx": -215, "vy": 0,
-            "damage": 10, "warning": False, "terrain_bounced": True,
+            "damage": 20, "warning": False, "terrain_bounced": True,
         }]
         assert event["nearby_attacks"] == []
         bot.note(session.command({"step": 1, "actions": []}))
@@ -268,6 +268,7 @@ def post_boss_campaign(tmp_path, request):
         # This fixture starts at a defeat; all subsequent collection, choices
         # and departure use the same input commands as a campaign run.
         game.shared.upgrade_tutorial_shown = True
+        game.shared.support_pickups = 1
         scene = GameScene(game, stage_id=stage)
         game.change_scene(scene)
         session.command({"step": 1, "actions": []})
@@ -334,8 +335,8 @@ def test_post_boss_collects_upgrades_then_walks_to_next_chapter(
     assert scene._post_boss_timer < POST_BOSS_AUTO_TIMEOUT
     assert scene.player.sx >= 760
     assert scene.player.hp == 100
-    assert scene.player.weapon.main_level == 1
-    assert scene._companion.lv_supply == 1
+    assert scene.player.weapon.speed_level == 1
+    assert scene._companion.lv_hp == 1
     assert scene.player.weapon.weapon_stock == scene._companion.stock == 0
     assert session.game.shared.carry_weapon == scene.player.weapon.snapshot()
     assert session.game._scene._next_stage_id == 2
@@ -346,7 +347,7 @@ def test_post_boss_collects_upgrades_then_walks_to_next_chapter(
             break
     assert isinstance(session.game._scene, GameScene)
     assert session.game._scene._stage_id == 2
-    assert session.game._scene.player.weapon.main_level == 1
+    assert session.game._scene.player.weapon.speed_level == 1
     assert session.frame - start < 60 * 45
 
 
@@ -443,12 +444,15 @@ def test_precision_hold_can_reach_safe_lane_without_crossing_ceiling():
     ceiling = SimpleNamespace(rect=pygame.Rect(0, 0, 500, 120), collidable=True)
     bot, scene, beam = _movement_fixture((0, 156, 585, 210), terrain=[ceiling])
     scene.player.rect.center = (224, 169)
-    scene.player.weapon.speed_multiplier = 1.12
+    from src.core.balance import PLAYER_BASE_SPEED
+    scene.player.weapon.speed_multiplier = 1.25
+    # At the lower speed, use a longer decision interval to exercise overshoot.
+    bot.interval = 24
     beam.vx = beam.vy = 0
     beam.warning_only = True
     actions, _ = bot.movement(scene)
     assert "move_up" in actions
     assert bot._planned_move_frames < bot.interval
-    hit = scene.player.hit_rect.move(0, -int(280 * 1.12 * bot._planned_move_frames / 60))
+    hit = scene.player.hit_rect.move(0, -int(PLAYER_BASE_SPEED * 1.25 * bot._planned_move_frames / 60))
     assert not hit.colliderect(ceiling.rect)
     assert not hit.colliderect(beam.rect)

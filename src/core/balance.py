@@ -25,20 +25,21 @@ ENEMY_SPD_SCALE: dict[int, float] = {
 }
 
 # ── プレイヤー HP / 被ダメージ設計（HP ゲージ・最大100）─────────────
+PLAYER_BASE_SPEED    = 140.0 # 初期移動速度（px/秒）。速度強化前は従来280の半分
 PLAYER_MAX_HP        = 100   # 多段階 HP ゲージの最大値
 PLAYER_INVINCIBLE    = 0.8   # 被弾後の無敵時間（秒）
 
 # 被ダメージ量（被弾源別）
-PLAYER_DMG_ENEMY     = 15    # 雑魚との接触
-PLAYER_DMG_BULLET    = 10    # 敵弾・ボス弾（EnemyBullet.damage 未指定時の既定）
+PLAYER_DMG_ENEMY     = 22    # 雑魚との接触
+PLAYER_DMG_BULLET    = 20    # 敵弾・ボス弾（EnemyBullet.damage 未指定時の既定）
 PLAYER_DMG_BOSS      = 25    # ボス本体との接触
 PLAYER_DMG_TERRAIN   = 8     # 地形との接触（i-frame で連続接触を間引く）
 
-HEAL_AMOUNT          = 30    # HealItem の回復量
+HEAL_AMOUNT          = 20    # HealItem の回復量
 
 # 先輩（カロナール）が接触した敵へ与える反撃ダメージ
 KARONARU_CONTACT_DMG = 12
-BOSS_SUCTION_SPEED = 125.0  # 超サイヤ人の予告中の吸引（px/秒）
+BOSS_SUCTION_SPEED = 50.0  # 超サイヤ人の予告中の吸引（px/秒）
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -73,6 +74,9 @@ STANCE_LASER_TICK = 3.0
 # ── 体温オーバーヒート（プレイヤー）─────────────────────────────
 # レーザーの発射・継続で発熱し、通常弾へ切り替えると冷却。
 # 39.9℃ではレーザーのみ一時停止。先輩の解熱弾Lvとボスダウンで冷却を強化。
+SUPPORT_PICKUPS_PER_POINT = 2
+SUPPLY_BUDGET = (0, 15, 25, 35)  # 回復できる合計HP。休息地点・ボス開始時に補充
+
 HEAT_MAX            = 100.0
 HEAT_LASER_PER_SEC  = 48.0   # 継続レーザーの発熱。通常弾は常に使える
 HEAT_COOL_RATE      = 32.0   # レーザー停止中の基礎冷却（/秒）

@@ -69,7 +69,7 @@ def _make_game():
         highscore=SimpleNamespace(get_scores=lambda: scores, add=noop),
         sound=SimpleNamespace(stop_bgm=noop, play_bgm=noop, play_se=lambda *args, **kwargs: sounds.append(args)),
         playlog=SimpleNamespace(end_run=noop),
-        shared=SimpleNamespace(score=123456789012, stage=4, lives=3, kill_count=65432,
+        shared=SimpleNamespace(score=123456789012, stage=4, lives=3, deaths=2, kill_count=65432,
                                carry_hp=87, carry_weapon={"main_level": 5}),
     )
 
@@ -182,19 +182,19 @@ def test_gameover_menu_explains_retry_and_continue_without_overlap(game, lives):
             assert all(row.contains(rect) for _text, rect in menu_text if row.top <= rect.top < row.bottom)
         drawn = "".join(text for text, _rect, _color in screen.text)
         assert all(line in drawn for line in lines)
-        assert "スコア・強化・有給を初期状態にして第一章へ" in drawn
-        assert ("有給を1日使って続ける" in drawn) == (lives > 0)
-        assert ("有給は残っていません" in drawn) == (lives == 0)
+        assert "スコア・強化を初期状態にして第一章へ" in drawn
+        assert "直前の休息地点から再挑戦" in drawn
+        assert "回数制限なし" in drawn
 
 
-def test_stageclear_preserves_zero_hp_and_lives_and_medic_label(game):
-    game.shared.carry_hp = game.shared.lives = 0
+def test_stageclear_preserves_zero_hp_and_deaths_and_medic_label(game):
+    game.shared.carry_hp = game.shared.deaths = 0
     scene = StageClearScene(game, 2, 3)
     scene.on_enter()
     scene._timer = 2.0
     screen = _draw(scene)
     text = [text for text, _rect, _color in screen.text]
-    assert "0 / 100" in text and "0 日" in text
+    assert "0 / 100" in text and "0 回" in text
     assert "MEDIC" in text and "123,456,789,012" in text
     assert any("RIGHT SHIFT: 第三章へ進む" in line for line in text)
 

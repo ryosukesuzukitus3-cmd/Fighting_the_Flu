@@ -37,6 +37,7 @@ def scene(monkeypatch):
     result._companion = Mock(sx=80, sy=210)
     result.particles, result.camera = Mock(), Mock()
     result._spawn_popup = Mock()
+    result._save_checkpoint = Mock()
     result.player_bullets = pygame.sprite.Group()
     result.enemy_bullets = pygame.sprite.Group()
     result.laser = SimpleNamespace(state="firing")

@@ -74,7 +74,7 @@ def test_all_player_status_fits_inside_top_band(game):
     assert screen.get_at((600, 250)).a == 0
     assert all(width <= 248 for _text, width in game.rendered)
     text = [item[0] for item in game.rendered]
-    assert "有給 0日" in text
+    assert "再挑戦 ∞" in text
     assert "メイン MEDIC" in text
     assert any("レーザー6" in item and "追尾7" in item and "磁力3" in item and "防壁" in item for item in text)
 

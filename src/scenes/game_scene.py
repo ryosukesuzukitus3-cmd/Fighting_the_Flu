@@ -86,8 +86,12 @@ def _hit_rect_collide(player, other) -> bool:
     return player.hit_rect.colliderect(other.rect)
 
 
+from src.scenes.game.learning_mixin import GameSceneLearningMixin
+
+
 class GameScene(
     GameSceneDebugMixin,
+    GameSceneLearningMixin,
     GameSceneBossFxMixin,
     GameScenePostBossMixin,
     GameSceneOverlayMixin,
@@ -285,6 +289,7 @@ class GameScene(
         self.game.sound.play_se(se_name, volume=0.5)
         self._bgm_delay = round_se.get_length() + 0.3
         self._bgm_path  = f"music/bgm/{self.stage.bgm}" if self.stage.bgm else ""
+        self._init_learning()
 
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
@@ -476,6 +481,8 @@ class GameScene(
                     self._combo_break_timer = 0.9
                 self._combo_count = 0
 
+        self._update_learning(dt)
+
         # ── 通常 / alert / entering 共通更新 ─────────────────
         self.camera.update(dt)
         self._stage_elapsed += dt
@@ -493,7 +500,7 @@ class GameScene(
                                    self.enemies, self.enemy_bullets, self.terrain,
                                    can_fire=self._combat_active and not self._final.final_strike_active)
 
-        if self._stage_banner_timer <= 0 and self._is_normal_play:
+        if self._stage_banner_timer <= 0 and self._is_normal_play and self._learning_encounter is None:
             self.spawner.update(dt, self.camera)
             self._check_billy_spawn_bark()
         # alert/entering 中はスポーナー不動だがボス保留検知は行う
@@ -800,6 +807,9 @@ class GameScene(
         self.game.sound.play_bgm_if_new(BOSS_BGM.get(boss_stage_id, "music/bgm/決戦.mp3"))
 
     def _start_fight_banner(self) -> None:
+        if not self._checkpoint_boss_saved:
+            self._save_checkpoint("boss", "ボス戦")
+            self._checkpoint_boss_saved = True
         self._boss_intro_state = "fight_banner"
         self._boss_intro_timer = FIGHT_BANNER_DURATION
         if not self._fight_sound_played:
@@ -839,6 +849,8 @@ class GameScene(
             self.player_bullets.draw(buf)
             self.enemy_bullets.draw(buf)
         self.enemies.draw(buf)
+        if self._learning_encounter:
+            self._learning_encounter.draw(buf)
         boss_reaction = self._final.draw_boss_reaction(buf)
         if self._boss is not None and not boss_reaction:
             buf.blit(self._boss.image, self._boss.rect)
@@ -1328,15 +1340,8 @@ class GameScene(
         if etype == "EnemyBilly":
             self._enqueue_boss_dialogue([random.choice(BILLY_KILL_BARKS)], BOSS_MID_LINE_DURATION)
             from src.entities.items.heal import HealItem
-            self._add_weapon_drop(
-                enemy.world_x + random.uniform(-40, 40),
-                enemy.world_y + random.uniform(-30, 30),
-            )
-            for _ in range(4):
-                self.items.add(HealItem(
-                    enemy.world_x + random.uniform(-60, 60),
-                    enemy.world_y + random.uniform(-40, 40),
-                ))
+            self._add_fixed_item_drop(getattr(enemy, "fixed_drop", None), enemy.world_x, enemy.world_y)
+            self.items.add(HealItem(enemy.world_x, enemy.world_y))
         elif etype == "MatchingZeroDrone":
             # enemy.kill() 済みなので残存数 0 ＝最後の1機を撃破した瞬間
             if not any(type(e).__name__ == "MatchingZeroDrone" for e in self.enemies):
@@ -1348,10 +1353,6 @@ class GameScene(
                 chance = self._random_drop_chance(getattr(enemy, "drop_chance", DROP_CHANCE.get(etype, 0.20)))
                 if random.random() < chance:
                     self._add_random_item_drop(enemy.world_x, enemy.world_y)
-
-    def _add_weapon_drop(self, world_x: float, world_y: float) -> None:
-        from src.entities.items.weapon_item import WeaponItem
-        self.items.add(WeaponItem(world_x, world_y))
 
     def _add_fixed_item_drop(
         self,
@@ -1570,7 +1571,9 @@ class GameScene(
         """Apply a weapon stock pickup."""
         self.player.weapon.weapon_stock += 1
         # 取得ごとに先輩（カロナール）の強化ストックも +1（別ツリー＝支援系）
-        if self._companion is not None:
+        from src.core.balance import SUPPORT_PICKUPS_PER_POINT
+        self.game.shared.support_pickups += 1
+        if self._companion is not None and self.game.shared.support_pickups % SUPPORT_PICKUPS_PER_POINT == 0:
             self._companion.stock += 1
             self._spawn_popup(
                 "先輩 強化ストック +1",
@@ -1589,7 +1592,7 @@ class GameScene(
             self.game.shared.upgrade_tutorial_shown = True
             self._open_upgrade_ui()
 
-    def _companion_spawn_heal(self) -> None:
+    def _companion_spawn_heal(self, amount: int = 10) -> None:
         """補給: 先輩が前方へ回復アイテムを射出する（Lvで頻度上昇）。"""
         if self._companion is None:
             return
@@ -1597,7 +1600,9 @@ class GameScene(
         # 先輩の少し前方（右）に射出 → 自然に左ドリフトして自機の進路に乗る
         world_x = self.camera.x + float(self._companion.rect.centerx) + 26.0
         world_y = float(self._companion.rect.centery)
-        self.items.add(HealItem(world_x, world_y))
+        item = HealItem(world_x, world_y)
+        item.heal_amount = amount
+        self.items.add(item)
         # 射出演出（先輩位置からのきらめき）
         self.particles.spawn_spark(
             self._companion.rect.centerx, self._companion.rect.centery,
@@ -1693,6 +1698,7 @@ class GameScene(
             self.player.hp = self.player.max_hp
             self.player._invincible_timer = 2.0
             return
+        self.game.shared.deaths += 1
         self.game.playlog.log_player_death(
             self._stage_id,
             self._stage_elapsed,

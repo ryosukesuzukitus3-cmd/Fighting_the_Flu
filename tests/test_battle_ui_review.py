@@ -105,12 +105,13 @@ def test_absent_companion_does_not_block_player_upgrade(scene):
     assert scene.player.weapon.main_level == 1
 
 
-def test_upgrade_draw_explains_locks_and_keeps_long_key_hints_on_screen(scene):
+def test_upgrade_draw_offers_early_addons_and_keeps_long_key_hints_on_screen(scene):
     scene._open_upgrade_ui()
     scene.game.displays.update(ui_accept="RIGHT CTRL", ui_back="LEFT SHIFT")
     scene._draw_upgrade_ui(pygame.Surface((800, 600), pygame.SRCALPHA))
     text = "\n".join(text for text, _ in scene.game.records)
-    assert "主砲 Lv2で解放" in text
+    assert "主砲 Lv2で解放" not in text
+    assert "HOMING 1" in text and "LASER 1" in text
     assert "RIGHT CTRL" in text and "LEFT SHIFT" in text
     assert "保留して閉じる" in text
     assert all(width <= 752 for _, width in scene.game.records)

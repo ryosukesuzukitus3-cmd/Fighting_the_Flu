@@ -36,7 +36,7 @@ def test_weapon_upgrade_caps_each_track() -> None:
     for _ in range(20):
         w.upgrade("speed")
     assert w.speed_at_max
-    assert w.speed_multiplier == 1.0 + 3 * 0.12
+    assert w.speed_multiplier == 1.75
 
     for _ in range(20):
         w.upgrade("laser")
@@ -342,6 +342,8 @@ def test_boss_intro_start_helpers_set_expected_state() -> None:
     s._pending_boss_stage_id = None
     s._stage_id = 1
     s._fight_sound_played = False
+    s._checkpoint_boss_saved = False
+    s._save_checkpoint = lambda *args: None
 
     GameScene._start_boss_name(s)
     assert s._boss_intro_state == "boss_name"

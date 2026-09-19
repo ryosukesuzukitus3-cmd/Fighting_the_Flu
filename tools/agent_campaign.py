@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.core.balance import PLAYER_BASE_SPEED
 from tools.agent_playtest import Session
 from tools.playtest_state import boundary, mode
 
@@ -108,7 +109,7 @@ class Campaign:
                    *sorted((ROOT / "data/stages").glob("stage*.json")),
                    Path(__file__).resolve(), ROOT / "tools/agent_playtest.py",
                    ROOT / "tools/playtest_state.py", ROOT / "tools/combat_lab.py",
-                   ROOT / "tools/headless.py"]
+                   ROOT / "tools/headless.py", ROOT / "tools/challenge_lab.py"]
         (session.output_dir / "source-fingerprints.json").write_text(json.dumps({
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sources}, indent=2), encoding="utf-8")
@@ -242,8 +243,8 @@ class Campaign:
         if zone == "top":
             choices = scene._top_available_indices()
             priorities = []
-            if weapon.main_level < 2:
-                priorities += ["weapon_main"]
+            if weapon.speed_level < 1:
+                priorities += ["speed"]
             if weapon.laser_level < 1:
                 priorities += ["laser"]
             if weapon.speed_level < 1:
@@ -261,6 +262,8 @@ class Campaign:
             choices = scene._bottom_available_indices()
             comp = scene._companion
             priorities = []
+            if comp.lv_hp < 1:
+                priorities += ["kt_hp"]
             if comp.lv_supply < 1:
                 priorities += ["kt_supply"]
             if comp.lv_magnet < 2:
@@ -360,7 +363,7 @@ class Campaign:
             hazards.append((obj.rect, vx, vy, 1.7))
         for obj in terrain:
             hazards.append((obj.rect, -scroll, 0, 2.5))
-        speed = 280 * player.weapon.speed_multiplier
+        speed = PLAYER_BASE_SPEED * player.weapon.speed_multiplier
         plans = []
         best = None
         best_cost = (True, float("inf"))
@@ -462,8 +465,8 @@ class Campaign:
             self.reason = "completed campaign and returned to title"
             return None
         if name == "GameOverScene":
-            if self.session.game.shared.lives <= 0:
-                self.reason = "continues exhausted"
+            if len(self.deaths) >= 12:
+                self.reason = "diagnostic retry budget exhausted (12 attempts)"
                 return None
             return self.pulse("ui_accept")
         if state == "dialogue":

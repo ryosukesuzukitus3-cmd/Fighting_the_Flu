@@ -1,7 +1,7 @@
 """ウェポン選択UI ミックスイン — GameScene に多重継承で組み込まれる。
 
 2段構成: 上段=自機ウェポン / 下段=カロナール先輩の支援系統。
-取得ごとに自機+1・先輩+1の在庫を別々に持ち、1回の画面で
+取得ごとに自機+1・2個ごとに先輩+1の在庫を別々に持ち、1回の画面で
 「上段から1つ → 下段から1つ → 決定」の順に振り分ける。
 """
 from __future__ import annotations
@@ -24,8 +24,8 @@ class GameSceneUpgradeMixin:
         w = self.player.weapon  # type: ignore[attr-defined]
         if key == "weapon_main": return not w.main_at_max
         if key == "speed":       return not w.speed_at_max
-        if key == "laser":       return w.main_level >= 2 and w.laser_level < 6
-        if key == "homing":      return w.main_level >= 2 and w.homing_level < 7
+        if key == "laser":       return w.laser_level < 6
+        if key == "homing":      return w.homing_level < 7
         return True
 
     def _slot_display_label(self, key: str) -> str:
@@ -224,14 +224,14 @@ class GameSceneUpgradeMixin:
                             self._companion_slot_label, bot_avail, dim=c is None)
 
         descriptions = {
-            "weapon_main": "連射・弾の広がりを強化。主砲を2回強化すると追加装備が解放。",
+            "weapon_main": "連射・弾の広がりを強化。通常弾で広い範囲を攻撃する。",
             "speed": "移動を速くして弾や地形を避けやすくします。",
             "laser": (f"[{self.game.settings.key_display('laser')}] 押している間だけ発射。"
                       "離すと停止・冷却。隙にまとめて撃ち込む。"),
             "homing": "敵を追う弾を通常射撃に追加します。",
             "kt_hp": "先輩の耐久力を上げ、その場で回復します。",
             "kt_shot": "先輩の解熱弾を強化し、自機の体温も下がりやすくします。",
-            "kt_supply": "先輩が回復アイテムを届けます。",
+            "kt_supply": "区間ごとに合計15 / 25 / 35回復。減ったHPを自動で補給。",
             "kt_magnet": "近くのアイテムを自機へ引き寄せます。",
         }
         if self._upg_zone == "top":
@@ -302,8 +302,6 @@ class GameSceneUpgradeMixin:
                 status = "選択済み"
             elif dim:
                 status = "現在は選択不可"
-            elif key in {"homing", "laser"} and self.player.weapon.main_level < 2:
-                status = "主砲 Lv2で解放"
             elif not avail:
                 status = "最大強化" if "MAX" in label_fn(key) else "在庫なし"
             else:

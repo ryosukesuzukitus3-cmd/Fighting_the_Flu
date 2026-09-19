@@ -39,7 +39,7 @@ def test_set_save_load_and_reset_key_bindings(tmp_path, monkeypatch) -> None:
 
     loaded.reset_key_bindings()
     assert loaded.get_key("fire") == pygame.K_z
-    assert loaded.get_key("laser") == pygame.K_SPACE
+    assert loaded.get_key("laser") == pygame.K_b
 
 
 def test_set_key_binding_rejects_unknown_action_and_unsupported_key(tmp_path, monkeypatch) -> None:
@@ -109,7 +109,7 @@ def test_loading_filters_unknown_actions_and_invalid_key_names(tmp_path, monkeyp
     manager = settings_mod.SettingsManager()
 
     assert manager.get_key("fire") == pygame.K_a
-    assert manager.get_key("laser") == pygame.K_SPACE
+    assert manager.get_key("laser") == pygame.K_b
     assert "unknown" not in manager.get("key_bindings")
 
 
@@ -130,10 +130,10 @@ def test_loading_does_not_accept_non_key_pygame_constants(tmp_path, monkeypatch,
     monkeypatch.setattr(settings_mod, "_SETTINGS_PATH", path)
     path.write_text(json.dumps({"key_bindings": {"laser": name}}), encoding="utf-8")
     manager = settings_mod.SettingsManager()
-    assert manager.get_key("laser") == pygame.K_SPACE
+    assert manager.get_key("laser") == pygame.K_b
     # The action lookup must also defend against invalid in-memory data.
     manager.get("key_bindings")["laser"] = name
-    assert manager.get_key("laser") == pygame.K_SPACE
+    assert manager.get_key("laser") == pygame.K_b
 
 
 def test_unknown_keycode_cannot_be_bound(tmp_path, monkeypatch):
